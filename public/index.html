@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#10b981" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/favicon.svg" />
+  <title>我们的清单</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- 顶部加载进度条 -->
+  <div id="loadingBar" class="loading-bar" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="topbar__title">📋 我们的清单</div>
+    <div class="topbar__right">
+      <span id="me" class="topbar__me topbar__me--placeholder">加载中…</span>
+      <button id="logoutBtn" class="btn btn--ghost" type="button">退出</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 离线提示（socket 断开时显示） -->
+    <div id="offlineBar" class="offline-bar" hidden>⚠️ 已离线，正在重连...</div>
+
+    <section class="composer">
+      <input
+        id="todoInput"
+        class="composer__input"
+        type="text"
+        maxlength="200"
+        placeholder="添加一条待办..."
+        autocomplete="off"
+        disabled
+      />
+      <button id="addBtn" class="composer__btn" type="button" disabled aria-label="添加">+</button>
+    </section>
+
+    <!-- 首屏骨架屏（app.js 加载完真实数据后会被替换） -->
+    <ul id="todoList" class="todo-list">
+      <li class="skeleton" aria-hidden="true">
+        <div class="skeleton__box skeleton__checkbox"></div>
+        <div style="flex:1">
+          <div class="skeleton__box skeleton__line skeleton__line--w70"></div>
+          <div class="skeleton__box skeleton__line skeleton__line--w40"></div>
+        </div>
+      </li>
+      <li class="skeleton" aria-hidden="true">
+        <div class="skeleton__box skeleton__checkbox"></div>
+        <div style="flex:1">
+          <div class="skeleton__box skeleton__line skeleton__line--w70"></div>
+          <div class="skeleton__box skeleton__line skeleton__line--w40"></div>
+        </div>
+      </li>
+    </ul>
+  </main>
+
+  <script src="/js/app.js" type="module" defer></script>
+</body>
+</html>

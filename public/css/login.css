@@ -1,0 +1,122 @@
+/* ===== 登录页 ===== */
+.login {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(160deg, #ecfdf5 0%, #f9fafb 60%);
+}
+
+.login__card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--color-surface);
+  border-radius: 20px;
+  box-shadow: 0 8px 30px rgba(16, 185, 129, 0.08);
+  padding: 36px 28px;
+  text-align: center;
+  animation: card-enter 0.4s var(--ease);
+}
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.login__emoji {
+  font-size: 48px;
+  line-height: 1;
+  margin-bottom: 12px;
+  animation: emoji-pop 0.5s var(--ease) 0.1s both;
+}
+
+@keyframes emoji-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.login__title {
+  margin: 0 0 4px;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.login__subtitle {
+  margin: 0 0 24px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.login__form {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ===== 表单字段 ===== */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field__label {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.field__input {
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.field__input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+/* ===== 提交按钮 ===== */
+.login__submit {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 10px;
+  margin-top: 4px;
+}
+
+.login__submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ===== 错误提示 ===== */
+.login__error {
+  margin: 0;
+  padding: 10px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: var(--color-danger);
+  border-radius: 8px;
+  font-size: 13px;
+  text-align: center;
+}

@@ -1,0 +1,450 @@
+/* ===== 基础重置 ===== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --color-primary: #10b981;
+  --color-primary-dark: #059669;
+  --color-text: #1f2937;
+  --color-text-muted: #6b7280;
+  --color-border: #e5e7eb;
+  --color-bg: #f9fafb;
+  --color-surface: #ffffff;
+  --color-danger: #ef4444;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
+    "Helvetica Neue", Arial, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input {
+  font: inherit;
+}
+
+/* ===== 顶栏 ===== */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding-top: calc(16px + var(--safe-top));
+  padding-bottom: 16px;
+}
+
+.topbar__title {
+  font-weight: 600;
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar__me {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar__me::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.topbar__me--placeholder::before {
+  background: #d1d5db;
+  box-shadow: 0 0 0 3px rgba(209, 213, 219, 0.3);
+}
+
+/* ===== 按钮 ===== */
+.btn {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 6px 14px;
+  border-radius: 8px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn:hover {
+  background: var(--color-bg);
+}
+
+.btn--ghost {
+  background: transparent;
+}
+
+.btn--primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.btn--primary:hover {
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+}
+
+/* ===== 主容器 ===== */
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 20px 16px calc(40px + var(--safe-bottom));
+}
+
+/* ===== 离线提示 ===== */
+.offline-bar {
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+/* ===== 输入区 ===== */
+.composer {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.composer__input {
+  flex: 1;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  outline: none;
+}
+
+.composer__input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.composer__btn {
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  border-radius: var(--radius);
+}
+
+.composer__btn:hover {
+  background: var(--color-primary-dark);
+}
+
+.composer__btn:disabled,
+.composer__input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== 列表 ===== */
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.todo-list__empty {
+  text-align: center;
+  color: var(--color-text-muted);
+  padding: 60px 16px;
+}
+
+.todo-list__empty-emoji {
+  font-size: 48px;
+  line-height: 1;
+  margin-bottom: 12px;
+  opacity: 0.7;
+}
+
+.todo-list__empty-text {
+  font-size: 14px;
+}
+
+/* ===== 单条待办 ===== */
+.todo {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 14px 14px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow);
+  transition: background 0.2s var(--ease), opacity 0.2s var(--ease),
+    transform 0.2s var(--ease), box-shadow 0.2s var(--ease),
+    border-color 0.2s var(--ease);
+  animation: todo-enter 0.25s var(--ease);
+}
+
+@media (hover: hover) {
+  .todo:hover {
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+@keyframes todo-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.todo--leaving {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.todo--done {
+  background: #f3f4f6;
+  opacity: 0.72;
+}
+
+.todo__checkbox {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+  flex-shrink: 0;
+  transition: transform 0.15s var(--ease);
+}
+
+.todo__checkbox:checked {
+  transform: scale(1.1);
+}
+
+.todo__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.todo__text {
+  font-size: 16px;
+  color: var(--color-text);
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.todo--done .todo__text {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
+.todo__meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.todo__delete {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.todo__delete:hover {
+  background: #fef2f2;
+  color: var(--color-danger);
+}
+
+/* ===== Toast 提示 ===== */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(31, 41, 55, 0.92);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 100;
+  max-width: 80vw;
+}
+
+.toast--show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ===== 骨架屏（首屏加载占位） ===== */
+.skeleton {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 14px 14px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow);
+}
+
+.skeleton__box {
+  background: linear-gradient(
+    90deg,
+    #f3f4f6 0%,
+    #e5e7eb 50%,
+    #f3f4f6 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+.skeleton__checkbox {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.skeleton__line {
+  height: 12px;
+  margin-bottom: 8px;
+}
+
+.skeleton__line--w70 {
+  width: 70%;
+}
+
+.skeleton__line--w40 {
+  width: 40%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ===== 顶部加载进度条（同步操作时） ===== */
+.loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0;
+  background: var(--color-primary);
+  z-index: 200;
+  transition: width 0.3s var(--ease), opacity 0.3s;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.loading-bar--active {
+  width: 70%;
+  opacity: 1;
+}
+
+.loading-bar--done {
+  width: 100%;
+  opacity: 0;
+  transition: width 0.2s, opacity 0.4s 0.1s;
+}
+
+/* ===== 输入框旋转加载图标 ===== */
+.composer__btn--loading {
+  position: relative;
+  color: transparent;
+}
+
+.composer__btn--loading::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+

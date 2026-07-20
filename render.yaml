@@ -1,0 +1,31 @@
+# Render 部署配置
+# 文档：https://render.com/docs/blueprint-spec
+# 使用方法见 README.md「部署到 Render」一节
+
+services:
+  - type: web
+    name: shared-todolist
+    runtime: node
+    plan: free
+    # 自动从 GitHub 仓库部署
+    # branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    # Render 会自动注入 PORT 环境变量
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_TYPE
+        value: supabase
+      # 以下密钥请在 Render 控制台手动填入（不要写在这里）
+      # - key: SESSION_SECRET         # 用 `openssl rand -hex 32` 生成
+      # - key: USER_A_USERNAME
+      # - key: USER_A_DISPLAY_NAME
+      # - key: USER_A_PASSWORD_HASH   # 用 bcrypt 生成
+      # - key: USER_B_USERNAME
+      # - key: USER_B_DISPLAY_NAME
+      # - key: USER_B_PASSWORD_HASH
+      # - key: SUPABASE_URL
+      # - key: SUPABASE_KEY           # 用 service_role key（不是 anon）
+    healthCheckPath: /health
+    autoDeploy: true
