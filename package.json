@@ -18,10 +18,12 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.110.7",
     "bcryptjs": "^2.4.3",
+    "canvas-confetti": "^1.9.4",
     "connect-pg-simple": "^9.0.1",
     "dotenv": "^16.6.1",
     "express": "^4.22.2",
     "express-session": "^1.19.0",
+    "pg": "^8.22.0",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3"
   },

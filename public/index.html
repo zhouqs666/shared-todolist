@@ -8,6 +8,15 @@
   <link rel="apple-touch-icon" href="/favicon.svg" />
   <title>我们的清单</title>
   <link rel="stylesheet" href="/css/style.css" />
+  <script>
+    // 早期应用主题，避免首屏闪烁（FOUC）
+    (function () {
+      try {
+        var t = localStorage.getItem('todo-theme') || 'mint';
+        document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <!-- 顶部加载进度条 -->
@@ -16,6 +25,25 @@
   <header class="topbar">
     <div class="topbar__title">📋 我们的清单</div>
     <div class="topbar__right">
+      <span id="completedToday" class="topbar__counter" hidden>✓ 0</span>
+      <div class="theme-picker">
+        <button id="themePickerBtn" class="theme-picker__btn" type="button" aria-label="切换主题"></button>
+        <div id="themeMenu" class="theme-picker__menu" hidden>
+          <div class="theme-picker__title">主题</div>
+          <div class="theme-picker__opts">
+            <button data-theme="mint" class="theme-picker__opt" type="button" style="--c:#10b981" aria-label="薄荷绿"></button>
+            <button data-theme="pink" class="theme-picker__opt" type="button" style="--c:#ec4899" aria-label="蜜桃粉"></button>
+            <button data-theme="blue" class="theme-picker__opt" type="button" style="--c:#3b82f6" aria-label="海洋蓝"></button>
+            <button data-theme="sunset" class="theme-picker__opt" type="button" style="--c:#f59e0b" aria-label="暖夕阳"></button>
+            <button data-theme="dark" class="theme-picker__opt" type="button" style="--c:#111827" aria-label="深夜黑"></button>
+          </div>
+          <div class="theme-picker__divider"></div>
+          <div id="fxToggle" class="theme-picker__toggle" role="switch" aria-checked="true">
+            <span>完成特效</span>
+            <span id="fxSwitch" class="theme-picker__switch theme-picker__switch--on"></span>
+          </div>
+        </div>
+      </div>
       <span id="me" class="topbar__me topbar__me--placeholder">加载中…</span>
       <button id="logoutBtn" class="btn btn--ghost" type="button">退出</button>
     </div>

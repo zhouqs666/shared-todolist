@@ -6,15 +6,19 @@
  */
 
 import { api, ApiError } from './api.js';
-import { formatRelativeTime } from './utils.js';
+import { formatRelativeTime, playDing } from './utils.js';
 import {
   getTodos,
   setTodos,
   sortTodos,
   setRenderFn,
   setOnlineFn,
+  setCompleteFn,
+  notifyCompleted,
 } from './state.js';
 import { initSocket } from './socket.js';
+import { initTheme, isFxEnabled } from './theme.js';
+import confetti from './vendor/canvas-confetti.esm.min.js';
 
 let currentUser = null;
 
@@ -62,6 +66,7 @@ function hideLoading() {
   // 注册渲染与状态回调
   setRenderFn(render);
   setOnlineFn(updateOnlineUI);
+  setCompleteFn(handleRemoteCompleted);
 
   // 启用输入区
   todoInput.disabled = false;
@@ -78,8 +83,16 @@ function hideLoading() {
     render(getTodos());
   }
 
+  // 初始化主题选择器
+  initTheme();
+
   // 建立 socket 连接
-  initSocket({ getTodos, setTodos, setOnline: updateOnlineUI });
+  initSocket({
+    getTodos,
+    setTodos,
+    setOnline: updateOnlineUI,
+    notifyCompleted,
+  });
 })();
 
 // ===== 事件绑定 =====
@@ -146,6 +159,8 @@ async function toggleComplete(id, nextCompleted) {
     completedAt: nextCompleted ? new Date().toISOString() : null,
   });
   setTodos(sortTodos(getTodos()));
+  // 本端完成 → 庆祝动画
+  if (nextCompleted) celebrateCompletion(current.text);
   try {
     const { todo } = await api.updateTodo(id, nextCompleted);
     setTodos(sortTodos(getTodos().map((t) => (t.id === id ? todo : t))));
@@ -194,6 +209,7 @@ function render() {
     li.appendChild(emoji);
     li.appendChild(text);
     todoListEl.appendChild(li);
+    updateCounter();
     return;
   }
 
@@ -201,6 +217,67 @@ function render() {
   todos.forEach((todo) => {
     todoListEl.appendChild(renderItem(todo));
   });
+  updateCounter();
+}
+
+/**
+ * 更新今日完成计数器
+ * 统计 completedAt 在今天的任务数
+ */
+function updateCounter() {
+  const el = document.getElementById('completedToday');
+  if (!el) return;
+  const today = new Date().toDateString();
+  const count = getTodos().filter(
+    (t) =>
+      t.completed &&
+      t.completedAt &&
+      new Date(t.completedAt).toDateString() === today
+  ).length;
+  el.textContent = '✓ ' + count;
+  el.hidden = count === 0;
+}
+
+/**
+ * 完成庆祝（彩带 + 音效 + 震动 + Toast）
+ * 仅当特效开关开启时执行彩带/音效/震动；Toast 始终显示
+ */
+function celebrateCompletion(todoText) {
+  // Toast 始终显示（不带特效也是一种反馈）
+  showToast('✓ ' + (todoText || '完成').slice(0, 30));
+
+  if (!isFxEnabled()) return;
+
+  // 彩带（使用主题色）
+  const rootStyle = getComputedStyle(document.documentElement);
+  const primary = rootStyle.getPropertyValue('--color-primary').trim() || '#10b981';
+  confetti({
+    particleCount: 80,
+    spread: 70,
+    origin: { y: 0.6 },
+    colors: [primary, '#fbbf24', '#f87171', '#60a5fa', '#fff'],
+    scalar: 0.9,
+    ticks: 150,
+  });
+
+  // 音效
+  playDing();
+
+  // 手机震动
+  if (navigator.vibrate) {
+    try {
+      navigator.vibrate([30, 20, 30]);
+    } catch (_) {}
+  }
+}
+
+/**
+ * 远端完成回调：对方完成了任务，本端也庆祝
+ * @param {Object} todo 完成后的 todo
+ */
+function handleRemoteCompleted(todo) {
+  if (!todo || !todo.completed) return;
+  celebrateCompletion('对方完成了「' + (todo.text || '') + '」');
 }
 
 function renderItem(todo) {

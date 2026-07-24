@@ -12,6 +12,7 @@ let todos = [];
 let online = true;
 let renderFn = null;
 let onlineFn = null;
+let completeFn = null;
 
 export function getTodos() {
   return todos;
@@ -37,6 +38,23 @@ export function setRenderFn(fn) {
 
 export function setOnlineFn(fn) {
   onlineFn = fn;
+}
+
+/**
+ * 注册"远端完成"回调
+ * 当 socket 收到 todo:updated 且从"未完成→已完成"时触发，用于播放完成动画
+ * @param {(todo: Object)=>void} fn
+ */
+export function setCompleteFn(fn) {
+  completeFn = fn;
+}
+
+/**
+ * 通知"完成"事件（由 socket.js 调用）
+ * @param {Object} todo 完成后的 todo 对象
+ */
+export function notifyCompleted(todo) {
+  if (completeFn) completeFn(todo);
 }
 
 /** PRD §4.2 Q2 排序：未完成在上、新的在上、完成的下沉 */

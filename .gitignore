@@ -22,3 +22,4 @@ npm-debug.log*
 # 构建产物（如以后引入前端构建工具）
 dist/
 build/
+.zcode/

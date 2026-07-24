@@ -34,3 +34,34 @@ export function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+/**
+ * 播放短促"叮"声（Web Audio API 生成，无需音频文件）
+ * 失败时静默（不影响功能）
+ */
+let audioCtx = null;
+export function playDing() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    audioCtx = audioCtx || new Ctx();
+    // 浏览器自动播放策略：上下文可能被暂停，需要恢复
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const now = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.connect(g);
+    g.connect(audioCtx.destination);
+    o.type = 'sine';
+    o.frequency.setValueAtTime(880, now); // A5
+    o.frequency.exponentialRampToValueAtTime(1320, now + 0.1); // 上滑到 E6
+    g.gain.setValueAtTime(0.001, now);
+    g.gain.exponentialRampToValueAtTime(0.15, now + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    o.start(now);
+    o.stop(now + 0.4);
+  } catch (e) {
+    /* 静默失败 */
+  }
+}
