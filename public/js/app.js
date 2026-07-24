@@ -21,6 +21,8 @@ import { initTheme, isFxEnabled } from './theme.js';
 import confetti from './vendor/canvas-confetti.esm.min.js';
 
 let currentUser = null;
+/** @type {Object<string, string>} userId → displayName 映射（从 /api/me 拿） */
+let userMap = {};
 
 const meEl = document.getElementById('me');
 const logoutBtn = document.getElementById('logoutBtn');
@@ -57,6 +59,13 @@ function hideLoading() {
     currentUser = data.user;
     meEl.textContent = currentUser.displayName;
     meEl.classList.remove('topbar__me--placeholder');
+    // 构造 userId → displayName 映射
+    if (Array.isArray(data.users)) {
+      userMap = {};
+      data.users.forEach((u) => {
+        userMap[u.id] = u.displayName;
+      });
+    }
   } catch (err) {
     console.error('[app] 获取用户信息失败:', err);
     meEl.textContent = '加载失败';
@@ -131,11 +140,8 @@ async function addTodo() {
   showLoading();
   try {
     const { todo } = await api.createTodo(text);
-    // socket 可能已经先把 todo 加进来了（广播快于 HTTP 响应），幂等处理
-    const existing = getTodos();
-    if (!existing.some((t) => t.id === todo.id)) {
-      setTodos(sortTodos([...existing, todo]));
-    }
+    // socket 不会发回声给自己（服务端排除 sender），所以这里直接加上
+    setTodos(sortTodos([...getTodos(), todo]));
     todoInput.value = '';
   } catch (err) {
     handleError(err, '添加失败');
@@ -148,9 +154,15 @@ async function addTodo() {
   }
 }
 
+// 每个 id 的"最新意图"：解决连续点击竞态（用户在 API 返回前又改了）
+const latestIntent = new Map(); // id → boolean
+
 async function toggleComplete(id, nextCompleted) {
   const current = getTodos().find((t) => t.id === id);
   if (!current || current.completed === nextCompleted) return; // 幂等
+
+  // 记录最新意图——后续如果有更早的 API 响应返回，会被忽略
+  latestIntent.set(id, nextCompleted);
 
   const prev = { ...current };
   Object.assign(current, {
@@ -163,13 +175,19 @@ async function toggleComplete(id, nextCompleted) {
   if (nextCompleted) celebrateCompletion(current.text);
   try {
     const { todo } = await api.updateTodo(id, nextCompleted);
+    // 竞态保护：如果在 await 期间用户又改了意图，丢弃这个响应
+    if (latestIntent.get(id) !== nextCompleted) {
+      return; // 已被后续操作覆盖
+    }
     setTodos(sortTodos(getTodos().map((t) => (t.id === id ? todo : t))));
   } catch (err) {
-    // 回滚
-    const target = getTodos().find((t) => t.id === id);
-    if (target) Object.assign(target, prev);
-    setTodos(sortTodos(getTodos()));
-    handleError(err, '操作失败');
+    // 回滚（仅在意图未变时）
+    if (latestIntent.get(id) === nextCompleted) {
+      const target = getTodos().find((t) => t.id === id);
+      if (target) Object.assign(target, prev);
+      setTodos(sortTodos(getTodos()));
+      handleError(err, '操作失败');
+    }
   }
 }
 
@@ -222,7 +240,6 @@ function render() {
 
 /**
  * 更新今日完成计数器
- * 统计 completedAt 在今天的任务数
  */
 function updateCounter() {
   const el = document.getElementById('completedToday');
@@ -238,54 +255,14 @@ function updateCounter() {
   el.hidden = count === 0;
 }
 
-/**
- * 完成庆祝（彩带 + 音效 + 震动 + Toast）
- * 仅当特效开关开启时执行彩带/音效/震动；Toast 始终显示
- */
-function celebrateCompletion(todoText) {
-  // Toast 始终显示（不带特效也是一种反馈）
-  showToast('✓ ' + (todoText || '完成').slice(0, 30));
-
-  if (!isFxEnabled()) return;
-
-  // 彩带（使用主题色）
-  const rootStyle = getComputedStyle(document.documentElement);
-  const primary = rootStyle.getPropertyValue('--color-primary').trim() || '#10b981';
-  confetti({
-    particleCount: 80,
-    spread: 70,
-    origin: { y: 0.6 },
-    colors: [primary, '#fbbf24', '#f87171', '#60a5fa', '#fff'],
-    scalar: 0.9,
-    ticks: 150,
-  });
-
-  // 音效
-  playDing();
-
-  // 手机震动
-  if (navigator.vibrate) {
-    try {
-      navigator.vibrate([30, 20, 30]);
-    } catch (_) {}
-  }
-}
-
-/**
- * 远端完成回调：对方完成了任务，本端也庆祝
- * @param {Object} todo 完成后的 todo
- */
-function handleRemoteCompleted(todo) {
-  if (!todo || !todo.completed) return;
-  celebrateCompletion('对方完成了「' + (todo.text || '') + '」');
-}
-
+/** 渲染单条（用 DOM API 而非 innerHTML，天然防 XSS） */
 function renderItem(todo) {
   const li = document.createElement('li');
   li.className = 'todo' + (todo.completed ? ' todo--done' : '');
   li.dataset.id = todo.id;
 
-  // checkbox
+  // checkbox：用 change 事件（仅用户交互触发，DOM 重建不会触发）
+  // toggleComplete 内有幂等保护，防止重复请求
   const checkbox = document.createElement('input');
   checkbox.type = 'checkbox';
   checkbox.className = 'todo__checkbox';
@@ -329,17 +306,57 @@ function renderItem(todo) {
   return li;
 }
 
+/** 根据 userId 返回展示名（从服务端返回的用户列表查找，避免硬编码） */
 function displayOf(userId) {
   if (!userId) return '?';
-  if (userId === currentUser.id) return currentUser.displayName;
-  // 双人场景：不是自己就是对方
-  return currentUser.id === 'u_a' ? 'Bob' : 'Alice';
+  return userMap[userId] || '?';
 }
 
 // ===== UI 状态 =====
 function updateOnlineUI(online) {
   if (!offlineBar) return;
   offlineBar.hidden = online;
+}
+
+/**
+ * 完成庆祝（彩带 + 音效 + 震动 + Toast）
+ * 仅当特效开关开启时执行彩带/音效/震动；Toast 始终显示
+ */
+function celebrateCompletion(todoText) {
+  // Toast 始终显示（不带特效也是一种反馈）
+  showToast('✓ ' + (todoText || '完成').slice(0, 30));
+
+  if (!isFxEnabled()) return;
+
+  // 彩带（使用主题色）
+  const rootStyle = getComputedStyle(document.documentElement);
+  const primary = rootStyle.getPropertyValue('--color-primary').trim() || '#10b981';
+  confetti({
+    particleCount: 80,
+    spread: 70,
+    origin: { y: 0.6 },
+    colors: [primary, '#fbbf24', '#f87171', '#60a5fa', '#fff'],
+    scalar: 0.9,
+    ticks: 150,
+  });
+
+  // 音效
+  playDing();
+
+  // 手机震动
+  if (navigator.vibrate) {
+    try {
+      navigator.vibrate([30, 20, 30]);
+    } catch (_) {}
+  }
+}
+
+/**
+ * 远端完成回调：对方完成了任务，本端也庆祝
+ */
+function handleRemoteCompleted(todo) {
+  if (!todo || !todo.completed) return;
+  celebrateCompletion('对方完成了「' + (todo.text || '') + '」');
 }
 
 function handleError(err, fallback) {

@@ -36,7 +36,7 @@ router.post('/', async (req, res, next) => {
       text: result.text,
       userId: getCurrentUserId(req),
     });
-    bus.emit(EVENTS.TODO_CREATED, todo);
+    bus.emit(EVENTS.TODO_CREATED, todo, getCurrentUserId(req));
     res.status(201).json({ ok: true, todo });
   } catch (err) {
     next(err);
@@ -55,7 +55,7 @@ router.patch('/:id', async (req, res, next) => {
     if (!todo) {
       return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
     }
-    bus.emit(EVENTS.TODO_UPDATED, todo);
+    bus.emit(EVENTS.TODO_UPDATED, todo, getCurrentUserId(req));
     res.json({ ok: true, todo });
   } catch (err) {
     next(err);
@@ -69,7 +69,7 @@ router.delete('/:id', async (req, res, next) => {
     if (!removed) {
       return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
     }
-    bus.emit(EVENTS.TODO_DELETED, { id: req.params.id });
+    bus.emit(EVENTS.TODO_DELETED, { id: req.params.id }, getCurrentUserId(req));
     res.json({ ok: true });
   } catch (err) {
     next(err);

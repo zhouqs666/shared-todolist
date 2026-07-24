@@ -60,16 +60,17 @@ export function initSocket(state) {
   });
 
   // 更新（完成/取消）
+  // 服务端已排除发送者本人，所以这里收到的一定是对方操作，直接应用
   socket.on('todo:updated', (todo) => {
     const todos = stateApi.getTodos();
-    // 检测"未完成 → 已完成"变化，触发庆祝动画
     const prev = todos.find((t) => t.id === todo.id);
-    const becameCompleted = todo.completed && prev && !prev.completed;
+    if (!prev) return;
+
+    const becameCompleted = todo.completed && !prev.completed;
 
     const next = todos.map((t) => (t.id === todo.id ? todo : t));
     stateApi.setTodos(sortTodos(next));
 
-    // 通知 app.js 播放完成动画（仅当从未完成变为已完成）
     if (becameCompleted && stateApi.notifyCompleted) {
       stateApi.notifyCompleted(todo);
     }

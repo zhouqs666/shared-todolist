@@ -4,7 +4,7 @@
 
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { findByUsername, findById } from '../auth/userService.js';
+import { findByUsername, findById, listSafe } from '../auth/userService.js';
 import { isLoggedIn } from '../auth/middleware.js';
 
 const router = Router();
@@ -38,6 +38,8 @@ router.post('/login', async (req, res) => {
   return res.json({
     ok: true,
     user: { id: user.id, username: user.username, displayName: user.displayName },
+    // 返回其他用户（双人场景即"对方"），用于前端显示署名
+    users: listSafe().map((u) => ({ id: u.id, displayName: u.displayName })),
   });
 });
 
@@ -73,6 +75,7 @@ router.get('/me', (req, res) => {
   return res.json({
     ok: true,
     user: { id: user.id, username: user.username, displayName: user.displayName },
+    users: listSafe().map((u) => ({ id: u.id, displayName: u.displayName })),
   });
 });
 

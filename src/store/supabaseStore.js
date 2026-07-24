@@ -116,10 +116,14 @@ export const supabaseStore = {
   },
 
   async remove(id) {
-    const { error } = await supabase.from(TABLE).delete().eq('id', id);
+    // 用 count 选项判断实际删除了几行
+    // 注意：PostgREST 需要 Prefer header 才会返回 count
+    const { count, error } = await supabase
+      .from(TABLE)
+      .delete({ count: 'exact' })
+      .eq('id', id);
     if (error) throw error;
-    // Supabase delete 不直接返回影响行数，用 findById 兜底
-    const still = await supabaseStore.findById(id);
-    return still === null;
+    // count === 1 表示删除成功；0 表示 ID 不存在
+    return count !== null && count > 0;
   },
 };

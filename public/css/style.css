@@ -109,6 +109,7 @@ input {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 16px 20px;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
@@ -117,23 +118,60 @@ input {
   z-index: 10;
   padding-top: calc(16px + var(--safe-top));
   padding-bottom: 16px;
+  /* 防止子元素溢出导致横向滚动条 */
+  min-width: 0;
 }
 
 .topbar__title {
   font-weight: 600;
   font-size: 18px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .topbar__right {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .topbar__me {
   color: var(--color-text-muted);
   font-size: 14px;
+  /* 超长用户名在窄屏下省略 */
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 窄屏适配：缩小间距、紧凑布局 */
+@media (max-width: 400px) {
+  .topbar {
+    padding: 12px 12px;
+    padding-top: calc(12px + var(--safe-top));
+  }
+  .topbar__title {
+    font-size: 16px;
+  }
+  .topbar__right {
+    gap: 6px;
+  }
+  .topbar__me {
+    max-width: 50px;
+    font-size: 12px;
+  }
+  .btn--ghost {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .topbar__counter {
+    padding: 3px 8px;
+    font-size: 12px;
+  }
+}
   display: inline-flex;
   align-items: center;
   gap: 6px;
