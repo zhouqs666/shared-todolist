@@ -86,4 +86,6 @@ ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
 
 -- ===== 4. 账号创建参考（不在此处运行，使用 scripts/init-users.mjs）=====
 -- 见 scripts/init-users.mjs：用 service_role 调 auth.admin.createUser 创建
--- XiaoBaoBao / DaBaoBei 两个用户，触发上面的 trigger 自动建 profile。
+-- 底层账号邮箱 xiaobaobao@todo.local / dabaobei@todo.local（注册时 display_name 用英文），
+-- 登录名/显示名后续改为中文「小宝宝」「大宝贝」（见 scripts/init-users.mjs 的 USERS 表），
+-- 触发上面的 trigger 自动建 profile。

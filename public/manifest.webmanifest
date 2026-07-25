@@ -1,6 +1,6 @@
 {
-  "name": "我们的清单",
-  "short_name": "清单",
+  "name": "爱的清单",
+  "short_name": "爱的清单",
   "description": "双人共享待办清单",
   "start_url": "/",
   "scope": "/",

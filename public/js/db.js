@@ -11,6 +11,7 @@
  */
 
 import { supabase } from './supabase.js';
+import { avatarForUsername } from './avatars.js';
 
 /** DB 行 → 前端 todo 对象 */
 function toExternal(row) {
@@ -90,7 +91,7 @@ export const db = {
     if (error) throw wrapError(error);
   },
 
-  /** 拉取所有 profiles（用于构建 userId → displayName 映射） */
+  /** 拉取所有 profiles（用于构建 userId → displayName / avatar 映射） */
   async listProfiles() {
     const { data, error } = await supabase
       .from('profiles')
@@ -100,6 +101,7 @@ export const db = {
       id: p.id,
       username: p.username,
       displayName: p.display_name,
+      avatar: avatarForUsername(p.username),
     }));
   },
 };

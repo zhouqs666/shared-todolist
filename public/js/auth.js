@@ -12,17 +12,22 @@
  */
 
 import { supabase } from './supabase.js';
+import { avatarForUsername } from './avatars.js';
 
 // 用户名 → 伪邮箱映射
 // 用伪邮箱是因为 Supabase Auth 必须以邮箱为账号唯一标识，
 // 但我们的应用不需要真实邮箱通信（已关闭邮箱验证）。
+// 中文登录名（小宝宝/大宝贝）与英文（XiaoBaoBao/DaBaoBei）都支持，
+// 后者作为兼容入口保留。
 const USERNAME_TO_EMAIL = {
+  小宝宝: 'xiaobaobao@todo.local',
+  大宝贝: 'dabaobei@todo.local',
   XiaoBaoBao: 'xiaobaobao@todo.local',
   DaBaoBei: 'dabaobei@todo.local',
 };
 
 function usernameToEmail(username) {
-  // 大小写敏感的精确匹配
+  // 精确匹配（中文/英文均可）
   if (USERNAME_TO_EMAIL[username]) return USERNAME_TO_EMAIL[username];
   // 兜底：未知名 → 拼伪邮箱（不会登录成功，但保留扩展性）
   return `${username.toLowerCase()}@todo.local`;
@@ -89,10 +94,12 @@ export const auth = {
   _shapeUser(user, fallbackUsername) {
     if (!user) return null;
     const meta = user.user_metadata || {};
+    const username = meta.username || fallbackUsername || null;
     return {
       id: user.id,
-      username: meta.username || fallbackUsername || null,
+      username,
       displayName: meta.display_name || meta.username || fallbackUsername || '我',
+      avatar: avatarForUsername(username),
     };
   },
 };

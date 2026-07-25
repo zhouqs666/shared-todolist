@@ -2,7 +2,8 @@
  * 初始化两个 Auth 用户（幂等可重复运行）
  *
  * 用法：
- *   node scripts/init-users.mjs
+ *   npm run init-users
+ *   （等价于：node --env-file-if-exists=.env scripts/init-users.mjs）
  *
  * 行为：
  *   1. 用 service_role 登录 Supabase admin API
@@ -41,9 +42,12 @@ const supabase = createClient(URL, KEY, {
 });
 
 // 两个固定账号（与前端 auth.js 的 USERNAME_TO_EMAIL 保持一致）
+// 注意：email 是幂等去重的键，不可改；username/display_name 用中文，
+// 新建账号时写入 user_metadata，再由 handle_new_user trigger 落到 profiles。
+// 已有账号需另外跑 SQL 更新 profiles.display_name（见 README 或会话记录）。
 const USERS = [
-  { username: 'XiaoBaoBao', email: 'xiaobaobao@todo.local', password: '5201314', display_name: 'XiaoBaoBao' },
-  { username: 'DaBaoBei',   email: 'dabaobei@todo.local',   password: '5271314', display_name: 'DaBaoBei' },
+  { username: '小宝宝', email: 'xiaobaobao@todo.local', password: '5201314', display_name: '小宝宝' },
+  { username: '大宝贝', email: 'dabaobei@todo.local',   password: '5271314', display_name: '大宝贝' },
 ];
 
 console.log('=== 初始化 Auth 用户 ===');

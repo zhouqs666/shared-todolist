@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node scripts/serve.mjs",
     "dev": "node --watch scripts/serve.mjs",
-    "init-users": "node scripts/init-users.mjs",
+    "init-users": "node --env-file-if-exists=.env scripts/init-users.mjs",
+    "rename-users": "node --env-file-if-exists=.env scripts/rename-users.mjs",
     "bundle:supabase": "esbuild --bundle --format=esm --platform=browser --target=es2020 --minify --outfile=public/js/vendor/supabase-js.esm.js @supabase/supabase-js"
   },
   "keywords": [

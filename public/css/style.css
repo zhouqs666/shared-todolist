@@ -140,11 +140,41 @@ input {
 .topbar__me {
   color: var(--color-text-muted);
   font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   /* 超长用户名在窄屏下省略 */
-  max-width: 80px;
+  max-width: 96px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.topbar__me-name {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+/* 顶栏头像（当前登录用户） */
+.topbar__avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--color-border);
+  box-shadow: 0 0 0 2px var(--color-surface),
+    0 0 0 3px rgba(var(--color-primary-rgb), 0.35);
+}
+
+/* 加载占位时的状态点（未渲染真实头像前显示） */
+.topbar__me--placeholder::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d1d5db;
+  box-shadow: 0 0 0 3px rgba(209, 213, 219, 0.3);
+  flex-shrink: 0;
 }
 
 /* 窄屏适配：缩小间距、紧凑布局 */
@@ -160,8 +190,12 @@ input {
     gap: 6px;
   }
   .topbar__me {
-    max-width: 50px;
+    max-width: 70px;
     font-size: 12px;
+  }
+  .topbar__avatar {
+    width: 22px;
+    height: 22px;
   }
   .btn--ghost {
     padding: 6px 10px;
@@ -171,24 +205,6 @@ input {
     padding: 3px 8px;
     font-size: 12px;
   }
-}
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.topbar__me::before {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.2);
-}
-
-.topbar__me--placeholder::before {
-  background: #d1d5db;
-  box-shadow: 0 0 0 3px rgba(209, 213, 219, 0.3);
 }
 
 /* ===== 按钮 ===== */
@@ -386,6 +402,32 @@ input {
   margin-top: 4px;
   font-size: 12px;
   color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+/* 待办项 meta 中的小头像（创建者） */
+.todo__avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--color-border);
+  vertical-align: middle;
+}
+
+/* 无头像时的占位点 */
+.todo__avatar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  opacity: 0.6;
+  flex-shrink: 0;
+  display: inline-block;
 }
 
 .todo__delete {

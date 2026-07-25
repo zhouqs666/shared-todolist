@@ -65,15 +65,14 @@ function hideLoading() {
       return;
     }
     currentUser = user;
-    meEl.textContent = currentUser.displayName;
-    meEl.classList.remove('topbar__me--placeholder');
+    renderMe();
 
-    // 构建 userId → displayName 映射（用于 render 时显示创建者/完成者）
+    // 构建 userId → {displayName, avatar} 映射（用于 render 时显示创建者/完成者）
     try {
       const profiles = await db.listProfiles();
       userMap = {};
       profiles.forEach((p) => {
-        userMap[p.id] = p.displayName;
+        userMap[p.id] = { displayName: p.displayName, avatar: p.avatar };
       });
     } catch (err) {
       console.error('[app] 加载 profiles 失败:', err);
@@ -81,6 +80,7 @@ function hideLoading() {
   } catch (err) {
     console.error('[app] 获取用户信息失败:', err);
     meEl.textContent = '加载失败';
+    meEl.classList.remove('topbar__me--placeholder');
     return;
   }
 
@@ -234,6 +234,25 @@ async function deleteTodo(id) {
   }
 }
 
+// ===== 顶栏"我"：头像 + 昵称 =====
+function renderMe() {
+  meEl.classList.remove('topbar__me--placeholder');
+  meEl.textContent = '';
+  const avatar = currentUser && currentUser.avatar;
+  if (avatar) {
+    const img = document.createElement('img');
+    img.className = 'topbar__avatar';
+    img.src = avatar;
+    img.alt = '';
+    img.onerror = () => img.remove();
+    meEl.appendChild(img);
+  }
+  const name = document.createElement('span');
+  name.className = 'topbar__me-name';
+  name.textContent = currentUser ? currentUser.displayName : '';
+  meEl.appendChild(name);
+}
+
 // ===== 渲染 =====
 function render() {
   const todos = getTodos();
@@ -304,12 +323,29 @@ function renderItem(todo) {
 
   const metaEl = document.createElement('div');
   metaEl.className = 'todo__meta';
-  const creatorName = displayOf(todo.createdBy);
-  let meta = `${creatorName} · ${formatRelativeTime(todo.createdAt)}`;
-  if (todo.completed) {
-    meta += ` · ${displayOf(todo.completedBy)}完成`;
+  const creator = displayOf(todo.createdBy);
+  const time = formatRelativeTime(todo.createdAt);
+  const completer = todo.completed ? displayOf(todo.completedBy) : null;
+
+  if (creator.avatar) {
+    const img = document.createElement('img');
+    img.className = 'todo__avatar';
+    img.src = creator.avatar;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.onerror = () => img.remove();
+    metaEl.appendChild(img);
+  } else {
+    const dot = document.createElement('span');
+    dot.className = 'todo__avatar-dot';
+    metaEl.appendChild(dot);
   }
-  metaEl.textContent = meta;
+
+  const metaText = document.createElement('span');
+  let meta = `${creator.name} · ${time}`;
+  if (completer) meta += ` · ${completer.name}完成`;
+  metaText.textContent = meta;
+  metaEl.appendChild(metaText);
 
   body.appendChild(textEl);
   body.appendChild(metaEl);
@@ -329,10 +365,12 @@ function renderItem(todo) {
   return li;
 }
 
-/** 根据 userId 返回展示名（从 profiles 表查到，避免硬编码） */
+/** 根据 userId 返回 {name, avatar}（从 profiles 表查到，避免硬编码） */
 function displayOf(userId) {
-  if (!userId) return '?';
-  return userMap[userId] || '?';
+  if (!userId) return { name: '?', avatar: null };
+  const p = userMap[userId];
+  if (!p) return { name: '?', avatar: null };
+  return { name: p.displayName, avatar: p.avatar };
 }
 
 // ===== UI 状态 =====
