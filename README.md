@@ -1,161 +1,161 @@
 # 📋 我们的清单
 
-一个为**两个人**设计的轻量级共享待办清单网页应用：两人看到同一份清单，互相添加、完成、删除任务，所有变更**实时同步**到对方屏幕。
+一个为**两个人**设计的轻量级共享待办清单 **PWA**：两人看到同一份清单，互相添加、完成、删除任务，所有变更**实时同步**到对方屏幕。
 
 ## ✨ 功能
 
 - 👥 双账号共享一份清单
 - ➕ 添加 / ✅ 完成 / 🗑 删除
-- ⚡ 实时同步（WebSocket，< 1 秒到达对方）
-- 📱 移动端友好（自适应手机/桌面）
-- 🔒 密码 bcrypt 哈希、登录态 cookie 鉴权
-- 🆓 免费部署（Render + Supabase 免费层）
+- ⚡ 实时同步（Supabase Realtime，< 1 秒到达对方）
+- 📱 移动端友好 + **可安装到手机主屏幕**（PWA）
+- 🎨 5 套主题切换 + 完成动画（彩带 / 音效 / 震动 / 计数器）
+- 🔒 Supabase Auth + RLS 行级安全
+- 🆓 永久免费部署（Supabase 免费层 + Cloudflare Tunnel）
+
+## 🏗️ 架构（V2 / PWA + Supabase 直连）
+
+```
+┌──────────────┐         ┌─────────────────────────┐
+│  浏览器/PWA   │ ◄────► │   Supabase 云（免费层）  │
+│  纯静态前端   │  HTTPS │  ┌──────────────────┐    │
+│  (public/)   │  + WSS │  │ Auth（密码登录）  │    │
+│              │         │  │ PostgreSQL       │    │
+│  supabase-js │         │  │ Realtime（推送）  │    │
+│  (本地打包)  │         │  └──────────────────┘    │
+└──────────────┘         └─────────────────────────┘
+       ▲
+       │ 静态托管
+       │
+┌──────┴───────┐
+│ Cloudflare   │
+│ Tunnel /任意 │
+│ 静态托管服务 │
+└──────────────┘
+```
+
+**关键设计**：
+- **无后端服务器**——前端直接通过 Supabase JS SDK 访问数据库
+- **anon key 写在 `public/js/supabase.js`**——这是**设计上公开**的（public key），真正的安全靠 RLS：
+  - 未登录（anon 角色）：完全无法读写
+  - 已登录（authenticated 角色）：可读写所有 todos（双人共享模式）
+- **只有 2 个固定账号**（无公开注册入口），所以"所有 authenticated 用户都能读写全部"是安全的
 
 ## 🚀 本地开发
 
 ```bash
-# 1. 安装依赖
+# 1. 安装依赖（仅 supabase-js + esbuild + sharp）
 npm install
 
-# 2. 复制环境变量模板
+# 2. 配置环境变量（仅供 scripts/init-users.mjs 用）
 cp .env.example .env
+# 编辑 .env 填入 SUPABASE_URL / SUPABASE_KEY / SUPABASE_ANON_KEY
 
-# 3. 启动
+# 3. 启动静态服务器
 npm start
 # 或开发模式（文件变更自动重启）
 npm run dev
 ```
 
-打开 http://localhost:3000 即可。
+打开 http://localhost:3000
 
-**默认账号**（本地开发，明文都是 `password`）：
-- `alice` / `password`
-- `bob` / `password`
+## ☁️ 部署上线
 
-## ☁️ 部署上线（Render + Supabase）
+### 前置条件
 
-整体流程：**GitHub 推代码 → Supabase 建表 → Render 部署 → 设置环境变量 → 访问**
+1. **Supabase 项目**（已建好 schema）
+2. **两个 Auth 用户**已通过 `scripts/init-users.mjs` 创建
+3. 一个**静态托管方案**：
+   - **方案 A（推荐）**：Cloudflare Tunnel 指向本地静态服务器（地址临时但免费）
+   - **方案 B（永久）**：Cloudflare Pages / Netlify / Vercel 托管 `public/` 目录（永久固定域名）
+   - **方案 C（最简）**：`npm start` + 任意内网穿透（ngrok / frp）
 
-### 第 1 步：把代码推到 GitHub
-
-```bash
-# 在项目根目录
-git init
-git add .
-git commit -m "init: 双人共享待办清单"
-git branch -M main
-git remote add origin <你的 GitHub 仓库地址>
-git push -u origin main
-```
-
-> 仓库可以设为 Public 或 Private（Render 两者都支持）。
-
-### 第 2 步：创建 Supabase 项目并建表
-
-1. 访问 https://supabase.com 注册（GitHub 登录最快）
-2. **New Project** → 取个名字（如 `shared-todo`）→ 设置数据库密码 → 选免费区域（Singapore 离国内最近）
-3. 等待 1~2 分钟项目创建完成
-4. 进入项目 → **SQL Editor** → **New query**
-5. 把 [`supabase/schema.sql`](./supabase/schema.sql) 整个文件内容粘进去 → **Run**
-6. 进入 **Project Settings** → **API**，记下两个值（后面 Render 要用）：
-   - **Project URL**（形如 `https://xxxxx.supabase.co`）
-   - **service_role secret key**（⚠️ 注意是 service_role，不是 anon！这是绕过 RLS 的服务端密钥）
-
-### 第 3 步：生成你自己的密码 hash
-
-本地执行（用你想给 Alice/Bob 设置的真实密码）：
+### Cloudflare Tunnel 示例
 
 ```bash
-# 安装依赖后
-node scripts/gen-password-hash.js "你的真实密码"
-# 会输出形如 $2a$10$xxxxx... 的 hash，复制下来
+# 终端 1：启动静态服务器
+npm start
 
-# 再给第二个用户生成一次
-node scripts/gen-password-hash.js "第二个用户的密码"
+# 终端 2：启动 tunnel（会输出 https://xxx.trycloudflare.com）
+cloudflared tunnel --url http://localhost:3000
 ```
 
-> ⚠️ 生产环境**务必**改掉默认的 `password`，否则任何人都能登录你的清单。
+### Cloudflare Pages 永久部署
 
-### 第 4 步：在 Render 创建 Web Service
+1. 把代码推到 GitHub
+2. Cloudflare Pages → Create project → Connect to Git
+3. Build command：留空（无构建步骤）
+4. Build output directory：`public`
+5. 部署完成得到永久地址 `https://your-project.pages.dev`
 
-1. 访问 https://render.com 注册（GitHub 登录）
-2. **New +** → **Blueprint**
-3. 选择刚才推送代码的 GitHub 仓库
-4. Render 会自动识别 `render.yaml`，确认服务名 `shared-todolist`
-5. **Apply** 创建服务
-6. 进入服务 → **Environment** 标签页，**手动添加**以下环境变量（`render.yaml` 里被注释掉的那些）：
+## 🔧 维护命令
 
-   | Key | Value | 说明 |
-   |-----|-------|------|
-   | `SESSION_SECRET` | （用 `openssl rand -hex 32` 生成） | Session 加密 |
-   | `USER_A_USERNAME` | 如 `alice` | 用户 A 登录名 |
-   | `USER_A_DISPLAY_NAME` | 如 `Alice` | 用户 A 显示名 |
-   | `USER_A_PASSWORD_HASH` | 第 3 步生成的 hash | 用户 A 密码 hash |
-   | `USER_B_USERNAME` | 如 `bob` | 用户 B 登录名 |
-   | `USER_B_DISPLAY_NAME` | 如 `Bob` | 用户 B 显示名 |
-   | `USER_B_PASSWORD_HASH` | 第 3 步生成的 hash | 用户 B 密码 hash |
-   | `SUPABASE_URL` | 第 2 步记下的 Project URL | Supabase 地址 |
-   | `SUPABASE_KEY` | 第 2 步记下的 service_role key | Supabase 服务密钥 |
+```bash
+# 重新打包 supabase-js（升级版本后用）
+npm run bundle:supabase
 
-7. **Save Changes** → Render 自动重新部署
-8. 部署完成后，服务顶部会显示访问地址，形如：
-   `https://shared-todolist-xxxx.onrender.com`
-
-### 第 5 步：手机访问
-
-- 用任意手机浏览器打开 Render 给的地址
-- 输入你设置的用户名 + 密码
-- 把网址加到桌面（iOS Safari → 分享 → 添加到主屏幕），体验接近原生 App
-
-## ⚠️ 已知限制（免费层）
-
-| 限制 | 影响 | 应对 |
-|------|------|------|
-| Render 15 分钟无访问会休眠 | 首次唤醒等 30~50s | 接受；或升级 7 美元/月消除休眠 |
-| Supabase 免费层 500MB / 50k 行 | 双人场景完全够用 | — |
-| 不支持 HTTPS 自定义域名 | 用 onrender.com 域名 | 想用自有域名需付费 |
+# 初始化 Auth 用户（幂等可重复运行）
+npm run init-users
+```
 
 ## 🏗️ 技术栈
 
 | 层 | 技术 |
 |----|------|
 | 前端 | 原生 HTML5 + CSS3 + ES Module（无构建） |
-| 后端 | Node.js + Express |
-| 实时通信 | Socket.IO |
-| 数据存储 | 开发：JSON 文件 / 生产：Supabase PostgreSQL |
-| 鉴权 | Cookie + express-session + bcrypt |
-| 部署 | Render（Web）+ Supabase（DB） |
+| 数据/鉴权/实时 | Supabase（PostgreSQL + Auth + Realtime） |
+| 客户端 SDK | supabase-js（esbuild 打包到 `public/js/vendor/`） |
+| PWA | manifest.webmanifest + Service Worker |
+| 静态服务器 | Node 内置 http（零依赖，`scripts/serve.mjs`） |
+| 部署 | Cloudflare Tunnel / Pages |
 
 ## 📂 项目结构
 
 ```
 toDoList/
-├── src/                    # 后端
-│   ├── index.js            # 入口
-│   ├── routes/             # REST 路由（auth, todos）
-│   ├── sockets/            # Socket.IO 服务
-│   ├── store/              # 数据访问层（json/supabase 双实现）
-│   ├── auth/               # 鉴权中间件与用户服务
-│   ├── config/             # 环境变量集中读取
-│   └── utils/              # 校验工具
-├── public/                 # 前端静态资源
-│   ├── index.html          # 主页
-│   ├── login.html          # 登录页
-│   ├── css/                # 样式
-│   ├── js/                 # 主逻辑、socket、state、api
-│   └── favicon.svg         # 应用图标
-├── supabase/schema.sql     # 数据库建表脚本
-├── scripts/                # 工具脚本
-│   └── gen-password-hash.js
-├── render.yaml             # Render 部署配置
-├── PRD.md                  # 产品需求文档
+├── public/                       # 前端静态资源（部署根目录）
+│   ├── index.html                # 主页
+│   ├── login.html                # 登录页
+│   ├── manifest.webmanifest      # PWA 清单
+│   ├── sw.js                     # Service Worker
+│   ├── favicon.svg               # 应用图标（SVG 源）
+│   ├── icons/                    # PWA 图标（PNG）
+│   ├── css/                      # 样式（style + login）
+│   └── js/
+│       ├── app.js                # 主页入口
+│       ├── login.js              # 登录页逻辑
+│       ├── auth.js               # 认证层（Supabase Auth）
+│       ├── db.js                 # 数据访问层
+│       ├── realtime.js           # Realtime 订阅
+│       ├── state.js              # 状态管理
+│       ├── theme.js              # 主题切换 + FX 开关
+│       ├── utils.js              # 工具函数
+│       ├── supabase.js           # Supabase 客户端单例（含 anon key）
+│       └── vendor/
+│           ├── supabase-js.esm.js         # SDK（本地打包）
+│           └── canvas-confetti.esm.min.js # 动画库
+├── scripts/
+│   ├── serve.mjs                 # 极简静态服务器
+│   └── init-users.mjs            # Auth 用户初始化脚本
+├── supabase/schema.sql           # 数据库 schema（参考用）
+├── PRD.md                        # 产品需求文档
+├── .env.example                  # 环境变量模板
 └── package.json
 ```
 
+## 🔒 安全模型
+
+| 资源 | 未登录（anon） | 已登录（authenticated） |
+|------|----------------|------------------------|
+| `profiles` 表 | 可读（仅显示名） | 可读，只能改自己 |
+| `todos` 表 | 完全拒绝（RLS） | 可读写所有 todos |
+
+**为什么所有 authenticated 都能读写所有 todos？**
+因为这是"双人共享清单"——两个账号都要能看到/操作同一份数据。安全性靠"只有 2 个固定账号能注册"保证（无公开注册入口，账号通过 `scripts/init-users.mjs` 用 service_role 创建）。
+
 ## 📖 文档
 
-- [PRD.md](./PRD.md) — 产品需求文档（功能、架构、决策）
-- [README.md](./README.md) — 本文件（部署指引）
+- [PRD.md](./PRD.md) — 产品需求文档
+- [supabase/schema.sql](./supabase/schema.sql) — 数据库 schema
 - [`.env.example`](./.env.example) — 环境变量模板
 
 ## 📝 License

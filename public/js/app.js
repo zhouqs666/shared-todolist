@@ -1,11 +1,17 @@
 /**
- * 主页入口
- * M2：登录态、退出
- * M3：待办 CRUD
- * M4：实时同步（Socket.IO）
+ * 主页入口（V2 / PWA + Supabase 版）
+ *
+ * 改造点（相对 V1）：
+ *   - 登录态：fetch /api/me → auth.getCurrentUser()（基于 Supabase session）
+ *   - 数据访问：api.* → db.*（直连 Supabase，无后端）
+ *   - 实时：initSocket → initRealtime（Supabase Realtime postgres_changes）
+ *   - 自我回声：服务端不再排除 sender，前端用 id 幂等去重
+ *
+ * 保留：所有 UI、CSS、动画、主题、state 形状、todo 字段名。
  */
 
-import { api, ApiError } from './api.js';
+import { db } from './db.js';
+import { auth } from './auth.js';
 import { formatRelativeTime, playDing } from './utils.js';
 import {
   getTodos,
@@ -16,12 +22,12 @@ import {
   setCompleteFn,
   notifyCompleted,
 } from './state.js';
-import { initSocket } from './socket.js';
+import { initRealtime } from './realtime.js';
 import { initTheme, isFxEnabled } from './theme.js';
 import confetti from './vendor/canvas-confetti.esm.min.js';
 
 let currentUser = null;
-/** @type {Object<string, string>} userId → displayName 映射（从 /api/me 拿） */
+/** @type {Object<string, string>} userId → displayName 映射（从 profiles 表拿） */
 let userMap = {};
 
 const meEl = document.getElementById('me');
@@ -49,22 +55,28 @@ function hideLoading() {
 
 // ===== 启动 =====
 (async function init() {
+  // 主题先初始化（不依赖任何数据/网络，越早越好，避免用户感知延迟）
+  initTheme();
+
   try {
-    const resp = await fetch('/api/me');
-    const data = await resp.json();
-    if (!data.ok) {
-      window.location.href = '/login';
+    const user = await auth.getCurrentUser();
+    if (!user) {
+      window.location.href = '/login.html';
       return;
     }
-    currentUser = data.user;
+    currentUser = user;
     meEl.textContent = currentUser.displayName;
     meEl.classList.remove('topbar__me--placeholder');
-    // 构造 userId → displayName 映射
-    if (Array.isArray(data.users)) {
+
+    // 构建 userId → displayName 映射（用于 render 时显示创建者/完成者）
+    try {
+      const profiles = await db.listProfiles();
       userMap = {};
-      data.users.forEach((u) => {
-        userMap[u.id] = u.displayName;
+      profiles.forEach((p) => {
+        userMap[p.id] = p.displayName;
       });
+    } catch (err) {
+      console.error('[app] 加载 profiles 失败:', err);
     }
   } catch (err) {
     console.error('[app] 获取用户信息失败:', err);
@@ -83,24 +95,35 @@ function hideLoading() {
 
   bindEvents();
 
-  // 先拉一次列表（兜底，socket 连上后会用 todo:sync 全量覆盖）
+  // 先拉一次列表兜底（弥补 Realtime 订阅期间的 INSERT 事件丢失）
   try {
-    const { todos } = await api.listTodos();
+    const todos = await db.listTodos();
     setTodos(sortTodos(todos));
   } catch (err) {
-    handleError(err, '加载列表失败');
+    handleError(toAppError(err), '加载列表失败');
     render(getTodos());
   }
 
-  // 初始化主题选择器
-  initTheme();
-
-  // 建立 socket 连接
-  initSocket({
+  // 建立 Realtime 订阅
+  initRealtime({
     getTodos,
     setTodos,
     setOnline: updateOnlineUI,
     notifyCompleted,
+  });
+
+  // 注册 SW（PWA 离线外壳）
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.warn('[sw] 注册失败:', err.message);
+    });
+  }
+
+  // 监听 auth 状态变化（token 失效时自动跳登录）
+  auth.onAuthChange((event) => {
+    if (event === 'SIGNED_OUT') {
+      window.location.href = '/login.html';
+    }
   });
 })();
 
@@ -121,11 +144,11 @@ async function logout() {
   logoutBtn.disabled = true;
   logoutBtn.textContent = '退出中...';
   try {
-    await fetch('/api/logout', { method: 'POST' });
+    await auth.logout();
   } catch (err) {
     console.error('[app] 退出失败:', err);
   } finally {
-    window.location.href = '/login';
+    window.location.href = '/login.html';
   }
 }
 
@@ -139,12 +162,12 @@ async function addTodo() {
   addBtn.classList.add('composer__btn--loading');
   showLoading();
   try {
-    const { todo } = await api.createTodo(text);
-    // socket 不会发回声给自己（服务端排除 sender），所以这里直接加上
+    const todo = await db.createTodo(text, currentUser.id);
+    // Realtime 也会推回来（幂等去重），这里直接加上不等回声
     setTodos(sortTodos([...getTodos(), todo]));
     todoInput.value = '';
   } catch (err) {
-    handleError(err, '添加失败');
+    handleError(toAppError(err), '添加失败');
   } finally {
     todoInput.disabled = false;
     addBtn.disabled = false;
@@ -174,7 +197,7 @@ async function toggleComplete(id, nextCompleted) {
   // 本端完成 → 庆祝动画
   if (nextCompleted) celebrateCompletion(current.text);
   try {
-    const { todo } = await api.updateTodo(id, nextCompleted);
+    const todo = await db.setCompleted(id, nextCompleted, currentUser.id);
     // 竞态保护：如果在 await 期间用户又改了意图，丢弃这个响应
     if (latestIntent.get(id) !== nextCompleted) {
       return; // 已被后续操作覆盖
@@ -186,7 +209,7 @@ async function toggleComplete(id, nextCompleted) {
       const target = getTodos().find((t) => t.id === id);
       if (target) Object.assign(target, prev);
       setTodos(sortTodos(getTodos()));
-      handleError(err, '操作失败');
+      handleError(toAppError(err), '操作失败');
     }
   }
 }
@@ -204,10 +227,10 @@ async function deleteTodo(id) {
   }
   setTodos(getTodos().filter((t) => t.id !== id));
   try {
-    await api.deleteTodo(id);
+    await db.deleteTodo(id);
   } catch (err) {
     setTodos(sortTodos([...getTodos(), target])); // 回滚
-    handleError(err, '删除失败');
+    handleError(toAppError(err), '删除失败');
   }
 }
 
@@ -306,7 +329,7 @@ function renderItem(todo) {
   return li;
 }
 
-/** 根据 userId 返回展示名（从服务端返回的用户列表查找，避免硬编码） */
+/** 根据 userId 返回展示名（从 profiles 表查到，避免硬编码） */
 function displayOf(userId) {
   if (!userId) return '?';
   return userMap[userId] || '?';
@@ -359,14 +382,27 @@ function handleRemoteCompleted(todo) {
   celebrateCompletion('对方完成了「' + (todo.text || '') + '」');
 }
 
+/**
+ * 把 db / auth 抛出的错误规整成统一的 AppError 形态
+ * （沿用旧 api.js 的错误码语义：NETWORK / TOO_LONG / INVALID_INPUT）
+ */
+function toAppError(err) {
+  if (!err) return { code: 'UNKNOWN', message: '未知错误' };
+  // 已经是包装过的（db.js 抛出的）
+  if (err.code) return err;
+  // TypeError 通常是 fetch 失败
+  if (err instanceof TypeError) return { code: 'NETWORK', message: '网络异常', original: err };
+  return { code: 'UNKNOWN', message: err.message || '未知错误', original: err };
+}
+
 function handleError(err, fallback) {
   console.error('[app] error:', err);
   let msg = fallback;
-  if (err instanceof ApiError) {
-    if (err.code === 'NETWORK') msg = '网络异常，请稍后重试';
-    else if (err.code === 'TOO_LONG') msg = '内容太长（最多 200 字）';
-    else if (err.code === 'INVALID_INPUT') msg = '内容不能为空';
-  }
+  const code = err?.code;
+  if (code === 'NETWORK') msg = '网络异常，请稍后重试';
+  else if (code === 'TOO_LONG') msg = '内容太长（最多 200 字）';
+  else if (code === 'INVALID_INPUT') msg = '内容不能为空';
+  else if (code === 'INVALID_CREDENTIALS') msg = '用户名或密码错误';
   showToast(msg);
 }
 

@@ -1,43 +1,89 @@
 -- ============================================================
--- 双人共享待办清单 — Supabase 建表脚本
--- 使用方法：
---   1. 登录 https://supabase.com
---   2. 创建项目（免费层即可）
---   3. 进入项目 → SQL Editor → New query
---   4. 粘贴本文件全部内容 → Run
+-- 双人共享待办清单 — Supabase schema（V2 / PWA + Auth 版）
+--
+-- 这是当前生产环境的 schema 副本，仅作参考。
+-- schema 已在 Dashboard SQL Editor 中应用，无需再次运行。
+-- 如需在新项目重置，按下面顺序执行即可。
 -- ============================================================
 
--- 待办表
+-- ===== 0. 清理（如重置） =====
+-- DROP TABLE IF EXISTS todos CASCADE;
+-- DROP TABLE IF EXISTS profiles CASCADE;
+-- DROP FUNCTION IF EXISTS handle_new_user() CASCADE;
+-- DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+
+-- ===== 1. profiles 表：userId → username / display_name =====
+CREATE TABLE IF NOT EXISTS profiles (
+  id           UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  username     TEXT UNIQUE NOT NULL,
+  display_name TEXT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "profiles_select_all" ON profiles;
+CREATE POLICY "profiles_select_all" ON profiles FOR SELECT USING (true);
+DROP POLICY IF EXISTS "profiles_insert_self" ON profiles;
+CREATE POLICY "profiles_insert_self" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+DROP POLICY IF EXISTS "profiles_update_self" ON profiles;
+CREATE POLICY "profiles_update_self" ON profiles FOR UPDATE USING (auth.uid() = id);
+
+-- 注册时自动填充 profiles（trigger）
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO profiles (id, username, display_name)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'username', split_part(NEW.email, '@', 1)),
+    COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1))
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+
+-- ===== 2. todos 表（V2：created_by / completed_by 是 UUID 引用 auth.users）=====
 CREATE TABLE IF NOT EXISTS todos (
-  id            TEXT PRIMARY KEY DEFAULT ('t_' || encode(genrandom_bytes(12), 'hex')),
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   text          TEXT NOT NULL CHECK (char_length(text) <= 200),
   completed     BOOLEAN NOT NULL DEFAULT FALSE,
-  created_by    TEXT NOT NULL,
+  created_by    UUID NOT NULL REFERENCES auth.users(id),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  completed_by  TEXT,
+  completed_by  UUID REFERENCES auth.users(id),
   completed_at  TIMESTAMPTZ,
 
-  -- 完成时必须有完成者
   CONSTRAINT completed_consistent CHECK (
     (completed = FALSE AND completed_by IS NULL AND completed_at IS NULL)
-    OR
-    (completed = TRUE AND completed_by IS NOT NULL AND completed_at IS NOT NULL)
+    OR (completed = TRUE AND completed_by IS NOT NULL AND completed_at IS NOT NULL)
   )
 );
-
--- 排序查询用到的索引
 CREATE INDEX IF NOT EXISTS idx_todos_completed_created
   ON todos (completed, created_at DESC);
-
--- 启用行级安全（Row Level Security）
 ALTER TABLE todos ENABLE ROW LEVEL SECURITY;
 
--- 由于本应用是服务端用 service_role key 访问（绕过 RLS），
--- 这里给 anon 角色完全禁止策略（最安全）。
--- 应用层鉴权已通过登录态校验。
--- 如果你希望 anon 也能读取（不推荐），可以放开下面注释。
---
--- CREATE POLICY "anon_read_todos" ON todos
---   FOR SELECT TO anon USING (true);
+-- 双人共享模式：所有已登录用户都能读写所有 todos
+-- （安全前提：只有 2 个固定账号能注册，无公开注册入口）
+DROP POLICY IF EXISTS "todos_select_auth" ON todos;
+CREATE POLICY "todos_select_auth" ON todos
+  FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "todos_insert_auth" ON todos;
+CREATE POLICY "todos_insert_auth" ON todos
+  FOR INSERT TO authenticated WITH CHECK (created_by = auth.uid());
+DROP POLICY IF EXISTS "todos_update_auth" ON todos;
+CREATE POLICY "todos_update_auth" ON todos
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "todos_delete_auth" ON todos;
+CREATE POLICY "todos_delete_auth" ON todos
+  FOR DELETE TO authenticated USING (true);
 
--- 注：service_role 默认绕过所有 RLS，应用用此角色。
+-- ===== 3. 启用 Realtime 推送（INSERT/UPDATE/DELETE 全事件）=====
+ALTER PUBLICATION supabase_realtime ADD TABLE todos;
+ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
+
+-- ===== 4. 账号创建参考（不在此处运行，使用 scripts/init-users.mjs）=====
+-- 见 scripts/init-users.mjs：用 service_role 调 auth.admin.createUser 创建
+-- XiaoBaoBao / DaBaoBei 两个用户，触发上面的 trigger 自动建 profile。
