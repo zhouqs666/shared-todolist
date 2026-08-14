@@ -1492,6 +1492,7 @@ input {
 /* 关键：hidden 必须能覆盖 display:flex，否则写信页永远可见（露页 bug 根因） */
 .note-write[hidden] { display: none !important; }
 .note-write__header {
+  position: relative; /* 标题绝对居中的定位上下文 */
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1514,6 +1515,10 @@ input {
 }
 .note-write__close:hover { background: rgba(244,63,94,0.1); opacity: 1; }
 .note-write__title {
+  position: absolute;   /* 居中仪式感：标题不受左侧关闭按钮宽度影响，绝对居中 */
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
   font-size: 17px;
   font-weight: 600;
   color: var(--rose-700);
@@ -1527,16 +1532,18 @@ input {
   overflow: hidden;
 }
 /* 信纸容器：横线纸纹理（行距 = textarea line-height 30.6px，横线对齐文字基线）。
-   白纸半透明底 + 柔影：一张真实的纸浮在信笺氛围上 */
+   实底白纸 + 两级玫瑰柔影 + 极淡描边：一张有分量的纸浮在信笺氛围上，
+   任何背景区域边界都清晰可辨。 */
 .note-write__paper {
   flex: 1;
   position: relative;
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background-color: rgba(255, 255, 255, 0.55);
-  box-shadow: 0 4px 20px rgba(244, 63, 94, 0.07);
+  background-color: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(253, 164, 175, 0.28);
+  box-shadow: 0 2px 8px rgba(225, 29, 72, 0.05), 0 12px 32px rgba(225, 29, 72, 0.12);
   /* 横线间距 30.6px（严丝合缝 textarea line-height），每条线 1px */
   background-image: repeating-linear-gradient(
     to bottom,
@@ -1546,9 +1553,25 @@ input {
     rgba(244, 63, 94, 0.15) 30.6px
   );
   /* 让横线落在文字基线下沿（字"坐"在横线上，像作业本）：
-     字体 ascent 16 + descent 4 + 半行距 5.3 = 基线下沿约 25px，
-     横线在周期内 29.6px 处，故整图下移 25 - 29.6 ≈ -4.6px */
-  background-position: 0 -4.6px;
+     textarea 有 padding-top 14px，基线下沿 = 14 + 25 ≈ 39px，
+     横线在周期内 29.6px 处，故整图下移 39 - 29.6 ≈ 9.4px */
+  background-position: 0 9.4px;
+}
+/* 信笺抬头线：纸顶一道两端渐隐的玫瑰细线，空纸也不空 */
+.note-write__paper::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(253, 164, 175, 0.65) 18%,
+    rgba(244, 63, 94, 0.5) 50%,
+    rgba(253, 164, 175, 0.65) 82%,
+    transparent 100%);
+  pointer-events: none;
 }
 .note-write__textarea {
   flex: 1;
@@ -1560,12 +1583,12 @@ input {
   color: var(--color-text);
   font-size: 17px;
   line-height: 30.6px; /* 与横线间距严丝合缝，文字坐在横线上 */
-  padding: 0;
+  padding: 14px 18px; /* 纸内边距：文字不骑圆角，四周有呼吸 */
   font-family: inherit;
 }
 .note-write__textarea::placeholder {
-  color: var(--rose-400);
-  opacity: 0.7;
+  color: var(--rose-600);
+  opacity: 0.62;
   line-height: 30.6px;
 }
 .note-write__footer {
@@ -1574,21 +1597,25 @@ input {
   text-align: center;
   position: relative;
 }
+/* 提示语 + 字数同一行：提示居中、计数右侧同基线，按钮下方区域完全留空 */
+.note-write__meta {
+  position: relative;
+  margin-bottom: 14px;
+}
 .note-write__hint {
   font-size: 12px;
   color: var(--rose-700);
   opacity: 0.5;
-  margin: 0 0 16px;
+  margin: 0;
   transition: opacity 0.3s var(--ease);
 }
-/* 字数指示器：底部右下角小字，不抢主按钮视觉 */
 .note-write__counter {
   position: absolute;
-  right: 24px;
-  bottom: calc(8px + var(--safe-bottom));
+  right: 0;
+  top: 1px;
   font-size: 11px;
   color: var(--rose-400);
-  opacity: 0.7;
+  opacity: 0.75;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
   transition: color 0.2s var(--ease), opacity 0.2s var(--ease);
@@ -1613,19 +1640,28 @@ input {
 .note-write__echo--show {
   opacity: 0.9;
 }
+/* 送达按钮：居中胶囊 + 小爱心 + 字距，像一枚封蜡/邮戳（仪式感核心） */
 .note-write__send {
-  width: 100%;
-  padding: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 52px;
   border: none;
-  border-radius: 14px;
+  border-radius: 999px;
   background: linear-gradient(160deg, var(--rose-400), var(--rose-600));
   color: #fff;
   font-size: 16px;
-  font-weight: 500;
-  box-shadow: 0 4px 16px rgba(244, 63, 94, 0.32);
-  transition: filter 0.15s var(--ease), transform 0.1s var(--ease);
+  font-weight: 600;
+  box-shadow: 0 6px 20px rgba(244, 63, 94, 0.35);
+  transition: filter 0.15s var(--ease), transform 0.1s var(--ease), box-shadow 0.15s var(--ease);
 }
-.note-write__send:hover { filter: brightness(1.06); }
+.note-write__send:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 8px 26px rgba(244, 63, 94, 0.42);
+}
+/* 字距 + 尾距补偿：letter-spacing 会在末字后多出 3px，往回收正视觉中心 */
+.note-write__send-text { letter-spacing: 3px; margin-right: -3px; }
 .note-write__send:active { transform: scale(0.98); }
 .note-write__send:disabled { opacity: 0.5; }
 /* 按钮化作光点飞出：点下瞬间按钮缩成一点淡出（光点从按钮位置飞向桃心） */
@@ -2720,9 +2756,11 @@ input {
   .note-write__close { color: rgba(253, 164, 175, 0.8); }
   .note-write__close:hover { background: rgba(244, 63, 94, 0.14); }
   .note-write__paper {
-    background-color: rgba(255, 255, 255, 0.045);
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(253, 164, 175, 0.14);
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   }
+  .note-write__paper::before { opacity: 0.55; }
   .note-write__hint { color: rgba(253, 164, 175, 0.55); }
   .note-read {
     background: linear-gradient(165deg, #241d20 0%, #1e191c 50%, #2b2024 100%);
