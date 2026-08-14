@@ -21,18 +21,25 @@ input, textarea, [contenteditable] {
 }
 
 :root {
-  --color-primary: #10b981;
-  --color-primary-dark: #059669;
-  --color-primary-rgb: 16, 185, 129;
-  --color-text: #1f2937;
-  --color-text-muted: #6b7280;
-  --color-border: #e5e7eb;
-  --color-bg: #f9fafb;
+  /* 主色：玫瑰（与情感色 rose 完全统一，「有爱」的品牌色）。
+     原 mint 薄荷绿已退役——绿（工具感）与粉（情感）割裂，统一后整体氛围如情书般温暖。 */
+  --color-primary: #f43f5e;
+  --color-primary-dark: #e11d48;
+  --color-primary-rgb: 244, 63, 94;
+  /* 文字/边框用暖灰（stone 系）而非冷灰，与玫瑰氛围协调 */
+  --color-text: #292524;
+  --color-text-muted: #78716c;
+  --color-border: #efe3e5;
+  --color-bg: #fdf5f6;
   --color-surface: #ffffff;
   --color-danger: #ef4444;
-  --radius: 12px;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --radius: 16px;
+  /* 阴影体系：品牌色染色（低饱和玫瑰），比纯黑灰阴影更"贵"。
+     旧变量名保留兼容，语义即三级 elevation。 */
+  --shadow-xs: 0 1px 2px rgba(147, 51, 64, 0.04);
+  --shadow: 0 1px 2px rgba(225, 29, 72, 0.04), 0 2px 8px rgba(225, 29, 72, 0.05);
+  --shadow-md: 0 2px 6px rgba(225, 29, 72, 0.05), 0 8px 24px rgba(225, 29, 72, 0.08);
+  --shadow-lg: 0 4px 12px rgba(225, 29, 72, 0.08), 0 16px 40px rgba(225, 29, 72, 0.12);
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -61,12 +68,12 @@ input, textarea, [contenteditable] {
   --gold-500: #f59e0b;
 }
 
-/* ===== 5 套主题（通过 data-theme 属性切换，存 localStorage） ===== */
-/* 默认（无 data-theme）即为薄荷绿 */
+/* ===== 主题（通过 data-theme 属性切换） ===== */
+/* 当前固定 rose（主色与情感色统一）；旧主题选择器保留以便未来恢复切换 */
 [data-theme="mint"] {
-  --color-primary: #10b981;
-  --color-primary-dark: #059669;
-  --color-primary-rgb: 16, 185, 129;
+  --color-primary: #f43f5e;
+  --color-primary-dark: #e11d48;
+  --color-primary-rgb: 244, 63, 94;
 }
 [data-theme="pink"] {
   --color-primary: #ec4899;
@@ -124,7 +131,12 @@ body {
 body {
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
     "Helvetica Neue", Arial, sans-serif;
-  background: var(--color-bg);
+  /* 氛围背景：极淡玫瑰渐变 + 顶部中央一抹柔光斑。
+     fixed 让渐变随滚动固定，卡片在"光"上滑动，像午后阳光洒在纸面。 */
+  background:
+    radial-gradient(1100px 480px at 50% -12%, rgba(253, 164, 175, 0.20), transparent 62%),
+    linear-gradient(180deg, #fff3f4 0%, #fdf8f8 42%, #fdf3f5 100%);
+  background-attachment: fixed;
   color: var(--color-text);
   font-size: 16px;
   line-height: 1.5;
@@ -147,8 +159,11 @@ input {
   justify-content: space-between;
   gap: 8px;
   padding: 16px 20px;
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  /* 毛玻璃：内容从下方滚过时透出模糊光影，与氛围背景融为一体 */
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(1.7);
+  backdrop-filter: blur(20px) saturate(1.7);
+  border-bottom: 1px solid rgba(244, 63, 94, 0.08);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -335,10 +350,10 @@ input {
   opacity: 0.75;
 }
 
-/* 数字：玫红色 + 加粗，视觉焦点 */
+/* 数字：玫红色 + 加粗，视觉焦点（放大成顶栏锚点，爱的计数器） */
 .topbar__anni-days {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 800;
   color: var(--rose-600);
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -354,7 +369,7 @@ input {
 @media (max-width: 400px) {
   .topbar__anni { gap: 2px; }
   .topbar__anni-label { font-size: 11px; }
-  .topbar__anni-days { font-size: 15px; }
+  .topbar__anni-days { font-size: 17px; }
   .topbar__anni-unit { font-size: 11px; }
 }
 
@@ -418,26 +433,60 @@ input {
 .todo-list__empty {
   text-align: center;
   color: var(--color-text-muted);
-  padding: 72px 16px;
+  padding: 76px 16px;
+  position: relative;
 }
 
-/* 空状态：rose 小爱心，轻微呼吸（像在等待） */
+/* 空状态：品牌渐变大爱心 + 柔光晕呼吸（像在安静地等待）。
+   爱心后面垫一圈极淡的玫瑰光斑，让"等待"有温度。 */
 .todo-list__empty-heart {
-  color: var(--rose-300);
-  margin-bottom: 16px;
-  opacity: 0.7;
+  position: relative;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   animation: empty-heart-breath 2.6s ease-in-out infinite;
 }
+.todo-list__empty-heart::before {
+  content: "";
+  position: absolute;
+  inset: -26px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(253, 164, 175, 0.22) 0%, rgba(255, 228, 230, 0.12) 45%, transparent 70%);
+  animation: empty-glow-breath 2.6s ease-in-out infinite;
+}
+.todo-list__empty-heart svg {
+  position: relative;
+  filter: drop-shadow(0 6px 16px rgba(244, 63, 94, 0.22));
+}
 @keyframes empty-heart-breath {
-  0%, 100% { transform: scale(1); opacity: 0.6; }
-  50%      { transform: scale(1.08); opacity: 0.85; }
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+@keyframes empty-glow-breath {
+  0%, 100% { opacity: 0.65; transform: scale(0.96); }
+  50%      { opacity: 1; transform: scale(1.04); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .todo-list__empty-heart { animation: none; }
+  .todo-list__empty-heart,
+  .todo-list__empty-heart::before { animation: none; }
 }
 
 .todo-list__empty-text {
-  font-size: 14px;
+  font-size: 15px;
+  color: var(--color-text);
+  opacity: 0.72;
+  letter-spacing: 0.5px;
+}
+
+/* 副文案：轻轻的一句引导，比主文案更小更淡 */
+.todo-list__empty-sub {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--rose-400);
+  opacity: 0.75;
   letter-spacing: 0.5px;
 }
 
@@ -448,10 +497,10 @@ input {
   gap: 12px;
   background: var(--color-surface);
   border-radius: var(--radius);
-  padding: 14px 14px;
+  padding: 15px 16px;
   margin-bottom: 12px; /* #6: 间距 10→12，呼吸感更好 */
-  /* 无边框，分层柔影：漂浮感 */
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.04);
+  /* 无边框，品牌染色分层柔影：漂浮感（阴影带一丝玫瑰，比黑灰更暖更"贵"） */
+  box-shadow: var(--shadow);
   transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.3s var(--ease);
   animation: todo-enter 0.25s var(--ease);
   position: relative; /* 给 .todo__nudge（绝对定位）做定位上下文，否则会飘到祖先容器 */
@@ -460,7 +509,7 @@ input {
 @media (hover: hover) {
   .todo:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-md);
   }
 }
 
@@ -482,42 +531,54 @@ input {
 /* 长按进度反馈：卡片轻微缩放 + 阴影收紧，暗示"再按一下触发菜单" */
 .todo--pressing {
   transform: scale(0.98);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-xs);
   transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
 
-/* 完成态：去灰块，只弱化文字（卡片质感不变，靠排序下沉区分） */
+/* 完成态：去灰块，只弱化文字（卡片质感不变，靠排序下沉区分）。
+   阴影收敛一丝：完成的卡片轻轻"沉"进背景，未完成的依然漂浮。 */
 .todo--done {
   background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+}
+.todo--done:hover {
+  box-shadow: var(--shadow);
 }
 
-/* 自绘圆形复选框：统一退到右上角，16×16 小尺寸，不占布局空间。
+/* 自绘圆形复选框：统一退到右上角，18×18 小尺寸，不占布局空间。
    无论完成与否都在同一位置（右上角），文字始终铺满卡片成为主角。
-   - 未完成：空心小灰圆（点它完成）
+   - 未完成：空心玫瑰小圆（点它完成），按下时点亮成心意的颜色
    - 完成：去掉圆圈，只留小对勾（点它取消完成） */
 .todo__check {
   position: absolute;
-  top: 8px;
-  right: 10px;
-  width: 16px;
-  height: 16px;
+  top: 9px;
+  right: 11px;
+  width: 18px;
+  height: 18px;
   padding: 0;
-  border: 1.5px solid var(--color-border);
+  border: 1.5px solid rgba(253, 164, 175, 0.85);
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-muted);
-  opacity: 0.5;
+  color: var(--rose-500);
+  opacity: 0.65;
   z-index: 2;
   transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease),
     transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .todo__check:active {
   transform: scale(0.88);
-  opacity: 0.8;
+  opacity: 1;
+  border-color: var(--rose-500);
+}
+@media (hover: hover) {
+  .todo__check:hover {
+    opacity: 0.9;
+    border-color: var(--rose-400);
+  }
 }
 .todo__check svg {
   width: 12px;
@@ -721,7 +782,7 @@ input {
   flex-wrap: wrap;
 }
 
-/* 待办项 meta 中的小头像（创建者） */
+/* 待办项 meta 中的小头像（创建者）：极细玫瑰描边，融入卡片色调 */
 .todo__avatar {
   width: 18px;
   height: 18px;
@@ -730,6 +791,7 @@ input {
   flex-shrink: 0;
   background: var(--color-border);
   vertical-align: middle;
+  box-shadow: 0 0 0 1px rgba(253, 164, 175, 0.45);
 }
 
 /* 无头像时的占位点 */
@@ -818,24 +880,24 @@ input {
 }
 
 /* ===== 骨架屏（首屏加载占位） ===== */
-/* 对齐真实 .todo 卡片：无边框、圆形复选框、同阴影 */
+/* 对齐真实 .todo 卡片：无边框、圆形复选框、同阴影同内距 */
 .skeleton {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   background: var(--color-surface);
   border-radius: var(--radius);
-  padding: 14px 14px;
-  margin-bottom: 10px;
+  padding: 15px 16px;
+  margin-bottom: 12px;
   box-shadow: var(--shadow);
 }
 
 .skeleton__box {
   background: linear-gradient(
     90deg,
-    var(--color-border) 0%,
-    var(--color-bg) 50%,
-    var(--color-border) 100%
+    rgba(254, 205, 211, 0.45) 0%,
+    rgba(255, 241, 242, 0.9) 50%,
+    rgba(254, 205, 211, 0.45) 100%
   );
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
@@ -1934,7 +1996,7 @@ input {
    添加待办：浮动按钮(FAB) + 展开式输入面板
    ============================================================ */
 
-/* 浮动 + 按钮（右下角，拇指自然可达） */
+/* 浮动 + 按钮（右下角，拇指自然可达）：品牌渐变 + 染色柔影 */
 .fab {
   position: fixed;
   right: 20px;
@@ -1943,22 +2005,22 @@ input {
   height: 56px;
   border: none;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: linear-gradient(160deg, var(--color-primary), var(--color-primary-dark));
   color: #fff;
-  box-shadow: 0 6px 20px rgba(var(--color-primary-rgb), 0.4),
-              0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 6px 20px rgba(var(--color-primary-rgb), 0.38),
+              0 2px 8px rgba(147, 51, 64, 0.18);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   z-index: 40;
   transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease),
-    background 0.18s var(--ease);
+    filter 0.18s var(--ease);
 }
 .fab:hover {
-  background: var(--color-primary-dark);
+  filter: brightness(1.06);
   transform: scale(1.06);
-  box-shadow: 0 8px 24px rgba(var(--color-primary-rgb), 0.5);
+  box-shadow: 0 8px 24px rgba(var(--color-primary-rgb), 0.48);
 }
 .fab:active {
   transform: scale(0.94);
@@ -1988,7 +2050,7 @@ input {
   z-index: 60;
   background: var(--color-surface);
   border-radius: 20px 20px 0 0;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 -4px 24px rgba(225, 29, 72, 0.10);
   padding: 8px 16px calc(16px + var(--safe-bottom));
   display: flex;
   align-items: center;

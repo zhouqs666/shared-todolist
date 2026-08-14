@@ -1157,15 +1157,24 @@ function render() {
     renderedIds.clear();
     const li = document.createElement('li');
     li.className = 'todo-list__empty';
-    // 自绘 rose 小爱心（非 emoji，跨设备一致 + 精致）
+    // 品牌渐变大爱心（与顶栏桃心同款渐变，跨设备一致）
     const heart = document.createElement('div');
     heart.className = 'todo-list__empty-heart';
-    heart.innerHTML = '<svg viewBox="0 0 24 24" width="40" height="40"><path d="M12 21s-7.5-4.7-7.5-10.2C4.5 7.6 7 5.5 9.8 5.5c1.4 0 2.7.7 3.2 1.8.5-1.1 1.8-1.8 3.2-1.8 2.8 0 5.3 2.1 5.3 5.3C21.5 16.3 12 21 12 21z" fill="currentColor"/></svg>';
+    heart.innerHTML =
+      '<svg viewBox="0 0 24 24" width="52" height="52" aria-hidden="true">' +
+      '<defs><linearGradient id="emptyHeartGrad" x1="0%" y1="0%" x2="100%" y2="100%">' +
+      '<stop offset="0%" stop-color="#fb7185"/><stop offset="100%" stop-color="#e11d48"/>' +
+      '</linearGradient></defs>' +
+      '<path d="M12 21s-7.5-4.7-7.5-10.2C4.5 7.6 7 5.5 9.8 5.5c1.4 0 2.7.7 3.2 1.8.5-1.1 1.8-1.8 3.2-1.8 2.8 0 5.3 2.1 5.3 5.3C21.5 16.3 12 21 12 21z" fill="url(#emptyHeartGrad)"/></svg>';
     const text = document.createElement('div');
     text.className = 'todo-list__empty-text';
     text.textContent = '这里空空的，像在等你';
+    const sub = document.createElement('div');
+    sub.className = 'todo-list__empty-sub';
+    sub.textContent = '写下第一条，和 ta 一起开始';
     li.appendChild(heart);
     li.appendChild(text);
+    li.appendChild(sub);
     todoListEl.appendChild(li);
     return;
   }
@@ -1749,7 +1758,7 @@ function celebrateCompletion(todo, isRemote = false) {
 
   // 配色：mint 主色 + rose 情感色，两套色在完成时刻和谐共舞
   const rootStyle = getComputedStyle(document.documentElement);
-  const primary = rootStyle.getPropertyValue('--color-primary').trim() || '#10b981';
+  const primary = rootStyle.getPropertyValue('--color-primary').trim() || '#f43f5e';
   const colors = [primary, ...ROSE, '#fbbf24'];
 
   const shape = getHeartShape();

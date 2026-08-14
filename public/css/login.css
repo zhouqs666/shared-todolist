@@ -5,7 +5,7 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: linear-gradient(160deg, #ecfdf5 0%, #f9fafb 60%);
+  background: linear-gradient(160deg, #fff1f2 0%, #fdf8f8 60%);
 }
 
 .login__card {
@@ -13,7 +13,7 @@
   max-width: 360px;
   background: var(--color-surface);
   border-radius: 20px;
-  box-shadow: 0 8px 30px rgba(16, 185, 129, 0.08);
+  box-shadow: 0 8px 30px rgba(225, 29, 72, 0.08);
   padding: 36px 28px;
   text-align: center;
   animation: card-enter 0.4s var(--ease);
@@ -112,7 +112,7 @@
 
 .field__input:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.15);
 }
 
 /* ===== 提交按钮 ===== */
