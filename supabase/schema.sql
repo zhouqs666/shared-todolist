@@ -55,6 +55,14 @@ CREATE TABLE IF NOT EXISTS todos (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   completed_by  UUID REFERENCES auth.users(id),
   completed_at  TIMESTAMPTZ,
+  -- 轻轻提醒标记：标记人的 user id（NULL=未标记）。克制提醒对方"这条我很关注"
+  nudge_by      UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  -- 图片附件：Storage 对象的完整 public URL（NULL=无图）。一条待办最多一张图。
+  image_path    TEXT,
+  -- 完成备注：完成后的可选交代/收尾说明（如"蚊子已打死"）。NULL=无备注
+  completed_note TEXT,
+  -- 软删除标记：NULL=正常，非NULL=已删除（回收站保留，防误删）
+  deleted_at    TIMESTAMPTZ,
 
   CONSTRAINT completed_consistent CHECK (
     (completed = FALSE AND completed_by IS NULL AND completed_at IS NULL)
@@ -83,6 +91,58 @@ CREATE POLICY "todos_delete_auth" ON todos
 -- ===== 3. 启用 Realtime 推送（INSERT/UPDATE/DELETE 全事件）=====
 ALTER PUBLICATION supabase_realtime ADD TABLE todos;
 ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
+
+-- ===== 5. daily_notes 表：悄悄留言（阅后即焚）=====
+CREATE TABLE IF NOT EXISTS daily_notes (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  day_key     DATE NOT NULL DEFAULT CURRENT_DATE,
+  author_id   UUID NOT NULL REFERENCES auth.users(id),
+  content     TEXT NOT NULL CHECK (char_length(content) <= 200),
+  read_by     UUID REFERENCES auth.users(id),   -- 谁已读过（NULL=未读）
+  deleted_at  TIMESTAMPTZ,                       -- 软删除标记（阅后即焚：NULL=正常）
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_daily_notes_day
+  ON daily_notes (day_key DESC, created_at);
+ALTER TABLE daily_notes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "daily_notes_select_auth" ON daily_notes;
+CREATE POLICY "daily_notes_select_auth" ON daily_notes
+  FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "daily_notes_insert_auth" ON daily_notes;
+CREATE POLICY "daily_notes_insert_auth" ON daily_notes
+  FOR INSERT TO authenticated WITH CHECK (author_id = auth.uid());
+DROP POLICY IF EXISTS "daily_notes_delete_auth" ON daily_notes;
+CREATE POLICY "daily_notes_delete_auth" ON daily_notes
+  FOR DELETE TO authenticated USING (true);
+DROP POLICY IF EXISTS "daily_notes_update_auth" ON daily_notes;
+CREATE POLICY "daily_notes_update_auth" ON daily_notes
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+-- ===== 6. reactions 表：任务表情反应（仅完成后可贴，前端控制） =====
+CREATE TABLE IF NOT EXISTS reactions (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  todo_id    UUID NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL REFERENCES auth.users(id),
+  emoji      TEXT NOT NULL CHECK (char_length(emoji) <= 10),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- 同一人对同一条同一表情只存一次（toggle 语义）
+  UNIQUE (todo_id, user_id, emoji)
+);
+CREATE INDEX IF NOT EXISTS idx_reactions_todo ON reactions (todo_id);
+ALTER TABLE reactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "reactions_select_auth" ON reactions;
+CREATE POLICY "reactions_select_auth" ON reactions
+  FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "reactions_insert_auth" ON reactions;
+CREATE POLICY "reactions_insert_auth" ON reactions
+  FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS "reactions_delete_auth" ON reactions;
+CREATE POLICY "reactions_delete_auth" ON reactions
+  FOR DELETE TO authenticated USING (user_id = auth.uid());
+
+-- ===== 7. 启用新表的 Realtime 推送 =====
+ALTER PUBLICATION supabase_realtime ADD TABLE daily_notes;
+ALTER PUBLICATION supabase_realtime ADD TABLE reactions;
 
 -- ===== 4. 账号创建参考（不在此处运行，使用 scripts/init-users.mjs）=====
 -- 见 scripts/init-users.mjs：用 service_role 调 auth.admin.createUser 创建

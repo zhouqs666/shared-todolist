@@ -26,3 +26,20 @@ build/
 
 # 临时探针脚本（PWA 重构验证用）
 .probe/
+
+# ===== Capacitor / Android 原生工程 =====
+# 注意：android/ 源码工程本身会被提交（便于团队打包），
+#       只忽略构建产物、本地签名、IDE 配置。
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+android/local.properties
+android/app/release/
+*.iml
+
+# 签名密钥（绝对不能提交，泄露=APP 可被冒名发布）
+*.keystore
+*.jks
+keystore.properties
+

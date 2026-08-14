@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">有爱</string>
+    <string name="title_activity_main">有爱</string>
+    <string name="package_name">com.love.todo</string>
+    <string name="custom_url_scheme">com.love.todo</string>
+</resources>

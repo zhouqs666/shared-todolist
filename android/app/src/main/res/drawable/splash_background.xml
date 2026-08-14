@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 启动背景：纯粉色，避免透明 PNG 导致的黑屏 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <color android:color="#FFE4E6" />
+    </item>
+</layer-list>

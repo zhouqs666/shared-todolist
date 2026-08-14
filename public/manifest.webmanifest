@@ -1,13 +1,13 @@
 {
-  "name": "爱的清单",
-  "short_name": "爱的清单",
+  "name": "有爱",
+  "short_name": "有爱",
   "description": "双人共享待办清单",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#ffffff",
-  "theme_color": "#10b981",
+  "background_color": "#ffe4e6",
+  "theme_color": "#ffe4e6",
   "lang": "zh-CN",
   "icons": [
     {

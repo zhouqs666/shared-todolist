@@ -1,0 +1,35 @@
+{
+  "appId": "com.love.todo",
+  "appName": "有爱",
+  "webDir": "public",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon",
+      "iconColor": "#ec4899"
+    },
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "launchAutoHide": true,
+      "backgroundColor": "#ffe4e6",
+      "androidSplashResourceName": "splash",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false,
+      "android": {
+        "backgroundColor": "#ffe4e6",
+        "spinnerColor": "#e11d48"
+      }
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "resetWhenUpdate": true,
+      "autoDeletePrevious": true,
+      "defaultChannel": "main"
+    }
+  }
+}

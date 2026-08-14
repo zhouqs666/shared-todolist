@@ -3,74 +3,211 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
-  <meta name="theme-color" content="#10b981" />
+  <meta name="theme-color" content="#ffe4e6" />
   <meta name="description" content="双人共享待办清单" />
+  <meta name="app-version" content="2.4.6" /><!-- APK 壳内置值；热更新包会被发布脚本覆盖 -->
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="爱的清单" />
-  <title>爱的清单</title>
+  <meta name="apple-mobile-web-app-title" content="有爱" />
+  <title>有爱</title>
   <link rel="stylesheet" href="/css/style.css" />
   <script>
-    // 早期应用主题，避免首屏闪烁（FOUC）
+    // 应用默认主题（mint）。主题切换 UI 已移除，固定薄荷绿。
+    document.documentElement.dataset.theme = 'mint';
+
+    // 顶栏爱心"预上色"：在 SVG 渲染前就按当前时段设好 stop-color，
+    // 避免"默认粉色 → 时段色"的跳变（尤其深夜打开时粉色→深紫的突兀切换）。
+    // 必须内联在 <head>，赶在 body 里爱心 SVG 第一次绘制前执行。
     (function () {
-      try {
-        var t = localStorage.getItem('todo-theme') || 'mint';
-        document.documentElement.dataset.theme = t;
-      } catch (e) {}
+      var h = new Date().getHours();
+      var c1, c2;
+      if (h >= 6 && h < 9) { c1 = '#fb8a6b'; c2 = '#e15a3b'; }        // 清晨暖橘
+      else if (h >= 22 || h < 6) { c1 = '#9f1239'; c2 = '#6b1d3a'; }  // 深夜深玫红
+      else { c1 = '#fb7185'; c2 = '#e11d48'; }                        // 白天品牌粉
+      var s = document.createElement('style');
+      s.textContent = '#topHeartGrad stop:nth-child(1){stop-color:' + c1 + '}'
+                    + '#topHeartGrad stop:nth-child(2){stop-color:' + c2 + '}';
+      document.head.appendChild(s);
     })();
   </script>
+  <style>
+    /* JS 爱心开屏动画（首帧即显示，避免 WebView 切换的硬切感） */
+    @keyframes js-splash-pop{0%{opacity:0;transform:scale(0.4) translateY(20px)}60%{opacity:1;transform:scale(1.08) translateY(0)}100%{opacity:1;transform:scale(1)}}
+    @keyframes js-splash-beat{0%,100%{transform:scale(1)}15%{transform:scale(1.18)}30%{transform:scale(1)}45%{transform:scale(1.12)}60%{transform:scale(1)}}
+    @media (prefers-reduced-motion:reduce){#js-splash>div{animation:none!important}}
+  </style>
 </head>
 <body>
+  <!-- JS 爱心开屏动画（首帧即铺满，1.2s 后淡出） -->
+  <div id="js-splash" style="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#fff1f2 0%,#ffe4e6 60%,#fecdd3 100%);transition:opacity 0.5s ease;pointer-events:none">
+    <div style="width:130px;height:130px;animation:js-splash-pop 0.6s cubic-bezier(0.16,1,0.3,1) both, js-splash-beat 1.2s ease-in-out 0.6s infinite">
+      <svg viewBox="0 0 512 512" width="120" height="120" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="jsh1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#fecdd3"/></linearGradient>
+          <linearGradient id="jsh2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ffe4e6"/><stop offset="100%" stop-color="#fda4af"/></linearGradient>
+        </defs>
+        <path d="M256 402s-110-66-110-140.6c0-36.4 28.8-63.4 63-63.4 22.6 0 41.4 11.6 47 28.2 5.6-16.6 24.4-28.2 47-28.2 34.2 0 63 27 63 63.4C366 336 256 402 256 402z" fill="url(#jsh1)"/>
+        <g transform="translate(262 248) scale(0.5)">
+          <path d="M256 402s-110-66-110-140.6c0-36.4 28.8-63.4 63-63.4 22.6 0 41.4 11.6 47 28.2 5.6-16.6 24.4-28.2 47-28.2 34.2 0 63 27 63 63.4C366 336 256 402 256 402z" fill="url(#jsh2)"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+  <script>
+    // 主页开屏：缩短至 1.2s，快进快出（保留仪式感，不拖沓）
+    setTimeout(function () {
+      var el = document.getElementById('js-splash');
+      if (!el) return;
+      el.style.opacity = '0';
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+    }, 1200);
+  </script>
+
   <!-- 顶部加载进度条 -->
   <div id="loadingBar" class="loading-bar" aria-hidden="true"></div>
 
-  <header class="topbar">
-    <div class="topbar__title">❤ 爱的清单</div>
-    <div class="topbar__right">
-      <span id="completedToday" class="topbar__counter" hidden>✓ 0</span>
-      <div class="theme-picker">
-        <button id="themePickerBtn" class="theme-picker__btn" type="button" aria-label="切换主题"></button>
-        <div id="themeMenu" class="theme-picker__menu" hidden>
-          <div class="theme-picker__title">主题</div>
-          <div class="theme-picker__opts">
-            <button data-theme="mint" class="theme-picker__opt" type="button" style="--c:#10b981" aria-label="薄荷绿"></button>
-            <button data-theme="pink" class="theme-picker__opt" type="button" style="--c:#ec4899" aria-label="蜜桃粉"></button>
-            <button data-theme="blue" class="theme-picker__opt" type="button" style="--c:#3b82f6" aria-label="海洋蓝"></button>
-            <button data-theme="sunset" class="theme-picker__opt" type="button" style="--c:#f59e0b" aria-label="暖夕阳"></button>
-            <button data-theme="dark" class="theme-picker__opt" type="button" style="--c:#111827" aria-label="深夜黑"></button>
-          </div>
-          <div class="theme-picker__divider"></div>
-          <div id="fxToggle" class="theme-picker__toggle" role="switch" aria-checked="true">
-            <span>完成特效</span>
-            <span id="fxSwitch" class="theme-picker__switch theme-picker__switch--on"></span>
-          </div>
+  <!-- 纪念日详情面板（点击顶栏桃心展开） -->
+  <div id="anniPanel" class="anni-panel" hidden>
+    <div class="anni-panel__card">
+      <!-- 跳动爱心：渐变填充，与顶栏爱心配色统一 -->
+      <div class="anni-panel__heart" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="48" height="48">
+          <defs>
+            <linearGradient id="anniHeartGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#fb7185"/>
+              <stop offset="100%" stop-color="#e11d48"/>
+            </linearGradient>
+          </defs>
+          <path d="M16 28s-11-6.6-11-14.2C5 9.2 7.9 6.5 11.3 6.5c2 0 3.8 1 4.7 2.6.9-1.6 2.7-2.6 4.7-2.6C24.1 6.5 27 9.2 27 13.8 27 21.4 16 28 16 28z" fill="url(#anniHeartGrad)"/>
+        </svg>
+      </div>
+      <!-- 主区：相识天数（正计时） -->
+      <div class="anni-panel__main">
+        <span class="anni-panel__pre">在一起</span>
+        <span id="anniPanelDays" class="anni-panel__days">0</span>
+        <span class="anni-panel__suf">天</span>
+      </div>
+      <!-- 分隔线 -->
+      <div class="anni-panel__divider"></div>
+      <!-- 倒计时列表 -->
+      <ul class="anni-panel__list">
+        <li class="anni-panel__item">
+          <span class="anni-panel__icon anni-panel__icon--wedding">💍</span>
+          <span class="anni-panel__label">结婚纪念日</span>
+          <span class="anni-panel__count" id="anniPanelWedding">—</span>
+        </li>
+        <li class="anni-panel__item">
+          <span class="anni-panel__icon anni-panel__icon--cake">🎂</span>
+          <span class="anni-panel__label">小宝宝的生日</span>
+          <span class="anni-panel__count" id="anniPanelBirthday1">—</span>
+        </li>
+        <li class="anni-panel__item">
+          <span class="anni-panel__icon anni-panel__icon--cake">🎂</span>
+          <span class="anni-panel__label">大宝贝的生日</span>
+          <span class="anni-panel__count" id="anniPanelBirthday2">—</span>
+        </li>
+      </ul>
+      <!-- 写留言入口：藏在纪念日面板里，不违和的小图标 -->
+      <button id="writeNoteBtn" class="anni-panel__writenote" type="button" aria-label="给 ta 留一句说不出口的话">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+        </svg>
+        <span>留一句心里话</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 心里话：全屏写信场景（阅后即焚） -->
+  <div id="noteModal" class="note-modal" hidden>
+    <!-- 写入态：全屏写信 -->
+    <div id="noteWrite" class="note-write">
+      <header class="note-write__header">
+        <button id="noteCancel" class="note-write__close" type="button" aria-label="关闭">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <span class="note-write__title">写下这句，飞去 ta 心里</span>
+      </header>
+      <div class="note-write__body">
+        <div class="note-write__paper">
+          <textarea id="noteInput" class="note-write__textarea" maxlength="200" placeholder="当面说不出口的话，轻轻留在 ta 的屏幕上…"></textarea>
         </div>
       </div>
+      <footer class="note-write__footer">
+        <p class="note-write__hint">落笔成光，飞入心间</p>
+        <span class="note-write__counter" id="noteCounter"><span id="noteCount">0</span>/200</span>
+        <p class="note-write__echo" id="noteEcho" hidden></p>
+        <button id="noteSend" class="note-write__send" type="button">悄悄送达</button>
+      </footer>
+    </div>
+    <!-- 阅读态：收到心意 -->
+    <div id="noteRead" class="note-read" hidden>
+      <div class="note-read__seal" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="40" height="40"><path d="M16 28s-11-6.6-11-14.2C5 9.2 7.9 6.5 11.3 6.5c2 0 3.8 1 4.7 2.6.9-1.6 2.7-2.6 4.7-2.6C24.1 6.5 27 9.2 27 13.8 27 21.4 16 28 16 28z" fill="currentColor"/></svg>
+      </div>
+      <div class="note-read__from" id="noteFrom">ta 悄悄对你说</div>
+      <div class="note-read__content" id="noteContent"></div>
+      <p class="note-read__hint">轻轻阅过，珍藏于心</p>
+      <button id="noteDismiss" class="note-read__dismiss" type="button">
+        <span class="note-read__dismiss-text">阅</span>
+      </button>
+    </div>
+  </div>
+
+  <header class="topbar">
+    <div class="topbar__title">
+      <span id="anniHeart" class="topbar__heart topbar__heart--tap" role="button" aria-label="查看纪念日" tabindex="0">
+        <svg viewBox="0 0 32 32" width="22" height="22" role="img" aria-label="爱心">
+          <defs>
+            <linearGradient id="topHeartGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#fb7185"/>
+              <stop offset="100%" stop-color="#e11d48"/>
+            </linearGradient>
+          </defs>
+          <path d="M16 28s-11-6.6-11-14.2C5 9.2 7.9 6.5 11.3 6.5c2 0 3.8 1 4.7 2.6.9-1.6 2.7-2.6 4.7-2.6C24.1 6.5 27 9.2 27 13.8 27 21.4 16 28 16 28z" fill="url(#topHeartGrad)"/>
+          <path d="M13 11c-1.6 0-3 1.3-3 3" stroke="rgba(255,255,255,0.55)" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+        </svg>
+      </span>
+      <span class="topbar__anni">
+        <span class="topbar__anni-label">在一起</span>
+        <span id="anniDays" class="topbar__anni-days">0</span>
+        <span class="topbar__anni-unit">天</span>
+      </span>
+    </div>
+    <div class="topbar__right">
+      <!-- 心意留言图标：有未读时爱心脉动 + 柔光晕（精致有惊喜感） -->
+      <button id="noteBell" class="note-bell" type="button" aria-label="留言" hidden>
+        <svg class="note-bell__svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <!-- 信封 -->
+          <rect x="3" y="6" width="18" height="13" rx="2"/>
+          <path d="M3 8l9 6 9-6"/>
+          <!-- 露出的小爱心（信封上方的红心，代表"有心意") -->
+          <path class="note-bell__heart" d="M12 4.5c-.8-1.2-2.5-1.2-3 .2-.5-1.4-2.2-1.4-3-.2-.9 1.3 0 2.5 0 2.5s1.5 1.3 3 2.5c1.5-1.2 3-2.5 3-2.5s.9-1.2 0-2.5z" fill="currentColor" stroke="none"/>
+        </svg>
+      </button>
+      <!-- 图鉴入口：收集隐藏款解锁的贴纸，有新解锁时红点提示 -->
+      <button id="stickerEntry" class="sticker-entry" type="button" aria-label="图鉴">
+        <svg class="sticker-entry__svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <!-- 收藏夹/书本图标 + 四瓣闪光点缀（呼应隐藏款 sparkle） -->
+          <path d="M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3V4z"/>
+          <path d="M4 17a3 3 0 0 1 3-3h11"/>
+          <path d="M14 1.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" fill="currentColor" stroke="none"/>
+        </svg>
+        <span id="stickerBadge" class="sticker-badge hidden"></span>
+      </button>
       <span id="me" class="topbar__me topbar__me--placeholder">加载中…</span>
-      <button id="logoutBtn" class="btn btn--ghost" type="button">退出</button>
     </div>
   </header>
 
+  <!-- 离线提示：贴顶窄条（行业最佳实践），不占内容区空间，平滑展开/收起 -->
+  <div id="offlineBar" class="offline-bar offline-bar--hidden">
+    <span class="offline-bar__text"></span><span class="offline-bar__dots"><i></i><i></i><i></i></span>
+  </div>
+
   <main class="container">
-    <!-- 离线提示（socket 断开时显示） -->
-    <div id="offlineBar" class="offline-bar" hidden>⚠️ 已离线，正在重连...</div>
-
-    <section class="composer">
-      <input
-        id="todoInput"
-        class="composer__input"
-        type="text"
-        maxlength="200"
-        placeholder="添加一条待办..."
-        autocomplete="off"
-        disabled
-      />
-      <button id="addBtn" class="composer__btn" type="button" disabled aria-label="添加">+</button>
-    </section>
-
     <!-- 首屏骨架屏（app.js 加载完真实数据后会被替换） -->
     <ul id="todoList" class="todo-list">
       <li class="skeleton" aria-hidden="true">
@@ -89,6 +226,69 @@
       </li>
     </ul>
   </main>
+
+  <!-- 添加待办：浮动按钮 + 展开式输入（移动端单手友好） -->
+  <button id="fabBtn" class="fab" type="button" aria-label="添加待办">
+    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+      <line x1="12" y1="5" x2="12" y2="19"/>
+      <line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  </button>
+
+  <!-- 添加待办展开面板（从底部上滑） -->
+  <div id="addPanel" class="add-panel">
+    <div class="add-panel__handle" aria-hidden="true"></div>
+    <input
+      id="todoInput"
+      class="add-panel__input"
+      type="text"
+      maxlength="200"
+      placeholder="添加一条待办，和 ta 一起完成 💕"
+      autocomplete="off"
+    />
+    <!-- 预挂图按钮（可选）：选好图后提交时自动附到这条待办。无图时不影响添加流程 -->
+    <button id="attachBtn" class="add-panel__attach" type="button" aria-label="添加图片">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+    </button>
+    <button id="addBtn" class="add-panel__btn" type="button" aria-label="添加">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </button>
+  </div>
+  <!-- 添加面板的遮罩 -->
+  <div id="addOverlay" class="add-overlay"></div>
+
+  <!-- 带感完成蓄力层：长按复选框弹出，居中大爱心+进度环（避开手指遮挡+消除与卡片长按菜单冲突）-->
+  <div id="heartfulCharge" class="heartful-charge" hidden>
+    <div class="heartful-charge__overlay"></div>
+    <div class="heartful-charge__heart" role="dialog" aria-label="带着心意完成" aria-modal="true">
+      <svg class="heartful-charge__progress" viewBox="0 0 100 100" aria-hidden="true">
+        <circle class="heartful-charge__track" cx="50" cy="50" r="46" fill="none"/>
+        <circle class="heartful-charge__bar" cx="50" cy="50" r="46" fill="none"/>
+      </svg>
+      <span class="heartful-charge__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="36" height="36"><path d="M12 21s-7.5-4.7-7.5-10.2C4.5 7.6 7 5.5 9.8 5.5c1.4 0 2.7.7 3.2 1.8.5-1.1 1.8-1.8 3.2-1.8 2.8 0 5.3 2.1 5.3 5.3C21.5 16.3 12 21 12 21z" fill="currentColor"/></svg>
+      </span>
+      <span class="heartful-charge__label">按住，带着心意完成</span>
+    </div>
+  </div>
+
+  <!-- 收集图鉴弹层：展示已收集/未收集的隐藏款贴纸 -->
+  <div id="stickerModal" class="sticker-modal hidden" role="dialog" aria-label="收集图鉴" aria-modal="true">
+    <div class="sticker-modal__panel">
+      <div class="sticker-modal__header">
+        <h2 class="sticker-modal__title">收集图鉴</h2>
+        <button id="stickerModalClose" class="sticker-modal__close" type="button" aria-label="关闭">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <p class="sticker-modal__hint">小概率出现隐藏款待办，解锁专属贴纸～</p>
+      <div id="stickerGrid" class="sticker-grid"></div>
+      <div class="sticker-modal__progress">
+        <div class="sticker-modal__progress-bar"><span id="stickerProgressBar" class="sticker-modal__progress-fill"></span></div>
+        <span id="stickerProgress" class="sticker-modal__progress-text">0 / 12</span>
+      </div>
+    </div>
+  </div>
 
   <script src="/js/app.js" type="module" defer></script>
 </body>

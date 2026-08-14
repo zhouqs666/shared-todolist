@@ -3,6 +3,21 @@
 *::before,
 *::after {
   box-sizing: border-box;
+  /* 禁用移动端点击的系统蓝色高亮（保留 :active 变换与 :focus-visible 作为反馈） */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 禁用长按系统菜单（选择/复制/呼叫），避免误触；输入区除外（需选中文本） */
+body {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* 输入框、留言 textarea 保留文本选择能力 */
+input, textarea, [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 :root {
@@ -21,6 +36,29 @@
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* 情感色（玫红系）：爱 / 纪念日 / 心里话 / 完成庆祝专属。
+     与 mint 功能色各司其职：mint=日常操作，rose=情感表达。 */
+  --rose-50: #fff1f2;
+  --rose-100: #ffe4e6;
+  --rose-200: #fecdd3;
+  --rose-300: #fda4af;
+  --rose-400: #fb7185;
+  --rose-500: #f43f5e;
+  --rose-600: #e11d48;
+  --rose-700: #9f1239;
+
+  /* 隐藏款盲盒稀有度色系（克制精致，低饱和渐变背景用）
+     rare=淡粉（最浅 rose）、epic=浅紫（violet）、legendary=香槟金。
+     稀有度由浅到深递进：粉→紫→金，视觉层次感。 */
+  --violet-50: #f6f3ff;
+  --violet-100: #ece6fc;
+  --violet-300: #c9bdf0;
+  --violet-400: #a596e8;
+  --gold-50: #fffbeb;
+  --gold-100: #fef3c7;
+  --gold-300: #fcd34d;
+  --gold-500: #f59e0b;
 }
 
 /* ===== 5 套主题（通过 data-theme 属性切换，存 localStorage） ===== */
@@ -60,8 +98,6 @@
 body,
 .topbar,
 .todo,
-.composer__input,
-.composer__btn,
 .btn--primary,
 .btn,
 .field__input {
@@ -127,6 +163,48 @@ input {
   font-size: 18px;
   white-space: nowrap;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 顶栏爱心（SVG，替代黑色 emoji，跨设备一致） */
+.topbar__heart {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+  position: relative; /* 给光晕伪元素 ::after 定位 */
+  filter: drop-shadow(0 2px 4px rgba(244, 63, 94, 0.25));
+  /* 持续心跳：克制的心跳节奏（咚-咚...呼吸...），仿真心跳 */
+  animation: heart-beat 2.4s ease-in-out infinite;
+}
+
+/* 心跳：两下一组 + 留白呼吸。幅度小（1→1.08），不吵眼 */
+@keyframes heart-beat {
+  0%, 100% { transform: scale(1); }
+  15%      { transform: scale(1.08); }   /* 第一下（咚）*/
+  30%      { transform: scale(1); }
+  45%      { transform: scale(1.06); }   /* 第二下（咚，稍弱）*/
+  60%      { transform: scale(1); }
+  /* 60%~100% 静止，留白让心跳"呼吸" */
+}
+
+/* 紧张心跳：两人同时在线时，心跳明显加速（2.4s → 1.2s），幅度更大。
+   复用 js-splash-beat 的双跳结构（仓库里已用于开屏大爱心），这里重命名为语义化名字。 */
+@keyframes heart-beat-excited {
+  0%, 100% { transform: scale(1); }
+  15%      { transform: scale(1.18); }   /* 咚（更强）*/
+  30%      { transform: scale(1); }
+  45%      { transform: scale(1.12); }   /* 咚（稍弱）*/
+  60%      { transform: scale(1); }
+}
+.topbar__heart--excited {
+  animation: heart-beat-excited 1.2s ease-in-out infinite !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar__heart { animation: none; }
+  .topbar__heart--excited { animation: none !important; }
 }
 
 .topbar__right {
@@ -138,42 +216,40 @@ input {
 }
 
 .topbar__me {
-  color: var(--color-text-muted);
-  font-size: 14px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  /* 超长用户名在窄屏下省略 */
-  max-width: 96px;
-  overflow: hidden;
-  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .topbar__me-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: none; /* 昵称已移除，保留 class 以防残留引用 */
 }
 
-/* 顶栏头像（当前登录用户） */
+/* 顶栏头像（当前登录用户，昵称移除后是唯一标识） */
 .topbar__avatar {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
   background: var(--color-border);
   box-shadow: 0 0 0 2px var(--color-surface),
     0 0 0 3px rgba(var(--color-primary-rgb), 0.35);
+  transition: transform 0.15s var(--ease);
 }
 
-/* 加载占位时的状态点（未渲染真实头像前显示） */
+/* 长按头像时的按压反馈：轻微缩放，提示"再按一会儿就退出" */
+.topbar__avatar--pressing {
+  transform: scale(0.9);
+}
+
+/* 加载占位：与头像同尺寸的圆形灰块，避免加载前后跳动 */
 .topbar__me--placeholder::before {
   content: "";
-  width: 8px;
-  height: 8px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background: #d1d5db;
-  box-shadow: 0 0 0 3px rgba(209, 213, 219, 0.3);
+  background: var(--color-border);
   flex-shrink: 0;
 }
 
@@ -189,21 +265,13 @@ input {
   .topbar__right {
     gap: 6px;
   }
-  .topbar__me {
-    max-width: 70px;
-    font-size: 12px;
-  }
   .topbar__avatar {
-    width: 22px;
-    height: 22px;
+    width: 26px;
+    height: 26px;
   }
-  .btn--ghost {
-    padding: 6px 10px;
-    font-size: 13px;
-  }
-  .topbar__counter {
-    padding: 3px 8px;
-    font-size: 12px;
+  .topbar__me--placeholder::before {
+    width: 26px;
+    height: 26px;
   }
 }
 
@@ -214,15 +282,17 @@ input {
   color: var(--color-text);
   padding: 6px 14px;
   border-radius: 8px;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s, opacity 0.1s;
 }
 
 .btn:hover {
   background: var(--color-bg);
 }
 
-.btn--ghost {
-  background: transparent;
+/* 按压反馈：移动端点按有"按下去"的实在感 */
+.btn:active {
+  transform: scale(0.96);
+  opacity: 0.8;
 }
 
 .btn--primary {
@@ -243,58 +313,99 @@ input {
   padding: 20px 16px calc(40px + var(--safe-bottom));
 }
 
-/* ===== 离线提示 ===== */
-.offline-bar {
-  background: #fef3c7;
-  border: 1px solid #fde68a;
-  color: #92400e;
-  padding: 8px 14px;
-  border-radius: 8px;
+/* ===== 顶栏纪念日：在一起 X 天（爱心右边，精致克制） ===== */
+.topbar__anni {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
   font-size: 13px;
-  text-align: center;
-  margin-bottom: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  /* 淡入，配合数字滚动 */
+  animation: anni-fade-in 0.6s var(--ease) both;
 }
 
-/* ===== 输入区 ===== */
-.composer {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 20px;
+@keyframes anni-fade-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
-.composer__input {
-  flex: 1;
-  padding: 12px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: var(--color-surface);
-  outline: none;
+.topbar__anni-label {
+  font-size: 12px;
+  opacity: 0.75;
 }
 
-.composer__input:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.15);
-}
-
-.composer__btn {
-  width: 44px;
-  height: 44px;
-  border: none;
-  background: var(--color-primary);
-  color: #fff;
-  font-size: 22px;
+/* 数字：玫红色 + 加粗，视觉焦点 */
+.topbar__anni-days {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--rose-600);
   line-height: 1;
-  border-radius: var(--radius);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.3px;
 }
 
-.composer__btn:hover {
-  background: var(--color-primary-dark);
+.topbar__anni-unit {
+  font-size: 12px;
+  opacity: 0.75;
 }
 
-.composer__btn:disabled,
-.composer__input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+/* 窄屏：缩小字号，确保不挤压右侧按钮 */
+@media (max-width: 400px) {
+  .topbar__anni { gap: 2px; }
+  .topbar__anni-label { font-size: 11px; }
+  .topbar__anni-days { font-size: 15px; }
+  .topbar__anni-unit { font-size: 11px; }
+}
+
+/* ===== 离线提示（贴顶窄条，行业最佳实践：不占内容空间）===== */
+.offline-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 300;
+  letter-spacing: 2px;
+  text-align: center;
+  /* 极淡半透明粉底，贴顶无圆角 */
+  background: rgba(251, 113, 133, 0.08);
+  color: rgba(159, 18, 57, 0.45);
+  /* 平滑展开/收起（高度 + 透明度，像窗帘）*/
+  transition: max-height 0.35s ease, opacity 0.35s ease, padding 0.35s ease;
+  max-height: 32px;
+  overflow: hidden;
+}
+.offline-bar--hidden {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 跳动的三点：暗示"正在重连中"，让提示活起来 */
+.offline-bar__dots {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 2px;
+}
+.offline-bar__dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(159, 18, 57, 0.45);
+  animation: dot-bounce 1.2s ease-in-out infinite;
+}
+.offline-bar__dots i:nth-child(2) { animation-delay: 0.2s; }
+.offline-bar__dots i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot-bounce {
+  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+  30% { opacity: 0.7; transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .offline-bar__dots i { animation: none; opacity: 0.5; }
 }
 
 /* ===== 列表 ===== */
@@ -307,18 +418,27 @@ input {
 .todo-list__empty {
   text-align: center;
   color: var(--color-text-muted);
-  padding: 60px 16px;
+  padding: 72px 16px;
 }
 
-.todo-list__empty-emoji {
-  font-size: 48px;
-  line-height: 1;
-  margin-bottom: 12px;
+/* 空状态：rose 小爱心，轻微呼吸（像在等待） */
+.todo-list__empty-heart {
+  color: var(--rose-300);
+  margin-bottom: 16px;
   opacity: 0.7;
+  animation: empty-heart-breath 2.6s ease-in-out infinite;
+}
+@keyframes empty-heart-breath {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50%      { transform: scale(1.08); opacity: 0.85; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .todo-list__empty-heart { animation: none; }
 }
 
 .todo-list__empty-text {
   font-size: 14px;
+  letter-spacing: 0.5px;
 }
 
 /* ===== 单条待办 ===== */
@@ -327,21 +447,20 @@ input {
   align-items: flex-start;
   gap: 12px;
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius);
   padding: 14px 14px;
-  margin-bottom: 10px;
-  box-shadow: var(--shadow);
-  transition: background 0.2s var(--ease), opacity 0.2s var(--ease),
-    transform 0.2s var(--ease), box-shadow 0.2s var(--ease),
-    border-color 0.2s var(--ease);
+  margin-bottom: 12px; /* #6: 间距 10→12，呼吸感更好 */
+  /* 无边框，分层柔影：漂浮感 */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.3s var(--ease);
   animation: todo-enter 0.25s var(--ease);
+  position: relative; /* 给 .todo__nudge（绝对定位）做定位上下文，否则会飘到祖先容器 */
 }
 
 @media (hover: hover) {
   .todo:hover {
-    border-color: var(--color-primary);
-    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   }
 }
 
@@ -360,25 +479,217 @@ input {
   opacity: 0;
   transform: translateX(20px);
 }
+/* 长按进度反馈：卡片轻微缩放 + 阴影收紧，暗示"再按一下触发菜单" */
+.todo--pressing {
+  transform: scale(0.98);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
 
+/* 完成态：去灰块，只弱化文字（卡片质感不变，靠排序下沉区分） */
 .todo--done {
-  background: #f3f4f6;
-  opacity: 0.72;
+  background: var(--color-surface);
 }
 
-.todo__checkbox {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  margin-top: 2px;
+/* 自绘圆形复选框：统一退到右上角，16×16 小尺寸，不占布局空间。
+   无论完成与否都在同一位置（右上角），文字始终铺满卡片成为主角。
+   - 未完成：空心小灰圆（点它完成）
+   - 完成：去掉圆圈，只留小对勾（点它取消完成） */
+.todo__check {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1.5px solid var(--color-border);
+  border-radius: 50%;
+  background: transparent;
   cursor: pointer;
-  accent-color: var(--color-primary);
-  flex-shrink: 0;
-  transition: transform 0.15s var(--ease);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  opacity: 0.5;
+  z-index: 2;
+  transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease),
+    transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.todo__check:active {
+  transform: scale(0.88);
+  opacity: 0.8;
+}
+.todo__check svg {
+  width: 12px;
+  height: 12px;
+  /* 对勾画出动画：初始隐藏，完成时画出 */
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.15s var(--ease) 0.05s, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) 0.05s;
+}
+/* 完成态：完全隐藏复选框视觉（划线已足以表达完成），
+   但保留透明按钮在原位，用户点右上角仍可取消完成 */
+.todo--done .todo__check {
+  border: none;
+  animation: none;
+  opacity: 0;       /* 视觉隐藏 */
+}
+.todo--done .todo__check:active {
+  opacity: 0;       /* 完成态点击也不显形 */
+}
+.todo--done .todo__check svg {
+  opacity: 0;       /* 对勾也不显示 */
+  transform: scale(1);
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .todo__check, .todo__check svg, .todo__check--done { animation: none; transition: none; }
 }
 
-.todo__checkbox:checked {
-  transform: scale(1.1);
+/* ===== 带感完成：居中蓄力层（长按复选框弹出，避开手指遮挡+消除冲突）===== */
+.heartful-charge { position: fixed; inset: 0; z-index: 200; }
+.heartful-charge[hidden] { display: none; }
+/* 全屏半透明遮罩：接管交互，阻挡卡片长按菜单 */
+.heartful-charge__overlay {
+  position: absolute; inset: 0;
+  background: rgba(17, 24, 39, 0);
+  transition: background 0.2s var(--ease);
+}
+.heartful-charge:not([hidden]) .heartful-charge__overlay {
+  background: rgba(17, 24, 39, 0.45);
+  backdrop-filter: blur(2px);
+}
+/* 中央爱心 + 进度环 */
+.heartful-charge__heart {
+  position: absolute;
+  top: 38%; left: 50%;
+  transform: translate(-50%, -50%) scale(0.7);
+  width: 120px; height: 120px;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity 0.25s var(--ease), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.heartful-charge:not([hidden]) .heartful-charge__heart {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+/* 进度环 SVG（外圈，96px 直径区域）*/
+.heartful-charge__progress {
+  position: absolute; inset: 0;
+  width: 120px; height: 120px;
+  transform: rotate(-90deg); /* 从顶部顺时针 */
+}
+.heartful-charge__track {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 3;
+}
+.heartful-charge__bar {
+  stroke: var(--rose-400);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  /* r=46, 周长 ≈ 289 */
+  stroke-dasharray: 289;
+  stroke-dashoffset: 289;
+  transition: stroke-dashoffset 0.6s linear;
+}
+/* 蓄力中：进度环填满 */
+.heartful-charge--charging .heartful-charge__bar {
+  stroke-dashoffset: 0;
+}
+/* 蓄满：环转高亮 + 爱心脉动 */
+.heartful-charge__icon {
+  position: relative; z-index: 1;
+  color: var(--rose-500);
+  display: flex; align-items: center; justify-content: center;
+  filter: drop-shadow(0 0 12px rgba(244, 63, 94, 0.5));
+  transition: transform 0.3s var(--ease), color 0.2s;
+}
+.heartful-charge--charged .heartful-charge__icon {
+  color: var(--rose-600);
+  animation: heartful-charged-pulse 0.6s var(--ease) infinite;
+}
+.heartful-charge--charged .heartful-charge__bar {
+  stroke: var(--rose-500);
+}
+@keyframes heartful-charged-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+/* 提示文案 */
+.heartful-charge__label {
+  position: absolute;
+  top: calc(100% + 20px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .heartful-charge__bar { transition: none; }
+  .heartful-charge--charged .heartful-charge__icon { animation: none; }
+  .heartful-charge__heart { transition: opacity 0.15s; }
+}
+
+/* ===== 带感完成：飞心动画（从复选框飞向顶栏桃心）===== */
+.fly-heart {
+  position: fixed;
+  width: 20px;
+  height: 20px;
+  z-index: 300;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0.4);
+  opacity: 0;
+  /* rose 渐变小爱心 + 柔光 */
+  background: radial-gradient(circle, #fff 0%, #fda4af 40%, #f43f5e 75%, transparent 100%);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21s-7.5-4.7-7.5-10.2C4.5 7.6 7 5.5 9.8 5.5c1.4 0 2.7.7 3.2 1.8.5-1.1 1.8-1.8 3.2-1.8 2.8 0 5.3 2.1 5.3 5.3C21.5 16.3 12 21 12 21z'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21s-7.5-4.7-7.5-10.2C4.5 7.6 7 5.5 9.8 5.5c1.4 0 2.7.7 3.2 1.8.5-1.1 1.8-1.8 3.2-1.8 2.8 0 5.3 2.1 5.3 5.3C21.5 16.3 12 21 12 21z'/%3E%3C/svg%3E") center/contain no-repeat;
+  filter: drop-shadow(0 0 6px rgba(244, 63, 94, 0.5));
+}
+.fly-heart--flying {
+  animation: fly-heart-to-top 0.8s var(--ease) forwards;
+}
+@keyframes fly-heart-to-top {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  15%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  70%  { opacity: 1; transform: translate(calc(-50% + var(--end-x) * 0.85), calc(-50% + var(--end-y) * 0.7 - 30px)) scale(0.9); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--end-x)), calc(-50% + var(--end-y))) scale(0.3); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fly-heart--flying { animation: none; opacity: 0; }
+}
+
+/* ===== 带感完成首次引导：复选框上方气泡 ===== */
+.todo__check-hint {
+  position: absolute;
+  top: 30px;
+  right: -4px;
+  background: var(--rose-500);
+  color: #fff;
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 10px;
+  white-space: nowrap;
+  z-index: 6;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.3s var(--ease), transform 0.3s var(--ease);
+  pointer-events: none;
+  box-shadow: 0 2px 10px rgba(244, 63, 94, 0.3);
+}
+.todo__check-hint::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  right: 12px;
+  border: 5px solid transparent;
+  border-bottom-color: var(--rose-500);
+  border-top: none;
+}
+.todo__check-hint--show {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .todo__body {
@@ -395,6 +706,8 @@ input {
 
 .todo--done .todo__text {
   text-decoration: line-through;
+  text-decoration-color: rgba(var(--color-primary-rgb), 0.45);
+  text-decoration-thickness: 1.5px;
   color: var(--color-text-muted);
 }
 
@@ -410,8 +723,8 @@ input {
 
 /* 待办项 meta 中的小头像（创建者） */
 .todo__avatar {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
@@ -430,23 +743,6 @@ input {
   display: inline-block;
 }
 
-.todo__delete {
-  flex-shrink: 0;
-  border: none;
-  background: transparent;
-  color: var(--color-text-muted);
-  font-size: 16px;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  transition: background 0.15s, color 0.15s;
-}
-
-.todo__delete:hover {
-  background: #fef2f2;
-  color: var(--color-danger);
-}
-
 /* ===== Toast 提示 ===== */
 .toast {
   position: fixed;
@@ -460,9 +756,12 @@ input {
   font-size: 14px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s, transform 0.2s;
+  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
   z-index: 100;
   max-width: 80vw;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .toast--show {
@@ -470,13 +769,61 @@ input {
   transform: translateX(-50%) translateY(0);
 }
 
+/* 图标 + 文案间距 */
+.toast__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.toast__icon svg { width: 18px; height: 18px; display: block; }
+
+/* 完成变体：品牌色渐变背景 + 勾图标，弹簧放大进入 */
+.toast--success {
+  background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 78%, #000));
+  box-shadow: 0 6px 20px rgba(var(--color-primary-rgb), 0.35);
+  padding: 12px 20px;
+  border-radius: 14px;
+}
+.toast--success .toast__icon { color: #fff; }
+.toast--success.toast--show {
+  animation: toast-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 隐藏款变体：深色底 + accent 染色光晕边框，图标着 accent 色 */
+.toast--rarity {
+  background: linear-gradient(135deg, #1f2937, #111827);
+  border: 1.5px solid var(--toast-accent, #fbbf24);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--toast-accent, #fbbf24) 18%, transparent),
+              0 6px 24px color-mix(in srgb, var(--toast-accent, #fbbf24) 30%, transparent);
+  padding: 12px 20px;
+  border-radius: 14px;
+  font-weight: 500;
+}
+.toast--rarity .toast__icon { color: var(--toast-accent, #fbbf24); }
+.toast--rarity .toast__icon svg { width: 20px; height: 20px; filter: drop-shadow(0 0 4px var(--toast-accent, #fbbf24)); }
+.toast--rarity.toast--show {
+  animation: toast-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 弹簧放大进入（从中心略小弹出，区别于普通 toast 的下→上平移）*/
+@keyframes toast-pop {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.85); }
+  60%  { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.04); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast--success.toast--show,
+  .toast--rarity.toast--show { animation: none; }
+}
+
 /* ===== 骨架屏（首屏加载占位） ===== */
+/* 对齐真实 .todo 卡片：无边框、圆形复选框、同阴影 */
 .skeleton {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius);
   padding: 14px 14px;
   margin-bottom: 10px;
@@ -486,9 +833,9 @@ input {
 .skeleton__box {
   background: linear-gradient(
     90deg,
-    #f3f4f6 0%,
-    #e5e7eb 50%,
-    #f3f4f6 100%
+    var(--color-border) 0%,
+    var(--color-bg) 50%,
+    var(--color-border) 100%
   );
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
@@ -498,7 +845,7 @@ input {
 .skeleton__checkbox {
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: 50%; /* 圆形，和真实复选框一致，加载完不跳变 */
   flex-shrink: 0;
   margin-top: 2px;
 }
@@ -549,25 +896,6 @@ input {
   transition: width 0.2s, opacity 0.4s 0.1s;
 }
 
-/* ===== 输入框旋转加载图标 ===== */
-.composer__btn--loading {
-  position: relative;
-  color: transparent;
-}
-
-.composer__btn--loading::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 18px;
-  height: 18px;
-  margin: -9px 0 0 -9px;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
 
 @keyframes spin {
   to {
@@ -575,141 +903,1622 @@ input {
   }
 }
 
-/* ===== 主题选择器 ===== */
-.theme-picker {
+/* ===== 图标按钮（退出等克制入口） ===== */
+.btn--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 50%;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+  flex-shrink: 0;
+}
+.btn--icon:hover,
+.btn--icon:focus-visible {
+  background: rgba(var(--color-primary-rgb), 0.1);
+  color: var(--color-text);
+  outline: none;
+}
+.btn--icon:active {
+  background: rgba(var(--color-primary-rgb), 0.18);
+}
+.btn--icon:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn--icon--loading svg {
+  animation: icon-spin 0.8s linear infinite;
+}
+@keyframes icon-spin {
+  to { transform: rotate(360deg); }
+}
+@media (max-width: 400px) {
+  .btn--icon {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* ===== 待办操作菜单（底部 action sheet，横向图标组） ===== */
+.action-sheet__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  transition: background 0.25s var(--ease);
+}
+.action-sheet__overlay--show {
+  background: rgba(17, 24, 39, 0.45);
+  backdrop-filter: blur(3px);
+}
+.action-sheet {
+  width: 100%;
+  max-width: 480px;
+  padding: 0 12px calc(12px + var(--safe-bottom));
+  transform: translateY(100%);
+  transition: transform 0.3s var(--ease);
+}
+.action-sheet__overlay--show .action-sheet {
+  transform: translateY(0);
+}
+
+/* 待办文案预览（顶部，圆角卡片头） */
+.action-sheet__preview {
+  background: var(--color-surface);
+  padding: 16px 18px;
+  border-radius: 20px 20px 0 0;
+  font-size: 15px;
+  color: var(--color-text);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* 图标按钮组（横向排列） */
+.action-sheet__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 6px;
+  background: var(--color-surface);
+  padding: 16px 12px;
+  border-top: 1px solid var(--color-border);
+}
+/* 单个图标按钮（统一 48×48 圆形） */
+.action-sheet__icon-btn {
+  flex: 1;
+  max-width: 64px;
+  height: 48px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease), transform 0.1s var(--ease);
+}
+.action-sheet__icon-btn svg {
+  width: 24px;
+  height: 24px;
+}
+.action-sheet__icon-btn:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+.action-sheet__icon-btn:active {
+  transform: scale(0.9);
+}
+/* 表情按钮稍小图标 */
+.action-sheet__icon-btn--reaction svg {
+  width: 26px;
+  height: 26px;
+}
+.action-sheet__icon-btn--reaction {
+  color: var(--color-text-muted);
+}
+/* 已选中态（自己贴过 / 已 nudge） */
+.action-sheet__icon-btn--mine,
+.action-sheet__icon-btn--active {
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.1);
+}
+/* 危险项（删除）rose 色 */
+.action-sheet__icon-btn--danger {
+  color: var(--rose-500);
+}
+.action-sheet__icon-btn--danger:hover {
+  background: rgba(244, 63, 94, 0.1);
+  color: var(--rose-600);
+}
+
+/* 关闭按钮（底部独立块） */
+.action-sheet__close {
+  margin-top: 8px;
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 16px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s var(--ease);
+}
+.action-sheet__close:hover { background: var(--color-bg); }
+
+/* ===== 纪念日详情面板（点击顶栏桃心展开） ===== */
+.anni-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgba(17, 24, 39, 0);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: background 0.25s var(--ease);
+  /* 点空白关闭 */
+  cursor: pointer;
+}
+
+/* 关键：hidden 属性必须真正隐藏，避免透明遮罩拦截顶栏点击 */
+.anni-panel[hidden] {
+  display: none !important;
+}
+
+.anni-panel--show {
+  background: rgba(17, 24, 39, 0.45);
+  backdrop-filter: blur(3px);
+}
+
+/* 卡片：从顶部下拉 */
+.anni-panel__card {
+  margin: calc(72px + var(--safe-top)) 20px 0;
+  padding: 28px 24px;
+  border-radius: 24px;
+  background: linear-gradient(160deg, var(--rose-50) 0%, var(--rose-100) 55%, var(--rose-200) 100%);
+  border: 1px solid rgba(244, 63, 94, 0.15);
+  box-shadow: 0 12px 40px rgba(244, 63, 94, 0.18);
+  text-align: center;
+  width: calc(100% - 40px);
+  max-width: 360px;
+  cursor: default;
+  transform: translateY(-30px) scale(0.96);
+  opacity: 0;
+  transition: transform 0.35s var(--ease), opacity 0.25s var(--ease);
+}
+
+.anni-panel--show .anni-panel__card {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+/* 顶部爱心：无圆框，爱心直接浮于卡片上，外发光（drop-shadow）跟随
+   爱心形状自然散开，呼吸时如"生命力外溢"。 */
+.anni-panel__heart {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: anni-panel-heart-beat 1.8s ease-in-out infinite,
+             anni-panel-heart-glow 1.8s ease-in-out infinite;
+}
+
+/* 首次打开弹窗时的飘落入场：爱心从上方落下、轻轻弹一下，再开始心跳。
+   --intro 由 JS 在每次冷启动后首次打开时添加，播放完即移除（不再飘）。 */
+.anni-panel__heart--intro {
+  animation: anni-panel-heart-drop 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+             anni-panel-heart-beat 1.8s ease-in-out 0.9s infinite,
+             anni-panel-heart-glow 1.8s ease-in-out 0.9s infinite;
+}
+
+/* 真心脏节律「扑-通……」：两跳紧凑（强→弱），后接较长舒张期 */
+@keyframes anni-panel-heart-beat {
+  0%, 100% { transform: scale(1); }
+  8%  { transform: scale(1.13); }   /* 扑（强） */
+  20% { transform: scale(1); }
+  28% { transform: scale(1.07); }   /* 通（弱） */
+  42% { transform: scale(1); }
+  /* 42%→100%：舒张休息期，约占 58% */
+}
+
+/* 光晕呼吸：用 drop-shadow 让光晕贴合爱心轮廓（而非圆形 box-shadow），
+   透明度随心跳起伏，峰值略迟于心跳避免机械同步。 */
+@keyframes anni-panel-heart-glow {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(244, 63, 94, 0.18)); }
+  10% { filter: drop-shadow(0 0 14px rgba(244, 63, 94, 0.38)); }  /* 第一跳扩散 */
+  22% { filter: drop-shadow(0 0 10px rgba(244, 63, 94, 0.26)); }
+  30% { filter: drop-shadow(0 0 13px rgba(244, 63, 94, 0.32)); }  /* 第二跳 */
+  44% { filter: drop-shadow(0 0 7px rgba(244, 63, 94, 0.20)); }
+}
+
+/* 飘落入场：从上方坠落 → 回弹 → 落定，带弹性曲线 */
+@keyframes anni-panel-heart-drop {
+  0%   { transform: translateY(-60px) scale(0.5); opacity: 0; }
+  60%  { transform: translateY(6px) scale(1.1); opacity: 1; }
+  80%  { transform: translateY(-3px) scale(0.97); }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .anni-panel__heart,
+  .anni-panel__heart--intro { animation: none; }
+}
+
+/* 主区：相识天数（视觉焦点，最大字号） */
+.anni-panel__main {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+.anni-panel__pre,
+.anni-panel__suf {
+  font-size: 15px;
+  color: var(--rose-700);
+  opacity: 0.75;
+}
+
+.anni-panel__days {
+  font-size: 52px;
+  font-weight: 800;
+  color: var(--rose-600);
+  line-height: 1;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 分隔线（主区与倒计时之间） */
+.anni-panel__divider {
+  height: 1px;
+  background: rgba(244, 63, 94, 0.15);
+  margin: 22px 0 8px;
+}
+
+/* 倒计时列表 */
+.anni-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.anni-panel__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(244, 63, 94, 0.08);
+}
+
+.anni-panel__item:last-child {
+  border-bottom: none;
+}
+
+.anni-panel__icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
+}
+
+.anni-panel__label {
+  flex: 1;
+  font-size: 14px;
+  color: var(--rose-700);
+  opacity: 0.9;
+}
+
+.anni-panel__count {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--rose-600);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 窄屏适配 */
+@media (max-width: 400px) {
+  .anni-panel__days { font-size: 44px; }
+  .anni-panel__label { font-size: 13px; }
+  .anni-panel__count { font-size: 14px; }
+}
+
+/* 顶栏桃心可点击状态（轻提示） */
+.topbar__heart--tap {
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 2px;
+  transition: transform 0.2s var(--ease);
+}
+
+.topbar__heart--tap:active {
+  transform: scale(0.88);
+}
+
+/* ===== 轻轻提醒标记（克制、不催促） ===== */
+/* 被标记的待办：左侧一道极淡的玫红竖条（像便利贴的标记） */
+.todo--nudged {
+  border-left: 3px solid #fde68a;
+  /* 边框颜色用 padding-left 补偿，避免内容左移 */
+  padding-left: 11px;
   position: relative;
 }
 
-.theme-picker__btn {
-  width: 28px;
-  height: 28px;
+/* 右上角提醒标记：twemoji 🤔 思考脸（彩色矢量，安卓不变黑）。
+   温和询问、无逼迫感，极轻微呼吸。 */
+.todo__nudge {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: todo-nudge-pulse 4s ease-in-out infinite;
+  cursor: pointer;
+}
+.todo__nudge svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+@keyframes todo-nudge-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 0.9;  transform: scale(1.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .todo__nudge { animation: none; }
+}
+
+/* 完成的待办即使被标记也不显示（已完成无需提醒） */
+.todo--done.todo--nudged {
+  border-left: 1px solid var(--color-border);
+  padding-left: 14px;
+}
+.todo--done .todo__nudge {
+  display: none;
+}
+
+/* ============================================================
+   V2.2 克制版：完成角标 / 悄悄留言（阅后即焚）/ 表情回应 / nudge 问号
+   设计原则：配角隐形，主角是清单。需要时才浮现。
+   全部复用 CSS 变量，5 套主题 + 深色自动适配。
+   ============================================================ */
+
+/* ===== 心意留言图标（顶栏，爱心脉动 + 柔光晕） ===== */
+.note-bell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   padding: 0;
-  border: 2px solid var(--color-border);
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+}
+.note-bell[hidden] { display: none; }
+/* 有未读留言：rose 色爱心 + 脉动 + 柔光晕（精致有惊喜感） */
+.note-bell--glow {
+  color: var(--rose-500);
+}
+.note-bell--glow .note-bell__heart {
+  transform-origin: center;
+  animation: note-heart-pulse 1.8s ease-in-out infinite;
+}
+.note-bell--glow::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(244, 63, 94, 0.3), transparent 70%);
+  animation: note-glow-ring 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes note-heart-pulse {
+  0%, 100% { transform: scale(1); }
+  30%      { transform: scale(1.2); }
+  60%      { transform: scale(1.05); }
+}
+@keyframes note-glow-ring {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50%      { opacity: 0.8; transform: scale(1.15); }
+}
+.note-bell:hover { background: rgba(244, 63, 94, 0.1); }
+.note-bell:focus-visible {
+  outline: 2px solid var(--rose-500);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .note-bell--glow .note-bell__heart,
+  .note-bell--glow::before { animation: none; }
+}
+
+
+/* ===== 心里话：全屏写信场景（仪式感） ===== */
+.note-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.3s var(--ease), visibility 0s 0.3s;
+}
+.note-modal[hidden] { display: none; }
+.note-modal--show {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 0.3s var(--ease);
+}
+
+/* 写入态：温暖纸质质感背景，像展开一张信纸 */
+.note-write {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(165deg, var(--rose-50) 0%, #ffffff 40%, var(--rose-50) 100%);
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  transform: translateY(100%);
+  transition: transform 0.4s var(--ease);
+}
+.note-modal--show .note-write {
+  transform: translateY(0);
+}
+/* 关键：hidden 必须能覆盖 display:flex，否则写信页永远可见（露页 bug 根因） */
+.note-write[hidden] { display: none !important; }
+.note-write__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 8px;
+  flex-shrink: 0;
+}
+.note-write__close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--rose-700);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: background 0.15s var(--ease), opacity 0.15s;
+}
+.note-write__close:hover { background: rgba(244,63,94,0.1); opacity: 1; }
+.note-write__title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--rose-700);
+}
+.note-write__body {
+  flex: 1;
+  padding: 12px 24px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+/* 信纸容器：横线纸纹理（行距 = textarea line-height 30.6px，横线对齐文字基线）*/
+.note-write__paper {
+  flex: 1;
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  /* 横线间距 30.6px（严丝合缝 textarea line-height），每条线 1px */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 29.6px,
+    rgba(244, 63, 94, 0.15) 29.6px,
+    rgba(244, 63, 94, 0.15) 30.6px
+  );
+  /* 让横线落在文字基线下沿（字"坐"在横线上，像作业本）：
+     字体 ascent 16 + descent 4 + 半行距 5.3 = 基线下沿约 25px，
+     横线在周期内 29.6px 处，故整图下移 25 - 29.6 ≈ -4.6px */
+  background-position: 0 -4.6px;
+}
+.note-write__textarea {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: transparent;
+  resize: none;
+  outline: none;
+  color: var(--color-text);
+  font-size: 17px;
+  line-height: 30.6px; /* 与横线间距严丝合缝，文字坐在横线上 */
+  padding: 0;
+  font-family: inherit;
+}
+.note-write__textarea::placeholder {
+  color: var(--rose-400);
+  opacity: 0.7;
+  line-height: 30.6px;
+}
+.note-write__footer {
+  flex-shrink: 0;
+  padding: 16px 24px calc(20px + var(--safe-bottom));
+  text-align: center;
+  position: relative;
+}
+.note-write__hint {
+  font-size: 12px;
+  color: var(--rose-700);
+  opacity: 0.5;
+  margin: 0 0 16px;
+  transition: opacity 0.3s var(--ease);
+}
+/* 字数指示器：底部右下角小字，不抢主按钮视觉 */
+.note-write__counter {
+  position: absolute;
+  right: 24px;
+  bottom: calc(8px + var(--safe-bottom));
+  font-size: 11px;
+  color: var(--rose-400);
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  transition: color 0.2s var(--ease), opacity 0.2s var(--ease);
+}
+.note-write__counter--warn {
+  color: #ea580c; /* 暖橙提示，接近上限 */
+  opacity: 1;
+}
+/* 送达回响：按钮化作光点后，原位淡入一句温柔的话 */
+.note-write__echo {
+  font-size: 14px;
+  color: var(--rose-600);
+  opacity: 0;
+  margin: 0 0 12px;
+  min-height: 0;
+  transition: opacity 0.4s var(--ease);
+  pointer-events: none;
+}
+.note-write__echo:not([hidden]) {
+  min-height: 20px;
+}
+.note-write__echo--show {
+  opacity: 0.9;
+}
+.note-write__send {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 14px;
+  background: var(--rose-500);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(244, 63, 94, 0.3);
+  transition: background 0.15s var(--ease), transform 0.1s var(--ease);
+}
+.note-write__send:hover { background: var(--rose-600); }
+.note-write__send:active { transform: scale(0.98); }
+.note-write__send:disabled { opacity: 0.5; }
+/* 按钮化作光点飞出：点下瞬间按钮缩成一点淡出（光点从按钮位置飞向桃心） */
+.note-write__send--gone {
+  opacity: 0;
+  transform: scale(0.3);
+  transition: opacity 0.3s var(--ease), transform 0.3s var(--ease);
+  pointer-events: none;
+}
+
+/* 阅读态：收到心意的展示 */
+.note-read {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(165deg, var(--rose-50) 0%, #ffffff 50%, var(--rose-100) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 32px calc(40px + var(--safe-bottom));
+  text-align: center;
+  transform: scale(0.96);
+  opacity: 0;
+  transition: transform 0.35s var(--ease), opacity 0.3s var(--ease);
+}
+.note-modal--show .note-read {
+  transform: scale(1);
+  opacity: 1;
+}
+.note-read[hidden] { display: none; }
+.note-read__seal {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.6);
+  box-shadow: 0 0 0 6px rgba(244,63,94,0.08);
+  color: var(--rose-500);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  animation: note-seal-pulse 2s ease-in-out infinite;
+}
+@keyframes note-seal-pulse {
+  0%,100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.note-read__from {
+  font-size: 14px;
+  color: var(--rose-700);
+  opacity: 0.7;
+  margin-bottom: 16px;
+}
+.note-read__content {
+  font-size: 18px;
+  line-height: 1.8;
+  color: var(--color-text);
+  background: rgba(255,255,255,0.7);
+  border-radius: 16px;
+  padding: 24px 20px;
+  width: 100%;
+  max-width: 340px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: 0 4px 20px rgba(244,63,94,0.08);
+}
+.note-read__hint {
+  font-size: 12px;
+  color: var(--rose-700);
+  opacity: 0.5;
+  margin: 20px 0 24px;
+}
+.note-read__dismiss {
+  padding: 12px 36px;
+  border: none;
+  border-radius: 14px;
+  background: var(--rose-500);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(244,63,94,0.3);
+  transition: background 0.15s var(--ease), transform 0.1s var(--ease);
+}
+.note-read__dismiss:hover { background: var(--rose-600); }
+.note-read__dismiss:active { transform: scale(0.98); }
+
+/* ===== 长按珍藏：克制版（仅留言文字慢慢通透发亮，余皆不动）===== */
+/* 按住时：按钮自身轻微压暗（安静的确认），留言文字柔柔发亮（像被珍视） */
+.note-read__dismiss--pressing {
+  background: var(--rose-600);
+}
+.note-read__content {
+  transition: text-shadow 0.6s ease-out;
+}
+.note-read--pressing .note-read__content {
+  text-shadow: 0 0 10px rgba(251, 113, 133, 0.45);
+}
+/* 松手时：发光快速收回（利落放弃），覆盖上面的慢过渡 */
+.note-read:not(.note-read--pressing) .note-read__content {
+  transition: text-shadow 0.2s ease-out;
+}
+/* 星空氛围：文字本就浅色，发亮用暖白 */
+.note-read--night.note-read--pressing .note-read__content {
+  text-shadow: 0 0 12px rgba(253, 164, 175, 0.5);
+}
+@media (prefers-reduced-motion: reduce) {
+  .note-read--pressing .note-read__content { text-shadow: none; }
+}
+
+/* ===== 珍藏仪式中：其余元素淡出让位，整卡成为文字化心的舞台 ===== */
+.note-read--cherishing { pointer-events: none; }
+.note-read--cherishing .note-read__seal,
+.note-read--cherishing .note-read__from,
+.note-read--cherishing .note-read__hint,
+.note-read--cherishing .note-read__dismiss {
+  opacity: 0;
+  transition: opacity 0.6s var(--ease);
+}
+/* 灯光渐暗：仪式开始时卡片沉入暮色，让化心的光成为唯一主角
+   （浅色白天/晨光背景下，亮粒子会被洗掉——深色舞台保证任何时段都出彩） */
+.note-read--cherishing::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(ellipse at 50% 45%, rgba(30, 27, 75, 0.42) 0%, rgba(24, 20, 60, 0.62) 100%);
+  opacity: 1;
+  transition: opacity 0.8s var(--ease);
+  pointer-events: none;
+}
+
+/* ===== 阅读态时段氛围（按留言写下时的时段切换）===== */
+/* 晨光（5-10点）：金粉暖色调 */
+.note-read--dawn {
+  background: linear-gradient(165deg, #fff7ed 0%, #fef2f2 50%, #fffbeb 100%);
+}
+.note-read--dawn .note-read__seal {
+  box-shadow: 0 0 0 6px rgba(251, 191, 36, 0.12);
+}
+/* 星空（22-5点）：深蓝夜幕 + 微光粒子，文字转浅 */
+.note-read--night {
+  background: linear-gradient(165deg, #1e1b4b 0%, #312e81 50%, #3730a3 100%);
+  /* 微光粒子：用 radial-gradient 多点散布 */
+  background-image:
+    radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,0.6), transparent),
+    radial-gradient(1px 1px at 70% 20%, rgba(255,255,255,0.5), transparent),
+    radial-gradient(1.5px 1.5px at 40% 75%, rgba(255,255,255,0.4), transparent),
+    radial-gradient(1px 1px at 85% 65%, rgba(255,255,255,0.5), transparent),
+    linear-gradient(165deg, #1e1b4b 0%, #312e81 50%, #3730a3 100%);
+}
+.note-read--night .note-read__from,
+.note-read--night .note-read__hint {
+  color: rgba(255,255,255,0.7);
+}
+.note-read--night .note-read__content {
+  color: #f8fafc;
+  background: rgba(255,255,255,0.1);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+.note-read--night .note-read__seal {
+  background: rgba(255,255,255,0.08);
+  color: #fda4af;
+  box-shadow: 0 0 0 6px rgba(253, 164, 175, 0.1);
+}
+/* 深色主题下降饱和度，避免过于刺眼 */
+@media (prefers-color-scheme: dark) {
+  .note-read--dawn {
+    background: linear-gradient(165deg, #2a1f17 0%, #2d1e22 50%, #1f1a14 100%);
+  }
+}
+
+/* ===== 留言飞向桃心：爱意送达/珍藏的视觉隐喻 ===== */
+
+/* 阅读卡片 / 写信卡片 收缩淡出（光点飞离的同时） */
+.note-read--leaving,
+.note-write--leaving {
+  opacity: 0 !important;
+  transform: scale(0.94) !important;
+  filter: blur(2px);
+  transition: opacity 0.5s var(--ease), transform 0.5s var(--ease), filter 0.5s var(--ease) !important;
+}
+
+/* 飞行光点（rose 柔光小球，绝不硬边） */
+.fly-dot {
+  position: fixed;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 235, 240, 1) 0%, var(--rose-400) 45%, rgba(244, 63, 94, 0.4) 75%, transparent 100%);
+  box-shadow: 0 0 12px 3px rgba(244, 63, 94, 0.35);
+  transform: translate(-50%, -50%) scale(0.4);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 300;
+  margin: 0;
+}
+/* 飞行中：从起点沿弧线飞向桃心（贝塞尔感：先上扬再收拢） */
+.fly-dot--flying {
+  animation: fly-to-heart 0.7s var(--ease) forwards;
+}
+@keyframes fly-to-heart {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  /* 用两层位移模拟弧线：外层 translate 到终点，内层用辅助变量做弧度 */
+  70% {
+    opacity: 1;
+    transform: translate(calc(-50% + var(--end-x) * 0.85), calc(-50% + var(--end-y) * 0.7 - 30px)) scale(0.85);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--end-x)), calc(-50% + var(--end-y))) scale(0.3);
+  }
+}
+
+/* 桃心接收跳动（爱意送达/珍藏，轻跳一下即停，区别于持续心跳） */
+.topbar__heart--receive {
+  animation: heart-receive 0.6s var(--ease) !important;
+}
+@keyframes heart-receive {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.22); }
+  60%  { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-read--leaving, .note-write--leaving { transform: none !important; filter: none; }
+  .fly-dot--flying { animation: none; opacity: 0; }
+  .topbar__heart--receive { animation: none; }
+}
+
+/* ===== 纪念日面板里的写入口（不违和的小图标） ===== */
+.anni-panel__writenote {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 18px;
+  padding: 10px;
+  border: none;
+  background: transparent;
+  color: var(--rose-700);
+  opacity: 0.55;
+  font-size: 13px;
+  border-top: 1px solid rgba(244, 63, 94, 0.12);
+  border-radius: 0 0 20px 20px;
+  transition: color 0.15s var(--ease), background 0.15s var(--ease), opacity 0.15s;
+  cursor: pointer;
+}
+.anni-panel__writenote:hover {
+  opacity: 0.85;
+  background: rgba(244, 63, 94, 0.05);
+}
+
+/* ===== 待办「有图」徽标（小相纸图标，挂 meta 行末尾）=====
+   图片不默认展开（太占屏），仅以小图标提示「这条有图」。
+   点徽标 → 弹全屏 lightbox 查看大图（见 .img-lightbox）。 */
+.todo__image-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: auto; /* 推到 meta 行最右 */
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: var(--color-accent-soft, rgba(244, 114, 182, 0.14));
+  color: var(--color-accent, #f472b6);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.15s var(--ease), background 0.15s var(--ease);
+  animation: reactions-enter 0.3s var(--ease);
+}
+.todo__image-badge svg { width: 15px; height: 15px; }
+.todo__image-badge:active { transform: scale(0.9); }
+@media (hover: hover) {
+  .todo__image-badge:hover { background: var(--color-accent, #f472b6); color: #fff; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .todo__image-badge { animation: none; transition: none; }
+}
+
+/* ===== 图片全屏预览（lightbox）===== */
+.img-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.92);
+  animation: img-lightbox-fade 0.2s var(--ease);
+}
+@keyframes img-lightbox-fade { from { opacity: 0; } to { opacity: 1; } }
+.img-lightbox__img {
+  max-width: 92vw;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+.img-lightbox__close {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.img-lightbox__close svg { width: 20px; height: 20px; }
+.img-lightbox__close:active { background: rgba(255, 255, 255, 0.3); }
+.img-lightbox__del {
+  position: absolute;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 11px 28px;
+  border: none;
+  border-radius: 999px;
+  background: #e11d48;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 4px 16px rgba(225, 29, 72, 0.4);
+}
+.img-lightbox__del:active { transform: translateX(-50%) scale(0.96); }
+@media (prefers-reduced-motion: reduce) {
+  .img-lightbox { animation: none; }
+}
+
+/* ===== 待办表情胶囊（极小，仅已贴才显示）=====
+   内联到 meta 行末尾（靠右），与创建者·时间共用一行，不再额外占垂直空间。 */
+.todo__reactions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-left: auto; /* 推到 meta 行右侧（图片徽标紧跟其后） */
+  align-items: center;
+}
+.todo__reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(244, 63, 94, 0.08);
+  border: 1px solid rgba(244, 63, 94, 0.14);
+  color: var(--rose-500);
+  pointer-events: none;
+  animation: reactions-enter 0.3s var(--ease);
+}
+.todo__reaction svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+.todo__reaction--mine {
+  background: rgba(244, 63, 94, 0.16);
+  border-color: rgba(244, 63, 94, 0.3);
+  color: var(--rose-600);
+}
+.todo__reaction-count {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--rose-700);
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes reactions-enter {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+/* 对方贴表情时的轻脉冲 */
+.todo__reactions--pulse {
+  animation: reactions-pulse 0.7s var(--ease);
+}
+@keyframes reactions-pulse {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .todo__reaction, .todo__reactions--pulse { animation: none; }
+}
+
+
+
+/* ============================================================
+   添加待办：浮动按钮(FAB) + 展开式输入面板
+   ============================================================ */
+
+/* 浮动 + 按钮（右下角，拇指自然可达） */
+.fab {
+  position: fixed;
+  right: 20px;
+  bottom: calc(24px + var(--safe-bottom));
+  width: 56px;
+  height: 56px;
+  border: none;
   border-radius: 50%;
   background: var(--color-primary);
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(var(--color-primary-rgb), 0.4),
+              0 2px 8px rgba(0, 0, 0, 0.15);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  transition: transform 0.15s var(--ease), border-color 0.15s;
-  box-shadow: 0 0 0 2px var(--color-surface) inset;
+  z-index: 40;
+  transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease),
+    background 0.18s var(--ease);
+}
+.fab:hover {
+  background: var(--color-primary-dark);
+  transform: scale(1.06);
+  box-shadow: 0 8px 24px rgba(var(--color-primary-rgb), 0.5);
+}
+.fab:active {
+  transform: scale(0.94);
+}
+.fab:disabled {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0);
+  transition: opacity 0.2s, transform 0.2s;
+}
+/* 鼠标/触摸点击后不残留系统焦点蓝框（仅键盘 :focus-visible 才显示绿框） */
+.fab:focus,
+.add-panel__btn:focus {
+  outline: none;
+}
+.fab:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
 }
 
-.theme-picker__btn:hover {
-  transform: scale(1.1);
-}
-
-.theme-picker__menu {
-  position: absolute;
-  top: calc(100% + 8px);
+/* 展开式输入面板（从底部上滑） */
+.add-panel {
+  position: fixed;
+  left: 0;
   right: 0;
+  bottom: 0;
+  z-index: 60;
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 12px;
-  box-shadow: var(--shadow-md);
-  z-index: 50;
-  min-width: 180px;
-  animation: menu-enter 0.2s var(--ease);
-}
-
-@keyframes menu-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.theme-picker__title {
-  font-size: 12px;
-  color: var(--color-text-muted);
-  margin-bottom: 8px;
-}
-
-.theme-picker__opts {
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  padding: 8px 16px calc(16px + var(--safe-bottom));
   display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
+  align-items: center;
+  gap: 10px;
+  transform: translateY(100%);
+  visibility: hidden;
+  transition: transform 0.28s var(--ease), visibility 0s 0.28s;
 }
-
-.theme-picker__opt {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 2px solid var(--color-border);
-  background: var(--c);
-  cursor: pointer;
+.add-panel--show {
+  transform: translateY(0);
+  visibility: visible;
+  transition: transform 0.28s var(--ease);
+}
+/* 顶部小把手（暗示可下拉关闭） */
+.add-panel__handle {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+}
+.add-panel__input {
+  flex: 1;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 16px; /* ≥16px 防 iOS 聚焦缩放 */
+  outline: none;
+  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.add-panel__input:focus {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.12);
+}
+.add-panel__input::placeholder {
+  color: var(--color-text-muted);
+}
+.add-panel__btn {
+  margin-top: 16px;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
   padding: 0;
-  transition: transform 0.15s var(--ease);
+  border: none;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s var(--ease), opacity 0.15s, transform 0.1s var(--ease);
+}
+.add-panel__btn:active { transform: scale(0.92); }
+.add-panel__btn:hover { background: var(--color-primary-dark); }
+.add-panel__btn:disabled { opacity: 0.5; }
+.add-panel__btn--loading {
+  background: var(--color-primary-dark);
+  color: transparent;
   position: relative;
 }
-
-.theme-picker__opt:hover {
-  transform: scale(1.15);
+.add-panel__btn--loading::after {
+  content: "";
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 16px; height: 16px;
+  margin: -8px 0 0 -8px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: icon-spin 0.8s linear infinite;
 }
 
-.theme-picker__opt--active {
-  border-color: var(--color-text);
-  border-width: 3px;
+/* 预挂图按钮（添加面板里，可选图片附件入口）。
+   克制：淡灰色圆形，与主提交按钮区分；已选图时显示主色角标圆点提示。 */
+.add-panel__attach {
+  margin-top: 16px;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease), opacity 0.15s;
+}
+.add-panel__attach:active { transform: scale(0.92); }
+.add-panel__attach:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+  opacity: 1;
+}
+/* 已选图：主色角标（右上小圆点，提示"有图待提交"） */
+.add-panel__attach--has { color: var(--color-primary); opacity: 1; }
+.add-panel__attach--has::after {
+  content: "";
+  position: absolute;
+  top: 11px; right: 11px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 2px solid var(--color-surface);
 }
 
-.theme-picker__divider {
-  height: 1px;
+/* 遮罩 */
+.add-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(17, 24, 39, 0);
+  visibility: hidden;
+  transition: background 0.25s var(--ease), visibility 0s 0.25s;
+}
+.add-overlay--show {
+  background: rgba(17, 24, 39, 0.4);
+  backdrop-filter: blur(2px);
+  visibility: visible;
+  transition: background 0.25s var(--ease);
+}
+
+/* ===== 完成备注：底部滑出输入面板（一次性模态）=====
+ * 长按已完成待办 → 备注 → 弹出。复用 add-panel 的滑出风格 + overlay 遮罩。
+ * 覆盖语义：预填原备注，可改可清空，必须点保存才写入。
+ */
+.note-input-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(17, 24, 39, 0);
+  visibility: hidden;
+  transition: background 0.28s var(--ease), visibility 0s 0.28s;
+}
+.note-input-overlay--show {
+  background: rgba(17, 24, 39, 0.4);
+  backdrop-filter: blur(2px);
+  visibility: visible;
+  transition: background 0.28s var(--ease);
+}
+
+.note-input-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--color-surface);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  padding: 8px 16px calc(20px + var(--safe-bottom));
+  transform: translateY(100%);
+  transition: transform 0.28s var(--ease);
+}
+.note-input-overlay--show .note-input-panel {
+  transform: translateY(0);
+}
+
+.note-input-panel__handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
   background: var(--color-border);
-  margin: 8px 0;
+  margin: 0 auto 14px;
 }
 
-.theme-picker__toggle {
+.note-input-panel__label {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.note-input-panel__textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 16px; /* ≥16px 防 iOS 聚焦缩放 */
+  font-family: inherit;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.note-input-panel__textarea:focus {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.12);
+}
+
+.note-input-panel__save {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 13px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  transition: transform 0.15s var(--ease);
+}
+.note-input-panel__save:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-input-overlay,
+  .note-input-panel,
+  .note-input-overlay--show .note-input-panel {
+    transition: none;
+  }
+}
+
+/* ============================================================
+   隐藏款盲盒：稀有度背景 + 角标 + 传说光晕
+   设计原则（克制精致）：极淡渐变（alpha 0.04~0.12），不用饱和色块；
+   不用角标，改用四边淡色细边框 + 极淡渐变背景体现稀有度。
+   配色：稀有=淡粉、史诗=浅紫、传说=香槟金，由浅到深递进。
+   ============================================================ */
+
+/* 稀有款（rare）：淡粉渐变 + 淡粉四边细边框 */
+.todo--rare {
+  background: linear-gradient(155deg, var(--rose-50) 0%, var(--rose-100) 100%);
+  border: 1.5px solid rgba(254, 205, 211, 0.7);
+  box-shadow: 0 1px 2px rgba(244, 63, 94, 0.05), 0 2px 10px rgba(244, 63, 94, 0.05);
+}
+
+/* 史诗款（epic）：浅紫渐变 + 浅紫四边细边框 */
+.todo--epic {
+  background: linear-gradient(155deg, var(--violet-50) 0%, var(--violet-100) 100%);
+  border: 1.5px solid rgba(196, 181, 253, 0.7);
+  box-shadow: 0 1px 2px rgba(139, 92, 246, 0.06), 0 2px 10px rgba(139, 92, 246, 0.08);
+}
+
+/* 传说款（legendary）：香槟金渐变 + 金色四边细边框 + 呼吸光晕 */
+.todo--legendary {
+  background: linear-gradient(155deg, var(--gold-50) 0%, var(--gold-100) 100%);
+  border: 1.5px solid rgba(252, 211, 77, 0.7);
+  box-shadow: 0 1px 2px rgba(245, 158, 11, 0.08), 0 2px 14px rgba(245, 158, 11, 0.12);
+  animation: legendary-glow 3.5s var(--ease) infinite;
+}
+@keyframes legendary-glow {
+  0%, 100% { box-shadow: 0 1px 2px rgba(245, 158, 11, 0.08), 0 2px 14px rgba(245, 158, 11, 0.12); }
+  50% { box-shadow: 0 1px 2px rgba(245, 158, 11, 0.12), 0 2px 20px rgba(245, 158, 11, 0.22); }
+}
+
+/* hover 时渐变更明显一点（限定支持 hover 的设备） */
+@media (hover: hover) {
+  .todo--rare:hover,
+  .todo--epic:hover,
+  .todo--legendary:hover {
+    filter: saturate(1.15);
+  }
+}
+
+/* 完成态的隐藏款：保持渐变但文字仍弱化（与普通 todo--done 一致） */
+.todo--rare.todo--done,
+.todo--epic.todo--done,
+.todo--legendary.todo--done {
+  filter: saturate(0.7);
+}
+
+/* ============================================================
+   隐藏款完成瞬间：卡片光环扩散（完成专属，开奖没有的动作）
+   从卡片中心向外扩散 rarity 配色的光环，稀有度越高环越多越绚。
+   ============================================================ */
+.todo { position: relative; }
+.todo__burst-ring {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid var(--burst-color, #fda4af);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 5;
+}
+.todo__burst-ring--go {
+  animation: burst-ring 0.7s var(--ease) forwards;
+}
+@keyframes burst-ring {
+  0%   { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.18); border-width: 0.5px; }
+}
+/* 传说款完成额外：卡片整体金光爆发（box-shadow 闪一下） */
+.todo--burst-legendary {
+  animation: legendary-burst-flash 0.7s var(--ease);
+}
+@keyframes legendary-burst-flash {
+  0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
+  40%  { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0.35), 0 0 40px rgba(251, 191, 36, 0.5); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .todo__burst-ring--go { animation: none; opacity: 0; }
+  .todo--burst-legendary { animation: none; }
+}
+
+/* ============================================================
+   图鉴入口（顶栏礼物盒图标 + 柔和提醒点）
+   ============================================================ */
+.sticker-entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), background 0.2s var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.sticker-entry:active {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--rose-400);
+}
+.sticker-entry__svg {
+  transition: transform 0.2s var(--ease);
+}
+.sticker-entry:active .sticker-entry__svg {
+  transform: scale(0.88);
+}
+
+/* 柔和提醒点：有未看的新贴纸时显示。
+   不用刺眼纯红，改用 rose-400 + 柔光，不脉冲（克制） */
+.sticker-badge {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rose-400);
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 4px rgba(251, 113, 133, 0.5);
+}
+.sticker-badge.hidden {
+  display: none;
+}
+
+/* ============================================================
+   图鉴弹层
+   ============================================================ */
+.sticker-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 1;
+  transition: opacity 0.25s var(--ease);
+}
+.sticker-modal.hidden {
+  display: flex; /* 保持 flex 布局，用 opacity + visibility 实现淡出 */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.sticker-modal__panel {
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-radius: 24px 24px 0 0;
+  padding: 20px 18px calc(20px + var(--safe-bottom));
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.12);
+  transform: translateY(0);
+  transition: transform 0.3s var(--ease);
+}
+.sticker-modal.hidden .sticker-modal__panel {
+  transform: translateY(100%);
+}
+.sticker-modal__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 13px;
-  color: var(--color-text);
-  cursor: pointer;
-  user-select: none;
+  margin-bottom: 4px;
 }
-
-.theme-picker__switch {
-  position: relative;
-  width: 36px;
-  height: 20px;
-  background: var(--color-border);
-  border-radius: 10px;
-  transition: background 0.2s;
-}
-
-.theme-picker__switch::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  background: #fff;
-  border-radius: 50%;
-  transition: transform 0.2s var(--ease);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-.theme-picker__switch--on {
-  background: var(--color-primary);
-}
-
-.theme-picker__switch--on::after {
-  transform: translateX(16px);
-}
-
-/* ===== 完成计数器 ===== */
-.topbar__counter {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 12px;
-  background: rgba(var(--color-primary-rgb), 0.12);
-  color: var(--color-primary);
-  font-size: 13px;
+.sticker-modal__title {
+  margin: 0;
+  font-size: 18px;
   font-weight: 600;
+  color: var(--color-text);
+}
+.sticker-modal__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 50%;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.sticker-modal__close:active {
+  background: rgba(0, 0, 0, 0.05);
+}
+.sticker-modal__hint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+/* 贴纸网格 */
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+/* 单个贴纸格子 */
+.sticker-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 6px;
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  transition: transform 0.2s var(--ease);
+}
+.sticker-cell__icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sticker-cell__icon svg {
+  width: 32px;
+  height: 32px;
+}
+.sticker-cell__name {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* 未解锁：灰显 + 问号锁 */
+.sticker-cell:not(.sticker-cell--unlocked) .sticker-cell__icon {
+  color: var(--color-border);
+  opacity: 0.7;
+}
+.sticker-cell:not(.sticker-cell--unlocked) .sticker-cell__name {
+  color: var(--color-border);
+  letter-spacing: 1px;
+}
+
+/* 已解锁：按稀有度染色 */
+.sticker-cell--unlocked .sticker-cell__name {
+  color: var(--color-text);
+  font-weight: 500;
+}
+.sticker-cell--rare {
+  background: linear-gradient(160deg, var(--rose-50), var(--rose-100));
+  border-color: rgba(254, 205, 211, 0.6);
+}
+.sticker-cell--rare .sticker-cell__icon { color: var(--rose-300); }
+.sticker-cell--epic {
+  background: linear-gradient(160deg, var(--violet-50), var(--violet-100));
+  border-color: rgba(196, 181, 253, 0.6);
+}
+.sticker-cell--epic .sticker-cell__icon { color: var(--violet-400); }
+.sticker-cell--legendary {
+  background: linear-gradient(160deg, var(--gold-50), var(--gold-100));
+  border-color: rgba(252, 211, 77, 0.6);
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.12);
+}
+.sticker-cell--legendary .sticker-cell__icon { color: var(--gold-500); }
+
+/* 进度条 */
+.sticker-modal__progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sticker-modal__progress-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-border);
+  overflow: hidden;
+}
+.sticker-modal__progress-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--rose-300), var(--violet-400), var(--gold-500));
+  transition: width 0.5s var(--ease);
+}
+.sticker-modal__progress-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-muted);
   white-space: nowrap;
+}
+
+/* 盲盒/图鉴相关动画的 reduced-motion 降级 */
+@media (prefers-reduced-motion: reduce) {
+  .todo--legendary {
+    animation: none !important;
+  }
 }
 

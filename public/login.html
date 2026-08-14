@@ -6,11 +6,40 @@
   <meta name="theme-color" content="#10b981" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/favicon.svg" />
-  <title>登录 · 爱的清单</title>
+  <title>登录 · 有爱</title>
   <link rel="stylesheet" href="/css/style.css" />
   <link rel="stylesheet" href="/css/login.css" />
+  <style>
+    @keyframes js-splash-pop{0%{opacity:0;transform:scale(0.4) translateY(20px)}60%{opacity:1;transform:scale(1.08) translateY(0)}100%{opacity:1;transform:scale(1)}}
+    @keyframes js-splash-beat{0%,100%{transform:scale(1)}15%{transform:scale(1.18)}30%{transform:scale(1)}45%{transform:scale(1.12)}60%{transform:scale(1)}}
+    @media (prefers-reduced-motion:reduce){#js-splash>div{animation:none!important}}
+  </style>
 </head>
 <body>
+  <!-- JS 爱心开屏动画（首帧即铺满，1.2s 后淡出） -->
+  <div id="js-splash" style="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#fff1f2 0%,#ffe4e6 60%,#fecdd3 100%);transition:opacity 0.5s ease;pointer-events:none">
+    <div style="width:120px;height:120px;animation:js-splash-pop 0.6s cubic-bezier(0.16,1,0.3,1) both, js-splash-beat 1.2s ease-in-out 0.6s">
+      <svg viewBox="0 0 512 512" width="120" height="120" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="jsh1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#fecdd3"/></linearGradient>
+          <linearGradient id="jsh2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ffe4e6"/><stop offset="100%" stop-color="#fda4af"/></linearGradient>
+        </defs>
+        <path d="M256 402s-110-66-110-140.6c0-36.4 28.8-63.4 63-63.4 22.6 0 41.4 11.6 47 28.2 5.6-16.6 24.4-28.2 47-28.2 34.2 0 63 27 63 63.4C366 336 256 402 256 402z" fill="url(#jsh1)"/>
+        <g transform="translate(262 248) scale(0.5)">
+          <path d="M256 402s-110-66-110-140.6c0-36.4 28.8-63.4 63-63.4 22.6 0 41.4 11.6 47 28.2 5.6-16.6 24.4-28.2 47-28.2 34.2 0 63 27 63 63.4C366 336 256 402 256 402z" fill="url(#jsh2)"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+  <script>
+    setTimeout(function () {
+      var el = document.getElementById('js-splash');
+      if (!el) return;
+      el.style.opacity = '0';
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+    }, 1200);
+  </script>
+
   <main class="login">
     <div class="login__card">
       <div class="login__heart" aria-hidden="true">

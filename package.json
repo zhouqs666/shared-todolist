@@ -8,7 +8,10 @@
     "dev": "node --watch scripts/serve.mjs",
     "init-users": "node --env-file-if-exists=.env scripts/init-users.mjs",
     "rename-users": "node --env-file-if-exists=.env scripts/rename-users.mjs",
-    "bundle:supabase": "esbuild --bundle --format=esm --platform=browser --target=es2020 --minify --outfile=public/js/vendor/supabase-js.esm.js @supabase/supabase-js"
+    "bundle:supabase": "esbuild --bundle --format=esm --platform=browser --target=es2020 --minify --outfile=public/js/vendor/supabase-js.esm.js @supabase/supabase-js",
+    "cap:sync": "cap sync",
+    "cap:open": "cap open android",
+    "cap:add:android": "cap add android"
   },
   "keywords": [
     "todolist",
@@ -20,11 +23,20 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/local-notifications": "^8.2.1",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capgo/capacitor-updater": "^8.51.3",
     "@supabase/supabase-js": "^2.110.7"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/cli": "^8.4.2",
+    "@playwright/test": "^1.62.1",
     "esbuild": "^0.21.5",
-    "sharp": "^0.33.0"
-  },
-  "optionalDependencies": {}
+    "playwright": "^1.62.1",
+    "sharp": "^0.33.0",
+    "typescript": "^7.0.2"
+  }
 }
