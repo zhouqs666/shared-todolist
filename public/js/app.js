@@ -1200,12 +1200,17 @@ function render() {
 
   // 按排序顺序更新/创建，并用 DocumentFragment 重排（移动而非重建，不触发动画）
   const frag = document.createDocumentFragment();
+  let newCount = 0; // 本轮新建的卡片数（用于首屏阶梯入场）
   todos.forEach((todo) => {
     let el = existing.get(todo.id);
     if (el) {
       updateItem(el, todo); // 原地更新（无动画）
     } else {
       el = renderItem(todo); // 新增项：带入场动画
+      // 首屏批量渲染时阶梯入场：前 8 张每张延迟 30ms（倾泻而下的节奏），
+      // 之后的立即出现（视口外没必要等）；单张新增（用户添加/远端来一条）delay=0 即时入场
+      if (newCount < 8) el.style.animationDelay = `${newCount * 30}ms`;
+      newCount++;
       renderedIds.add(todo.id);
     }
     frag.appendChild(el);

@@ -33,7 +33,13 @@ input, textarea, [contenteditable] {
   --color-bg: #fdf5f6;
   --color-surface: #ffffff;
   --color-danger: #ef4444;
-  --radius: 16px;
+  /* 圆角体系：4 档语义化（sm 胶囊小件 / md 输入与按钮 / lg 卡片 / xl 弹层）。
+     --radius 保留为 lg 的别名（=卡片档），兼容存量引用。 */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius: 18px;
   /* 阴影体系：品牌色染色（低饱和玫瑰），比纯黑灰阴影更"贵"。
      旧变量名保留兼容，语义即三级 elevation。 */
   --shadow-xs: 0 1px 2px rgba(147, 51, 64, 0.04);
@@ -240,10 +246,11 @@ input {
   display: none; /* 昵称已移除，保留 class 以防残留引用 */
 }
 
-/* 顶栏头像（当前登录用户，昵称移除后是唯一标识） */
+/* 顶栏头像（当前登录用户，昵称移除后是唯一标识）。
+   34px：承担长按退出的触控功能，兼顾 44px 命中区的外扩靠 padding */
 .topbar__avatar {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
@@ -261,8 +268,8 @@ input {
 /* 加载占位：与头像同尺寸的圆形灰块，避免加载前后跳动 */
 .topbar__me--placeholder::before {
   content: "";
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: var(--color-border);
   flex-shrink: 0;
@@ -281,12 +288,12 @@ input {
     gap: 6px;
   }
   .topbar__avatar {
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
   }
   .topbar__me--placeholder::before {
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
   }
 }
 
@@ -296,7 +303,7 @@ input {
   background: var(--color-surface);
   color: var(--color-text);
   padding: 6px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   transition: background 0.15s, border-color 0.15s, transform 0.1s, opacity 0.1s;
 }
 
@@ -502,7 +509,8 @@ input {
   /* 无边框，品牌染色分层柔影：漂浮感（阴影带一丝玫瑰，比黑灰更暖更"贵"） */
   box-shadow: var(--shadow);
   transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.3s var(--ease);
-  animation: todo-enter 0.25s var(--ease);
+  /* backwards：配合 JS 的入场延迟，延迟期间的卡片停在起始帧（不闪现） */
+  animation: todo-enter 0.25s var(--ease) backwards;
   position: relative; /* 给 .todo__nudge（绝对定位）做定位上下文，否则会飘到祖先容器 */
 }
 
@@ -905,7 +913,7 @@ input {
   );
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .skeleton__checkbox {
@@ -1118,7 +1126,7 @@ input {
   width: 100%;
   padding: 14px;
   border: none;
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text-muted);
   font-size: 15px;
@@ -1676,7 +1684,7 @@ input {
   line-height: 1.8;
   color: var(--color-text);
   background: rgba(255,255,255,0.7);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   padding: 24px 20px;
   width: 100%;
   max-width: 340px;
@@ -1870,7 +1878,7 @@ input {
   opacity: 0.55;
   font-size: 13px;
   border-top: 1px solid rgba(244, 63, 94, 0.12);
-  border-radius: 0 0 20px 20px;
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   transition: color 0.15s var(--ease), background 0.15s var(--ease), opacity 0.15s;
   cursor: pointer;
 }
@@ -1892,7 +1900,7 @@ input {
   margin-left: auto; /* 推到 meta 行最右 */
   padding: 0;
   border: none;
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--color-accent-soft, rgba(244, 114, 182, 0.14));
   color: var(--color-accent, #f472b6);
   cursor: pointer;
@@ -1925,7 +1933,7 @@ input {
   max-width: 92vw;
   max-height: 80vh;
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: 8px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
 }
 .img-lightbox__close {
@@ -2046,8 +2054,17 @@ input {
   justify-content: center;
   cursor: pointer;
   z-index: 40;
+  /* 首次入场：等首屏内容立稳后弹簧弹入（延迟避开骨架屏阶段的视觉竞争） */
+  animation: fab-enter 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) 0.35s backwards;
   transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease),
     filter 0.18s var(--ease);
+}
+@keyframes fab-enter {
+  from { opacity: 0; transform: scale(0.3) translateY(24px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fab { animation: none; }
 }
 .fab:hover {
   filter: brightness(1.06);
@@ -2112,7 +2129,7 @@ input {
   margin-top: 16px;
   padding: 12px 14px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   background: var(--color-bg);
   color: var(--color-text);
   font-size: 16px; /* ≥16px 防 iOS 聚焦缩放 */
@@ -2274,7 +2291,7 @@ input {
   box-sizing: border-box;
   padding: 12px 14px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   background: var(--color-bg);
   color: var(--color-text);
   font-size: 16px; /* ≥16px 防 iOS 聚焦缩放 */
@@ -2296,7 +2313,7 @@ input {
   margin-top: 12px;
   padding: 13px;
   border: none;
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   background: linear-gradient(160deg, var(--color-primary), var(--color-primary-dark));
   color: #fff;
   font-size: 15px;
@@ -2532,7 +2549,7 @@ input {
   align-items: center;
   gap: 6px;
   padding: 12px 6px;
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
@@ -2667,13 +2684,13 @@ input {
   /* 顶栏天数：暗底下换更亮的 rose-400，保证对比 */
   .topbar__anni-days { color: var(--rose-400); }
 
-  /* 骨架屏：暗色 shimmer */
+  /* 骨架屏：暗色 shimmer（掺一丝玫瑰调，与浅色版对称） */
   .skeleton__box {
     background: linear-gradient(
       90deg,
-      rgba(72, 64, 68, 0.65) 0%,
-      rgba(56, 48, 52, 0.9) 50%,
-      rgba(72, 64, 68, 0.65) 100%
+      rgba(84, 62, 68, 0.65) 0%,
+      rgba(62, 46, 51, 0.9) 50%,
+      rgba(84, 62, 68, 0.65) 100%
     );
     background-size: 200% 100%;
   }
@@ -2716,5 +2733,26 @@ input {
     color: #f4eff0;
     background: rgba(255, 255, 255, 0.06);
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  /* ===== 纪念日面板：暗色夜幕贺卡 =====
+     浅色下的亮粉卡在深夜会突兀（顶栏爱心深夜都知道换深玫红），
+     暗色改为低亮度玫瑰夜卡，文字换亮一档保证对比。 */
+  .anni-panel__card {
+    background: linear-gradient(160deg, #3b2c31 0%, #34272c 55%, #3f2c33 100%);
+    border-color: rgba(244, 63, 94, 0.22);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  }
+  .anni-panel__card::before { opacity: 0.35; }
+  .anni-panel__pre,
+  .anni-panel__suf { color: var(--rose-300); }
+  .anni-panel__days { color: var(--rose-400); }
+  .anni-panel__label { color: rgba(244, 224, 228, 0.85); }
+  .anni-panel__count { color: var(--rose-300); }
+  .anni-panel__divider { background: rgba(253, 164, 175, 0.16); }
+  .anni-panel__item { border-bottom-color: rgba(253, 164, 175, 0.10); }
+  .anni-panel__writenote {
+    color: var(--rose-300);
+    border-top-color: rgba(253, 164, 175, 0.14);
   }
 }

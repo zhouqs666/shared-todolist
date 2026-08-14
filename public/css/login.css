@@ -154,7 +154,7 @@
   background: #fef2f2;
   border: 1px solid #fecaca;
   color: var(--color-danger);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   text-align: center;
 }
