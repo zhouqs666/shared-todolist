@@ -2583,14 +2583,14 @@ input {
   margin-bottom: 18px;
 }
 
-/* 单个贴纸格子 */
+/* 单个贴纸格子（尺寸与旧版一致：约 81px 见方，日期不进格子） */
 .sticker-cell {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 7px;
-  padding: 13px 4px 11px;
+  gap: 5px;
+  padding: 10px 4px 9px;
   border-radius: var(--radius-md);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
@@ -2609,14 +2609,14 @@ input {
 
 /* 已解锁：白色裁切底板模拟实体贴纸（Die-cut） */
 .sticker-cell__plate {
-  width: 56px;
-  height: 56px;
-  border-radius: 17px;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
   background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 1px 2px rgba(147, 51, 64, 0.08), 0 3px 8px rgba(147, 51, 64, 0.07);
+  box-shadow: 0 1px 2px rgba(147, 51, 64, 0.08), 0 2px 6px rgba(147, 51, 64, 0.07);
 }
 .sticker-cell__icon {
   display: flex;
@@ -2624,13 +2624,8 @@ input {
   justify-content: center;
 }
 .sticker-cell__icon svg {
-  width: 44px;
-  height: 44px;
-}
-/* 已解锁贴纸比剪影略大，强化"拿到手"的实体感 */
-.sticker-cell--unlocked .sticker-cell__icon svg {
-  width: 46px;
-  height: 46px;
+  width: 36px;
+  height: 36px;
 }
 
 /* "新"角标：这次打开才看到的贴纸 */
@@ -2649,16 +2644,10 @@ input {
 }
 
 .sticker-cell__name {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-text-muted);
   text-align: center;
   line-height: 1.2;
-}
-.sticker-cell__date {
-  font-size: 10px;
-  line-height: 1;
-  color: var(--color-text-muted);
-  opacity: 0.85;
 }
 
 /* 未解锁：本尊图案的剪影（雾显悬念）——不用通用锁，

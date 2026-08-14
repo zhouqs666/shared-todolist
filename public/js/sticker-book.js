@@ -31,9 +31,18 @@ const RARITY_ORDER = ['rare', 'epic', 'legendary'];
 
 // localStorage key：存已看过的 stickerKey 集合（JSON 数组）
 const SEEN_KEY = 'seenStickerKeys';
+// localStorage key：集齐庆祝是否已弹过（持久化，避免每次冷启动重弹；
+// 图鉴重新变得不完整时自动清除，下次再集齐会重新庆祝）
+const CELEBRATED_KEY = 'stickerBookCelebrated';
 
-// 是否已庆祝过集齐全集（内存态，本次会话一次）
-let collectedCelebrated = false;
+// 是否已庆祝过集齐全集（从持久化恢复；清空重集后会重新庆祝）
+let collectedCelebrated = (() => {
+  try {
+    return localStorage.getItem(CELEBRATED_KEY) === '1';
+  } catch {
+    return false;
+  }
+})();
 
 // 打开图鉴那一刻的"已看"快照：用于判定哪些贴纸对用户是"新"的
 let seenSnapshot = null;
@@ -207,16 +216,6 @@ export function renderStickerBook(opts = {}) {
     name.textContent = s.unlocked ? s.name : '???';
     cell.appendChild(name);
 
-    if (s.unlocked) {
-      const date = formatDate(s.unlockedAt);
-      if (date) {
-        const dateEl = document.createElement('span');
-        dateEl.className = 'sticker-cell__date';
-        dateEl.textContent = date;
-        cell.appendChild(dateEl);
-      }
-    }
-
     frag.appendChild(cell);
   });
   grid.innerHTML = '';
@@ -236,10 +235,15 @@ export function renderStickerBook(opts = {}) {
   if (panelEl) panelEl.classList.toggle('sticker-modal__panel--complete', complete);
   if (chipEl) chipEl.classList.toggle('hidden', !complete);
 
-  // 集齐庆祝（每次会话一次）
+  // 集齐庆祝：持久化标记，只在真正"集齐那一刻"庆祝一次；
+  // 图鉴重新变得不完整（如清理测试数据）时清除标记，下次集齐重新庆祝
   if (complete && !collectedCelebrated) {
     collectedCelebrated = true;
+    try { localStorage.setItem(CELEBRATED_KEY, '1'); } catch { /* ignore */ }
     celebrateComplete();
+  } else if (!complete && collectedCelebrated) {
+    collectedCelebrated = false;
+    try { localStorage.removeItem(CELEBRATED_KEY); } catch { /* ignore */ }
   }
 }
 
@@ -261,14 +265,17 @@ function bindGridInteraction() {
   });
 }
 
-/** 弹跳动画 + 展示贴纸专属短句 */
+/** 弹跳动画 + 展示贴纸专属短句（带解锁日期，日期不进格子以免撑高） */
 function revealFlavor(cell) {
   cell.classList.remove('sticker-cell--pop');
   // 强制 reflow，保证连续点击也能重放动画
   void cell.offsetWidth;
   cell.classList.add('sticker-cell--pop');
   const flavor = getStickerFlavor(cell.dataset.key);
-  if (flavor) showToast(flavor);
+  if (!flavor) return;
+  const sticker = getStickers().find((s) => s.stickerKey === cell.dataset.key);
+  const date = sticker ? formatDate(sticker.unlockedAt) : '';
+  showToast(date ? `${flavor}（${date}解锁）` : flavor);
 }
 
 /**
