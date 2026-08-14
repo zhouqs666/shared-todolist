@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
-  <meta name="theme-color" content="#fff3f4" />
+  <meta name="theme-color" content="#fff3f4" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#211a1d" media="(prefers-color-scheme: dark)" />
   <meta name="description" content="双人共享待办清单" />
   <meta name="app-version" content="2.4.6" /><!-- APK 壳内置值；热更新包会被发布脚本覆盖 -->
   <link rel="manifest" href="/manifest.webmanifest" />
@@ -38,6 +39,8 @@
     @keyframes js-splash-pop{0%{opacity:0;transform:scale(0.4) translateY(20px)}60%{opacity:1;transform:scale(1.08) translateY(0)}100%{opacity:1;transform:scale(1)}}
     @keyframes js-splash-beat{0%,100%{transform:scale(1)}15%{transform:scale(1.18)}30%{transform:scale(1)}45%{transform:scale(1.12)}60%{transform:scale(1)}}
     @media (prefers-reduced-motion:reduce){#js-splash>div{animation:none!important}}
+    /* 暗色系统下开屏也是夜玫瑰底（覆盖内联浅色渐变，避免深夜打开闪白） */
+    @media (prefers-color-scheme:dark){#js-splash{background:linear-gradient(160deg,#241d20 0%,#1c1719 60%,#2a1e22 100%)!important}}
   </style>
 </head>
 <body>

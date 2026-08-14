@@ -5,15 +5,21 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: linear-gradient(160deg, #fff1f2 0%, #fdf8f8 60%);
+  /* 与主 App 一致的氛围：极淡玫瑰渐变 + 顶部柔光斑 */
+  background:
+    radial-gradient(900px 420px at 50% -8%, rgba(253, 164, 175, 0.22), transparent 62%),
+    linear-gradient(180deg, #fff3f4 0%, #fdf8f8 48%, #fdf3f5 100%);
 }
 
 .login__card {
   width: 100%;
   max-width: 360px;
-  background: var(--color-surface);
-  border-radius: 20px;
-  box-shadow: 0 8px 30px rgba(225, 29, 72, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  backdrop-filter: blur(18px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 24px;
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.05), 0 16px 44px rgba(225, 29, 72, 0.10);
   padding: 36px 28px;
   text-align: center;
   animation: card-enter 0.4s var(--ease);
@@ -70,16 +76,18 @@
 }
 
 .login__title {
-  margin: 0 0 4px;
-  font-size: 24px;
-  font-weight: 700;
+  margin: 0 0 6px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 2px;
   color: var(--color-text);
 }
 
 .login__subtitle {
-  margin: 0 0 24px;
+  margin: 0 0 26px;
   color: var(--color-text-muted);
   font-size: 14px;
+  letter-spacing: 1px;
 }
 
 .login__form {
@@ -104,7 +112,7 @@
 .field__input {
   padding: 12px 14px;
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: 14px;
   background: var(--color-surface);
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -118,11 +126,20 @@
 /* ===== 提交按钮 ===== */
 .login__submit {
   width: 100%;
-  padding: 12px;
+  padding: 13px;
   font-size: 16px;
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: 14px;
   margin-top: 4px;
+  border: none;
+  background: linear-gradient(160deg, var(--color-primary), var(--color-primary-dark));
+  box-shadow: 0 6px 18px rgba(244, 63, 94, 0.32);
+  transition: filter 0.15s var(--ease), transform 0.1s var(--ease), opacity 0.15s;
+}
+.login__submit:hover,
+.login__submit:active {
+  background: linear-gradient(160deg, var(--color-primary), var(--color-primary-dark));
+  filter: brightness(1.06);
 }
 
 .login__submit:disabled {
@@ -137,7 +154,26 @@
   background: #fef2f2;
   border: 1px solid #fecaca;
   color: var(--color-danger);
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 13px;
   text-align: center;
+}
+
+/* ===== 暗色模式（跟随系统）：夜玫瑰登录页 ===== */
+@media (prefers-color-scheme: dark) {
+  .login {
+    background:
+      radial-gradient(900px 420px at 50% -8%, rgba(244, 63, 94, 0.10), transparent 62%),
+      linear-gradient(180deg, #211a1d 0%, #1a1618 48%, #201a1d 100%);
+  }
+  .login__card {
+    background: rgba(45, 39, 42, 0.86);
+    border-color: rgba(255, 255, 255, 0.07);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 16px 44px rgba(0, 0, 0, 0.4);
+  }
+  .login__error {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fda4af;
+  }
 }

@@ -811,11 +811,14 @@ input {
   left: 50%;
   bottom: 30px;
   transform: translateX(-50%) translateY(20px);
-  background: rgba(31, 41, 55, 0.92);
+  background: rgba(41, 37, 36, 0.88);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   color: #fff;
   padding: 10px 18px;
-  border-radius: 8px;
+  border-radius: 14px;
   font-size: 14px;
+  letter-spacing: 0.2px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
@@ -824,6 +827,7 @@ input {
   display: flex;
   align-items: center;
   gap: 8px;
+  box-shadow: 0 8px 24px rgba(24, 20, 22, 0.22);
 }
 
 .toast--show {
@@ -1018,8 +1022,9 @@ input {
   transition: background 0.25s var(--ease);
 }
 .action-sheet__overlay--show {
-  background: rgba(17, 24, 39, 0.45);
-  backdrop-filter: blur(3px);
+  background: rgba(24, 20, 22, 0.42);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 .action-sheet {
   width: 100%;
@@ -1032,11 +1037,11 @@ input {
   transform: translateY(0);
 }
 
-/* 待办文案预览（顶部，圆角卡片头） */
+/* 待办文案预览（顶部，圆角卡片头）：与按钮组共同构成一张圆角卡片 */
 .action-sheet__preview {
   background: var(--color-surface);
   padding: 16px 18px;
-  border-radius: 20px 20px 0 0;
+  border-radius: 24px 24px 0 0;
   font-size: 15px;
   color: var(--color-text);
   font-weight: 500;
@@ -1045,6 +1050,7 @@ input {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  box-shadow: 0 -4px 24px rgba(225, 29, 72, 0.08);
 }
 
 /* 图标按钮组（横向排列） */
@@ -1055,7 +1061,7 @@ input {
   gap: 6px;
   background: var(--color-surface);
   padding: 16px 12px;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid rgba(253, 164, 175, 0.18);
 }
 /* 单个图标按钮（统一 48×48 圆形） */
 .action-sheet__icon-btn {
@@ -1077,7 +1083,7 @@ input {
   height: 24px;
 }
 .action-sheet__icon-btn:hover {
-  background: var(--color-bg);
+  background: rgba(255, 241, 242, 0.9);
   color: var(--color-text);
 }
 .action-sheet__icon-btn:active {
@@ -1108,7 +1114,7 @@ input {
 
 /* 关闭按钮（底部独立块） */
 .action-sheet__close {
-  margin-top: 8px;
+  margin-top: 10px;
   width: 100%;
   padding: 14px;
   border: none;
@@ -1118,9 +1124,10 @@ input {
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s var(--ease);
+  box-shadow: 0 4px 16px rgba(225, 29, 72, 0.06);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
-.action-sheet__close:hover { background: var(--color-bg); }
+.action-sheet__close:hover { background: var(--color-bg); color: var(--color-text); }
 
 /* ===== 纪念日详情面板（点击顶栏桃心展开） ===== */
 .anni-panel {
@@ -1148,6 +1155,7 @@ input {
 
 /* 卡片：从顶部下拉 */
 .anni-panel__card {
+  position: relative;
   margin: calc(72px + var(--safe-top)) 20px 0;
   padding: 28px 24px;
   border-radius: 24px;
@@ -1161,7 +1169,21 @@ input {
   transform: translateY(-30px) scale(0.96);
   opacity: 0;
   transition: transform 0.35s var(--ease), opacity 0.25s var(--ease);
+  overflow: hidden;
 }
+/* 顶部柔光：一抹来自"上方"的光落在卡片上，立体感 */
+.anni-panel__card::before {
+  content: "";
+  position: absolute;
+  top: -40%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120%;
+  height: 70%;
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.5) 0%, transparent 65%);
+  pointer-events: none;
+}
+.anni-panel__card > * { position: relative; }
 
 .anni-panel--show .anni-panel__card {
   transform: translateY(0) scale(1);
@@ -1265,8 +1287,15 @@ input {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 8px;
+  padding: 10px 10px;
   border-bottom: 1px solid rgba(244, 63, 94, 0.08);
+  border-radius: 10px;
+  transition: background 0.15s var(--ease);
+}
+@media (hover: hover) {
+  .anni-panel__item:hover {
+    background: rgba(255, 255, 255, 0.35);
+  }
 }
 
 .anni-panel__item:last-child {
@@ -1489,14 +1518,17 @@ input {
   min-height: 0;
   overflow: hidden;
 }
-/* 信纸容器：横线纸纹理（行距 = textarea line-height 30.6px，横线对齐文字基线）*/
+/* 信纸容器：横线纸纹理（行距 = textarea line-height 30.6px，横线对齐文字基线）。
+   白纸半透明底 + 柔影：一张真实的纸浮在信笺氛围上 */
 .note-write__paper {
   flex: 1;
   position: relative;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 4px 20px rgba(244, 63, 94, 0.07);
   /* 横线间距 30.6px（严丝合缝 textarea line-height），每条线 1px */
   background-image: repeating-linear-gradient(
     to bottom,
@@ -1578,14 +1610,14 @@ input {
   padding: 14px;
   border: none;
   border-radius: 14px;
-  background: var(--rose-500);
+  background: linear-gradient(160deg, var(--rose-400), var(--rose-600));
   color: #fff;
   font-size: 16px;
   font-weight: 500;
-  box-shadow: 0 4px 16px rgba(244, 63, 94, 0.3);
-  transition: background 0.15s var(--ease), transform 0.1s var(--ease);
+  box-shadow: 0 4px 16px rgba(244, 63, 94, 0.32);
+  transition: filter 0.15s var(--ease), transform 0.1s var(--ease);
 }
-.note-write__send:hover { background: var(--rose-600); }
+.note-write__send:hover { filter: brightness(1.06); }
 .note-write__send:active { transform: scale(0.98); }
 .note-write__send:disabled { opacity: 0.5; }
 /* 按钮化作光点飞出：点下瞬间按钮缩成一点淡出（光点从按钮位置飞向桃心） */
@@ -1662,14 +1694,14 @@ input {
   padding: 12px 36px;
   border: none;
   border-radius: 14px;
-  background: var(--rose-500);
+  background: linear-gradient(160deg, var(--rose-400), var(--rose-600));
   color: #fff;
   font-size: 15px;
   font-weight: 500;
-  box-shadow: 0 4px 16px rgba(244,63,94,0.3);
-  transition: background 0.15s var(--ease), transform 0.1s var(--ease);
+  box-shadow: 0 4px 16px rgba(244,63,94,0.32);
+  transition: filter 0.15s var(--ease), transform 0.1s var(--ease);
 }
-.note-read__dismiss:hover { background: var(--rose-600); }
+.note-read__dismiss:hover { filter: brightness(1.06); }
 .note-read__dismiss:active { transform: scale(0.98); }
 
 /* ===== 长按珍藏：克制版（仅留言文字慢慢通透发亮，余皆不动）===== */
@@ -2049,7 +2081,7 @@ input {
   bottom: 0;
   z-index: 60;
   background: var(--color-surface);
-  border-radius: 20px 20px 0 0;
+  border-radius: 24px 24px 0 0;
   box-shadow: 0 -4px 24px rgba(225, 29, 72, 0.10);
   padding: 8px 16px calc(16px + var(--safe-bottom));
   display: flex;
@@ -2064,7 +2096,7 @@ input {
   visibility: visible;
   transition: transform 0.28s var(--ease);
 }
-/* 顶部小把手（暗示可下拉关闭） */
+/* 顶部小把手（暗示可下拉关闭）：rose 调，融入面板气质 */
 .add-panel__handle {
   position: absolute;
   top: 8px;
@@ -2073,7 +2105,7 @@ input {
   width: 36px;
   height: 4px;
   border-radius: 2px;
-  background: var(--color-border);
+  background: rgba(253, 164, 175, 0.55);
 }
 .add-panel__input {
   flex: 1;
@@ -2103,20 +2135,23 @@ input {
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: linear-gradient(160deg, var(--color-primary), var(--color-primary-dark));
   color: #fff;
+  box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.32);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s var(--ease), opacity 0.15s, transform 0.1s var(--ease);
+  transition: box-shadow 0.15s var(--ease), filter 0.15s var(--ease), opacity 0.15s, transform 0.1s var(--ease);
 }
 .add-panel__btn:active { transform: scale(0.92); }
-.add-panel__btn:hover { background: var(--color-primary-dark); }
-.add-panel__btn:disabled { opacity: 0.5; }
+.add-panel__btn:hover { filter: brightness(1.06); box-shadow: 0 6px 18px rgba(var(--color-primary-rgb), 0.4); }
+.add-panel__btn:disabled { opacity: 0.5; box-shadow: none; }
 .add-panel__btn--loading {
+  filter: none;
   background: var(--color-primary-dark);
   color: transparent;
   position: relative;
+  box-shadow: none;
 }
 .add-panel__btn--loading::after {
   content: "";
@@ -2172,13 +2207,14 @@ input {
   position: fixed;
   inset: 0;
   z-index: 55;
-  background: rgba(17, 24, 39, 0);
+  background: rgba(24, 20, 22, 0);
   visibility: hidden;
   transition: background 0.25s var(--ease), visibility 0s 0.25s;
 }
 .add-overlay--show {
-  background: rgba(17, 24, 39, 0.4);
-  backdrop-filter: blur(2px);
+  background: rgba(24, 20, 22, 0.38);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   visibility: visible;
   transition: background 0.25s var(--ease);
 }
@@ -2208,13 +2244,13 @@ input {
   right: 0;
   bottom: 0;
   background: var(--color-surface);
-  border-radius: 20px 20px 0 0;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  border-radius: 24px 24px 0 0;
+  box-shadow: 0 -4px 24px rgba(225, 29, 72, 0.10);
   padding: 8px 16px calc(20px + var(--safe-bottom));
   transform: translateY(100%);
   transition: transform 0.28s var(--ease);
 }
-.note-input-overlay--show .note-input-panel {
+.action-sheet__overlay--show .note-input-panel {
   transform: translateY(0);
 }
 
@@ -2222,7 +2258,7 @@ input {
   width: 36px;
   height: 4px;
   border-radius: 2px;
-  background: var(--color-border);
+  background: rgba(253, 164, 175, 0.55);
   margin: 0 auto 14px;
 }
 
@@ -2261,12 +2297,14 @@ input {
   padding: 13px;
   border: none;
   border-radius: var(--radius);
-  background: var(--color-primary);
+  background: linear-gradient(160deg, var(--color-primary), var(--color-primary-dark));
   color: #fff;
   font-size: 15px;
   font-weight: 600;
-  transition: transform 0.15s var(--ease);
+  box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.3);
+  transition: transform 0.15s var(--ease), filter 0.15s var(--ease);
 }
+.note-input-panel__save:hover { filter: brightness(1.06); }
 .note-input-panel__save:active {
   transform: scale(0.97);
 }
@@ -2438,7 +2476,7 @@ input {
   background: var(--color-surface);
   border-radius: 24px 24px 0 0;
   padding: 20px 18px calc(20px + var(--safe-bottom));
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 -8px 32px rgba(225, 29, 72, 0.10);
   transform: translateY(0);
   transition: transform 0.3s var(--ease);
 }
@@ -2497,7 +2535,13 @@ input {
   border-radius: var(--radius);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  transition: transform 0.2s var(--ease);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+@media (hover: hover) {
+  .sticker-cell--unlocked:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(225, 29, 72, 0.10);
+  }
 }
 .sticker-cell__icon {
   width: 36px;
@@ -2584,3 +2628,93 @@ input {
   }
 }
 
+
+/* ============================================================
+   暗色模式（跟随系统 prefers-color-scheme，玫瑰夜色调校）
+   原则：变量层整体切换（绝大多数组件自动适配），
+   少数硬编码浅色（顶栏毛玻璃/骨架屏/信纸/离线条）单独覆盖。
+   品牌渐变按钮（FAB/主按钮）保持玫瑰原色，暗色下依旧醒目。
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  [data-theme="mint"],
+  :root {
+    --color-text: #f4eff0;        /* 暖白，不发冷 */
+    --color-text-muted: #a89ea3;  /* 暖灰 */
+    --color-border: #484044;
+    --color-bg: #262023;          /* hover 底/输入框底 */
+    --color-surface: #2d272a;     /* 卡片面（带一丝玫瑰灰） */
+    /* 暗色下阴影回归深色（染 rose 在暗底上看不出，反而发灰） */
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.38);
+    --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.45);
+  }
+
+  /* 夜玫瑰氛围背景：更暗的底 + 更收敛的顶部微光 */
+  body {
+    background:
+      radial-gradient(1100px 480px at 50% -12%, rgba(244, 63, 94, 0.09), transparent 62%),
+      linear-gradient(180deg, #211a1d 0%, #1a1618 42%, #201a1d 100%);
+    background-attachment: fixed;
+  }
+
+  /* 顶栏毛玻璃：深色半透明 + 玫瑰微光分隔 */
+  .topbar {
+    background: rgba(40, 33, 36, 0.74);
+    border-bottom-color: rgba(253, 164, 175, 0.10);
+  }
+
+  /* 顶栏天数：暗底下换更亮的 rose-400，保证对比 */
+  .topbar__anni-days { color: var(--rose-400); }
+
+  /* 骨架屏：暗色 shimmer */
+  .skeleton__box {
+    background: linear-gradient(
+      90deg,
+      rgba(72, 64, 68, 0.65) 0%,
+      rgba(56, 48, 52, 0.9) 50%,
+      rgba(72, 64, 68, 0.65) 100%
+    );
+    background-size: 200% 100%;
+  }
+
+  /* 离线条：暗色下深红半透明，不再刺眼 */
+  .offline-bar {
+    background: rgba(244, 63, 94, 0.12);
+    color: rgba(253, 164, 175, 0.8);
+  }
+  .offline-bar__dots i { background: rgba(253, 164, 175, 0.75); }
+
+  /* 操作菜单图标 hover：暗色玫瑰底 */
+  .action-sheet__icon-btn:hover { background: rgba(244, 63, 94, 0.14); }
+
+  /* 纪念日面板倒计时行 hover：暗色微光 */
+  .anni-panel__item:hover { background: rgba(255, 255, 255, 0.07); }
+
+  /* 隐藏款稀有卡：暗色下轻微收敛亮度（依旧比普通卡亮，保留高光感） */
+  .todo--rare, .todo--epic, .todo--legendary { filter: brightness(0.9); }
+  .todo--rare.todo--done, .todo--epic.todo--done, .todo--legendary.todo--done { filter: brightness(0.72); }
+
+  /* ===== 心里话场景：暗色夜笺 ===== */
+  .note-write {
+    background: linear-gradient(165deg, #241d20 0%, #1b1719 40%, #241d20 100%);
+  }
+  .note-write__title { color: rgba(253, 164, 175, 0.92); }
+  .note-write__close { color: rgba(253, 164, 175, 0.8); }
+  .note-write__close:hover { background: rgba(244, 63, 94, 0.14); }
+  .note-write__paper {
+    background-color: rgba(255, 255, 255, 0.045);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  }
+  .note-write__hint { color: rgba(253, 164, 175, 0.55); }
+  .note-read {
+    background: linear-gradient(165deg, #241d20 0%, #1e191c 50%, #2b2024 100%);
+  }
+  .note-read__from { color: rgba(253, 164, 175, 0.75); }
+  .note-read__hint { color: rgba(253, 164, 175, 0.55); }
+  .note-read__content {
+    color: #f4eff0;
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  }
+}
