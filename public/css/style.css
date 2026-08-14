@@ -68,10 +68,15 @@ input, textarea, [contenteditable] {
   --violet-100: #ece6fc;
   --violet-300: #c9bdf0;
   --violet-400: #a596e8;
+  --violet-500: #8b5cf6;
   --gold-50: #fffbeb;
   --gold-100: #fef3c7;
   --gold-300: #fcd34d;
   --gold-500: #f59e0b;
+  --gold-600: #d97706;
+
+  /* 图鉴未解锁剪影墨色：暖灰，对 --color-bg 对比 ≈3.3:1（WCAG 图形最低 3:1） */
+  --sticker-locked-ink: #8f8782;
 }
 
 /* ===== 主题（通过 data-theme 属性切换） ===== */
@@ -2570,7 +2575,7 @@ input {
   color: var(--color-text-muted);
 }
 
-/* 贴纸网格 */
+/* ===== 贴纸网格（结构：剪影悬念 + 实体贴纸底板）===== */
 .sticker-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -2580,15 +2585,20 @@ input {
 
 /* 单个贴纸格子 */
 .sticker-cell {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 12px 6px;
+  gap: 7px;
+  padding: 13px 4px 11px;
   border-radius: var(--radius-md);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.sticker-cell--unlocked {
+  cursor: pointer;
 }
 @media (hover: hover) {
   .sticker-cell--unlocked:hover {
@@ -2596,57 +2606,169 @@ input {
     box-shadow: 0 4px 12px rgba(225, 29, 72, 0.10);
   }
 }
+
+/* 已解锁：白色裁切底板模拟实体贴纸（Die-cut） */
+.sticker-cell__plate {
+  width: 56px;
+  height: 56px;
+  border-radius: 17px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(147, 51, 64, 0.08), 0 3px 8px rgba(147, 51, 64, 0.07);
+}
 .sticker-cell__icon {
-  width: 36px;
-  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .sticker-cell__icon svg {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
 }
+/* 已解锁贴纸比剪影略大，强化"拿到手"的实体感 */
+.sticker-cell--unlocked .sticker-cell__icon svg {
+  width: 46px;
+  height: 46px;
+}
+
+/* "新"角标：这次打开才看到的贴纸 */
+.sticker-cell__new {
+  position: absolute;
+  top: -5px;
+  right: -3px;
+  padding: 2px 4px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  background: var(--rose-600);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(225, 29, 72, 0.35);
+}
+
 .sticker-cell__name {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-muted);
   text-align: center;
   line-height: 1.2;
 }
+.sticker-cell__date {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-muted);
+  opacity: 0.85;
+}
 
-/* 未解锁：灰显 + 问号锁 */
+/* 未解锁：本尊图案的剪影（雾显悬念）——不用通用锁，
+   剪影墨色 ≥3:1 保证可辨，同时明显"还没拿到" */
 .sticker-cell:not(.sticker-cell--unlocked) .sticker-cell__icon {
-  color: var(--color-border);
-  opacity: 0.7;
+  color: var(--sticker-locked-ink);
 }
 .sticker-cell:not(.sticker-cell--unlocked) .sticker-cell__name {
-  color: var(--color-border);
+  color: var(--sticker-locked-ink);
   letter-spacing: 1px;
+  font-size: 11px;
 }
 
-/* 已解锁：按稀有度染色 */
+/* 已解锁：按稀有度染色（图标色加深一档，白底板上 ≥3:1） */
 .sticker-cell--unlocked .sticker-cell__name {
   color: var(--color-text);
-  font-weight: 500;
+  font-weight: 600;
 }
 .sticker-cell--rare {
   background: linear-gradient(160deg, var(--rose-50), var(--rose-100));
   border-color: rgba(254, 205, 211, 0.6);
 }
-.sticker-cell--rare .sticker-cell__icon { color: var(--rose-300); }
+.sticker-cell--rare .sticker-cell__icon { color: var(--rose-500); }
 .sticker-cell--epic {
   background: linear-gradient(160deg, var(--violet-50), var(--violet-100));
   border-color: rgba(196, 181, 253, 0.6);
 }
-.sticker-cell--epic .sticker-cell__icon { color: var(--violet-400); }
+.sticker-cell--epic .sticker-cell__icon { color: var(--violet-500); }
 .sticker-cell--legendary {
   background: linear-gradient(160deg, var(--gold-50), var(--gold-100));
   border-color: rgba(252, 211, 77, 0.6);
   box-shadow: 0 2px 10px rgba(245, 158, 11, 0.12);
 }
-.sticker-cell--legendary .sticker-cell__icon { color: var(--gold-500); }
+.sticker-cell--legendary .sticker-cell__icon { color: var(--gold-600); }
 
-/* 进度条 */
+/* 点击贴纸：弹跳 + 专属短句 */
+@keyframes sticker-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+.sticker-cell--pop {
+  animation: sticker-pop 0.45s var(--ease);
+}
+
+/* 打开弹层时格子依次浮现（翻开册子的节奏） */
+@keyframes sticker-cell-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+.sticker-cell--in {
+  animation: sticker-cell-in 0.38s var(--ease) both;
+}
+
+/* ===== 分档图例 ===== */
+.sticker-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 12px;
+}
+.sticker-legend__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+}
+.sticker-legend__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.sticker-legend__chip--rare .sticker-legend__dot { background: var(--rose-400); }
+.sticker-legend__chip--epic .sticker-legend__dot { background: var(--violet-400); }
+.sticker-legend__chip--legendary .sticker-legend__dot { background: var(--gold-500); }
+.sticker-legend__chip--done {
+  color: var(--color-text);
+  font-weight: 600;
+  border-color: rgba(252, 211, 77, 0.7);
+  background: var(--gold-50);
+}
+
+/* ===== 集齐完成态 ===== */
+.sticker-modal__heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.sticker-modal__complete-chip {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #b45309;
+  background: var(--gold-100);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.sticker-modal__complete-chip.hidden { display: none; }
+.sticker-modal__panel--complete {
+  box-shadow: 0 -8px 32px rgba(245, 158, 11, 0.22);
+}
+
+/* ===== 进度条 ===== */
 .sticker-modal__progress {
   display: flex;
   align-items: center;
@@ -2667,6 +2789,10 @@ input {
   background: linear-gradient(90deg, var(--rose-300), var(--violet-400), var(--gold-500));
   transition: width 0.5s var(--ease);
 }
+/* 集齐后进度条转纯金，呼应完成态 */
+.sticker-modal__progress-fill--complete {
+  background: linear-gradient(90deg, var(--gold-300), var(--gold-500));
+}
 .sticker-modal__progress-text {
   font-size: 13px;
   font-weight: 500;
@@ -2677,6 +2803,10 @@ input {
 /* 盲盒/图鉴相关动画的 reduced-motion 降级 */
 @media (prefers-reduced-motion: reduce) {
   .todo--legendary {
+    animation: none !important;
+  }
+  .sticker-cell--in,
+  .sticker-cell--pop {
     animation: none !important;
   }
 }

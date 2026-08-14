@@ -37,6 +37,13 @@ export const RARITY_META = {
     toast: '✨ 开出稀有款！',
     confettiColors: null, // rare 不撒花，克制
     stickerNames: ['初心', '萌芽', '晨光', '清欢'],
+    // 图鉴点击时的专属短句（与名称一一对应）
+    stickerFlavors: [
+      '一切，从第一条待办开始',
+      '小小的开始，也在认真生长',
+      '早起的意义，是先想到你',
+      '平凡日常里的小确幸',
+    ],
     // 稀有度配色（撒花/视觉用）：淡粉
     colors: ['#fda4af', '#fb7185', '#fecdd3'],
     // 清新·自然意象：嫩芽 / 露珠 / 四叶草 / 小花
@@ -57,6 +64,12 @@ export const RARITY_META = {
     toast: '🌟 开出史诗款！',
     confettiColors: ['#a78bfa', '#c4b5fd', '#8b5cf6', '#ddd6fe'],
     stickerNames: ['心动', '悸动', '钟情', '炽爱'],
+    stickerFlavors: [
+      '第一眼心动，是藏不住的',
+      '心跳漏了一拍，就是此刻',
+      '认准了，就不再看别处',
+      '热烈的爱，也要一起完成',
+    ],
     // 稀有度配色：浅紫
     colors: ['#a78bfa', '#c4b5fd', '#8b5cf6'],
     // 心动·浪漫意象：心跳 / 玫瑰 / 蝴蝶结 / 涟漪
@@ -77,6 +90,12 @@ export const RARITY_META = {
     toast: '👑 开出传说款！惊艳！',
     confettiColors: ['#fbbf24', '#fcd34d', '#f59e0b', '#fff7ed', '#fda4af'],
     stickerNames: ['永恒', '璀璨', '至臻', '神话'],
+    stickerFlavors: [
+      '想和你把每一天过成纪念',
+      '你是所有高光时刻的光源',
+      '最好的时光，是和你慢慢来',
+      '我们的故事，值得讲一辈子',
+    ],
     // 稀有度配色：香槟金
     colors: ['#fbbf24', '#fcd34d', '#f59e0b'],
     // 永恒·珍贵意象：王冠 / 星辰 / 钻石 / 彩虹
@@ -105,6 +124,19 @@ export function getStickerIcon(stickerKey) {
   const meta = RARITY_META[rarity];
   if (!meta || !meta.stickerIcons) return '';
   return meta.stickerIcons[idx] || meta.stickerIcons[0];
+}
+
+/**
+ * 根据 stickerKey 返回贴纸专属短句（图鉴点击时展示）。
+ * 无配置时返回空串（调用方兜底）。
+ */
+export function getStickerFlavor(stickerKey) {
+  const match = /^(rare|epic|legendary)_(\d+)$/.exec(stickerKey || '');
+  if (!match) return '';
+  const meta = RARITY_META[match[1]];
+  const idx = parseInt(match[2], 10) - 1;
+  if (!meta || !meta.stickerFlavors) return '';
+  return meta.stickerFlavors[idx] || '';
 }
 
 /** 判断是否为隐藏款（rare/epic/legendary，排除 common） */

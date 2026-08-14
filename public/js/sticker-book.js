@@ -2,19 +2,25 @@
  * 收集图鉴（贴纸本）UI
  *
  * 两人共享一本图鉴。顶栏入口图标 + 红点（有未看的解锁时亮）。
- * 点开是弹层：12 格网格，已解锁显示彩色贴纸 + 名称，未解锁灰显 + ❓。
- * 底部进度条「已收集 X/12」，集齐时弹一次性庆祝彩蛋。
+ * 点开是弹层：12 格网格，按稀有/史诗/传说三档分区。
+ *   - 已解锁：白色贴纸底板 + 彩色贴纸 + 名称 + 解锁日期，点击弹专属短句
+ *   - 未解锁：本尊图案的灰色剪影（雾显悬念）+ "???"
+ * 顶部有分档图例（稀有 x/4 · 史诗 x/4 · 传说 x/4），底部进度条，
+ * 集齐时面板进入金色完成态并庆祝一次。
  *
  * 全集定义从 blindbox.js 的 RARITY_META 派生（保持单一真相）。
  *
- * 红点逻辑（问题3修复）：按 stickerKey 记录"已看"，持久化到 localStorage。
- *   - 有贴纸的 key 不在已看集合里 → 亮红点
- *   - 打开图鉴 → 当前所有 key 标记已看 → 红点消失
+ * 红点 / "新"标记逻辑：
+ *   - 已看集合存 localStorage（按 stickerKey）
+ *   - 打开图鉴时快照当前已看集合 → 未在快照中的贴纸显示"新"角标
+ *   - 关闭图鉴时才把当前所有 key 标记已看 → 红点消失
  *   - 对方解锁新贴纸 → 新 key 不在已看集合 → 红点又亮
  */
 
+import confetti from './vendor/canvas-confetti.esm.min.js';
+import { isFxEnabled } from './theme.js';
 import { getStickers, setStickersRenderFn } from './state.js';
-import { RARITY_META, STICKERS_PER_RARITY, getStickerIcon } from './blindbox.js';
+import { RARITY_META, STICKERS_PER_RARITY, getStickerIcon, getStickerFlavor } from './blindbox.js';
 import { showToast } from './toast.js';
 import { db } from './db.js';
 import { setStickers } from './state.js';
@@ -26,8 +32,11 @@ const RARITY_ORDER = ['rare', 'epic', 'legendary'];
 // localStorage key：存已看过的 stickerKey 集合（JSON 数组）
 const SEEN_KEY = 'seenStickerKeys';
 
-// 是否已弹过集齐全集彩蛋（防止重复，内存态，本次会话一次）
+// 是否已庆祝过集齐全集（内存态，本次会话一次）
 let collectedCelebrated = false;
+
+// 打开图鉴那一刻的"已看"快照：用于判定哪些贴纸对用户是"新"的
+let seenSnapshot = null;
 
 /** 读取已看过的 stickerKey 集合 */
 function getSeenKeys() {
@@ -47,6 +56,14 @@ function markKeysSeen(keys) {
   try {
     localStorage.setItem(SEEN_KEY, JSON.stringify([...seen]));
   } catch { /* ignore */ }
+}
+
+/** 解锁时间 → 「M月d日」；无效时间返回空串 */
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
 /**
@@ -74,61 +91,197 @@ function buildFullBook() {
   return all;
 }
 
+/** 渲染分档图例：稀有 x/4 · 史诗 x/4 · 传说 x/4（集满的档打勾） */
+function renderLegend(all) {
+  const legendEl = document.getElementById('stickerLegend');
+  if (!legendEl) return;
+  const frag = document.createDocumentFragment();
+  for (const rarity of RARITY_ORDER) {
+    const total = STICKERS_PER_RARITY;
+    const count = all.filter((s) => s.rarity === rarity && s.unlocked).length;
+    const done = count === total;
+    const chip = document.createElement('span');
+    chip.className = 'sticker-legend__chip'
+      + ` sticker-legend__chip--${rarity}`
+      + (done ? ' sticker-legend__chip--done' : '');
+    const dot = document.createElement('i');
+    dot.className = 'sticker-legend__dot';
+    dot.setAttribute('aria-hidden', 'true');
+    chip.appendChild(dot);
+    chip.appendChild(document.createTextNode(`${RARITY_META[rarity].label} ${count}/${total}${done ? ' ✓' : ''}`));
+    frag.appendChild(chip);
+  }
+  legendEl.innerHTML = '';
+  legendEl.appendChild(frag);
+}
+
+/** 按收集进度切换提示文案（空状态引导 / 接近集齐 / 已集齐 / 默认） */
+function updateHint(unlockedCount) {
+  const hintEl = document.getElementById('stickerHint');
+  if (!hintEl) return;
+  let text;
+  if (unlockedCount === 0) {
+    text = '每添加一条待办，都有小概率开出隐藏款——和 ta 集满这 12 张吧';
+  } else if (unlockedCount === TOTAL_STICKERS) {
+    text = '12 张全部集齐，这是属于你们的专属纪念 ✨';
+  } else if (unlockedCount >= TOTAL_STICKERS - 2) {
+    text = `就差 ${TOTAL_STICKERS - unlockedCount} 张就集齐啦，加油～`;
+  } else {
+    text = '小概率出现隐藏款待办，解锁专属贴纸～';
+  }
+  hintEl.textContent = text;
+}
+
+/** 集齐庆祝：金色彩带（左右两发）+ 提示。特效开关关闭时只弹提示。 */
+function celebrateComplete() {
+  showToast('🎉 恭喜！图鉴已全部集齐！');
+  if (!isFxEnabled()) return;
+  const gold = RARITY_META.legendary.confettiColors;
+  const base = { spread: 60, ticks: 90, gravity: 0.9, scalar: 0.9, colors: gold };
+  confetti({ ...base, particleCount: 40, origin: { x: 0.15, y: 0.7 }, angle: 60 });
+  confetti({ ...base, particleCount: 40, origin: { x: 0.85, y: 0.7 }, angle: 120 });
+}
+
 /**
- * 渲染图鉴弹层内容（网格 + 进度）。
+ * 渲染图鉴弹层内容（图例 + 网格 + 提示 + 进度 + 集齐状态）。
  * 幂等：每次根据当前 stickers 全量重绘。
+ * @param {Object} [opts]
+ * @param {boolean} [opts.animate] 是否带格子入场节奏（打开弹层时用；实时刷新时不重放）
  */
-function renderStickerBook() {
+export function renderStickerBook(opts = {}) {
+  const { animate = false } = opts;
   const grid = document.getElementById('stickerGrid');
   const progressEl = document.getElementById('stickerProgress');
   const barEl = document.getElementById('stickerProgressBar');
+  const panelEl = document.querySelector('#stickerModal .sticker-modal__panel');
+  const chipEl = document.getElementById('stickerCompleteChip');
   if (!grid) return;
 
   const all = buildFullBook();
   const unlockedCount = all.filter((s) => s.unlocked).length;
+  const isNewOf = seenSnapshot ? (key) => !seenSnapshot.has(key) : () => false;
 
-  // 用 DocumentFragment 全量重绘（图鉴格子少，12 个，无需增量）
+  // 格子：已解锁 = 白底板 + 彩色贴纸 + 名称 + 日期（+ 新角标）；
+  //       未解锁 = 本尊图案的灰色剪影（雾显悬念）+ ???
   const frag = document.createDocumentFragment();
-  for (const s of all) {
+  all.forEach((s, idx) => {
+    const meta = RARITY_META[s.rarity];
     const cell = document.createElement('div');
-    cell.className = 'sticker-cell' + (s.unlocked ? ` sticker-cell--unlocked sticker-cell--${s.rarity}` : '');
-    cell.setAttribute('aria-label', s.unlocked ? `已解锁：${s.name}（${RARITY_META[s.rarity].label}）` : `未解锁：${RARITY_META[s.rarity].label}贴纸`);
+    cell.className = 'sticker-cell'
+      + (s.unlocked ? ` sticker-cell--unlocked sticker-cell--${s.rarity}` : '')
+      + (animate ? ' sticker-cell--in' : '');
+    if (animate) cell.style.animationDelay = `${idx * 35}ms`;
+    cell.setAttribute('aria-label', s.unlocked
+      ? `已解锁：${s.name}（${meta.label}${formatDate(s.unlockedAt) ? '，' + formatDate(s.unlockedAt) : ''}）`
+      : `未解锁：${meta.label}贴纸`);
 
-    const icon = document.createElement('span');
-    icon.className = 'sticker-cell__icon';
-    icon.innerHTML = s.unlocked ? getStickerIcon(s.key) : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 9a2.5 2.5 0 1 1 5 0v.5h-5V9z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 9.5a6 6 0 0 1 12 0v7a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
-    cell.appendChild(icon);
+    if (s.unlocked) {
+      // 可点击查看专属短句
+      cell.setAttribute('role', 'button');
+      cell.setAttribute('tabindex', '0');
+      cell.dataset.key = s.key;
+
+      const plate = document.createElement('span');
+      plate.className = 'sticker-cell__plate';
+      const icon = document.createElement('span');
+      icon.className = 'sticker-cell__icon';
+      icon.innerHTML = getStickerIcon(s.key);
+      plate.appendChild(icon);
+      cell.appendChild(plate);
+
+      if (isNewOf(s.key)) {
+        const fresh = document.createElement('span');
+        fresh.className = 'sticker-cell__new';
+        fresh.textContent = '新';
+        cell.appendChild(fresh);
+      }
+    } else {
+      const icon = document.createElement('span');
+      icon.className = 'sticker-cell__icon sticker-cell__icon--silhouette';
+      icon.innerHTML = getStickerIcon(s.key);
+      cell.appendChild(icon);
+    }
 
     const name = document.createElement('span');
     name.className = 'sticker-cell__name';
     name.textContent = s.unlocked ? s.name : '???';
     cell.appendChild(name);
 
+    if (s.unlocked) {
+      const date = formatDate(s.unlockedAt);
+      if (date) {
+        const dateEl = document.createElement('span');
+        dateEl.className = 'sticker-cell__date';
+        dateEl.textContent = date;
+        cell.appendChild(dateEl);
+      }
+    }
+
     frag.appendChild(cell);
-  }
+  });
   grid.innerHTML = '';
   grid.appendChild(frag);
 
-  // 进度
+  // 图例 / 提示 / 进度
+  renderLegend(all);
+  updateHint(unlockedCount);
   if (progressEl) progressEl.textContent = `${unlockedCount} / ${TOTAL_STICKERS}`;
-  if (barEl) barEl.style.width = `${(unlockedCount / TOTAL_STICKERS) * 100}%`;
-
-  // 集齐彩蛋（一次性）
-  if (unlockedCount === TOTAL_STICKERS && !collectedCelebrated) {
-    collectedCelebrated = true;
-    showToast('🎉 恭喜！图鉴已全部集齐！');
+  if (barEl) {
+    barEl.style.width = `${(unlockedCount / TOTAL_STICKERS) * 100}%`;
+    barEl.classList.toggle('sticker-modal__progress-fill--complete', unlockedCount === TOTAL_STICKERS);
   }
+
+  // 集齐状态：面板金色完成态 + 徽章
+  const complete = unlockedCount === TOTAL_STICKERS;
+  if (panelEl) panelEl.classList.toggle('sticker-modal__panel--complete', complete);
+  if (chipEl) chipEl.classList.toggle('hidden', !complete);
+
+  // 集齐庆祝（每次会话一次）
+  if (complete && !collectedCelebrated) {
+    collectedCelebrated = true;
+    celebrateComplete();
+  }
+}
+
+/** 格子点击/回车：弹跳 + 专属短句（事件委托，绑定一次） */
+function bindGridInteraction() {
+  const grid = document.getElementById('stickerGrid');
+  if (!grid) return;
+  grid.addEventListener('click', (e) => {
+    const cell = e.target.closest('.sticker-cell--unlocked');
+    if (!cell || !grid.contains(cell)) return;
+    revealFlavor(cell);
+  });
+  grid.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const cell = e.target.closest('.sticker-cell--unlocked');
+    if (!cell || !grid.contains(cell)) return;
+    e.preventDefault();
+    revealFlavor(cell);
+  });
+}
+
+/** 弹跳动画 + 展示贴纸专属短句 */
+function revealFlavor(cell) {
+  cell.classList.remove('sticker-cell--pop');
+  // 强制 reflow，保证连续点击也能重放动画
+  void cell.offsetWidth;
+  cell.classList.add('sticker-cell--pop');
+  const flavor = getStickerFlavor(cell.dataset.key);
+  if (flavor) showToast(flavor);
 }
 
 /**
  * 打开图鉴弹层。
- * 问题2修复：每次打开都主动从数据库拉取最新 stickers（不依赖 Realtime 是否生效），
+ * 每次打开都主动从数据库拉取最新 stickers（不依赖 Realtime 是否生效），
  * 拉完再渲染——保证打开图鉴总能看到最新解锁的贴纸。
- * 同时把当前所有贴纸标记为已看 → 清红点。
+ * 同时快照当前已看集合（用于"新"角标）；红点在关闭时清除。
  */
 async function openStickerBook() {
   const modal = document.getElementById('stickerModal');
   if (!modal) return;
+  // 快照打开前的已看集合：快照里没有的 = 这次要看的新贴纸
+  seenSnapshot = getSeenKeys();
   // 先显示弹层（渲染期间用户能看到加载态）
   modal.classList.remove('hidden');
   // 主动拉取最新数据（容错：失败则用本地缓存）
@@ -138,24 +291,23 @@ async function openStickerBook() {
   } catch (err) {
     console.warn('[sticker-book] 拉取图鉴失败（用本地缓存）:', err.message);
   }
-  // 渲染（用最新数据）
-  renderStickerBook();
-  // 打开即视为已看：把当前所有 stickerKey 标记已看 → 清红点
+  // 渲染（用最新数据 + 入场节奏）
+  renderStickerBook({ animate: true });
+}
+
+/** 关闭图鉴弹层。此刻才把当前所有贴纸标记为已看 → 清红点。 */
+export function closeStickerBook() {
+  const modal = document.getElementById('stickerModal');
+  if (!modal) return;
+  modal.classList.add('hidden');
   markKeysSeen(getStickers().map((s) => s.stickerKey));
   updateBadge();
 }
 
-/** 关闭图鉴弹层 */
-function closeStickerBook() {
-  const modal = document.getElementById('stickerModal');
-  if (!modal) return;
-  modal.classList.add('hidden');
-}
-
 /**
  * 更新顶栏红点。
- * 红点逻辑（问题3修复）：有贴纸的 key 不在已看集合里 → 亮红点。
- *   - 打开过图鉴 → 所有当前 key 已标记已看 → 无红点
+ * 红点逻辑：有贴纸的 key 不在已看集合里 → 亮红点。
+ *   - 关闭过图鉴 → 所有当前 key 已标记已看 → 无红点
  *   - 之后对方解锁新贴纸 → 新 key 不在已看集合 → 红点又亮
  */
 function updateBadge() {
@@ -195,7 +347,9 @@ export function initStickerBook(opts = {}) {
     });
   }
 
-  // 注册渲染回调：stickers 变化时更新红点 + 若弹层开着则刷新网格
+  bindGridInteraction();
+
+  // 注册渲染回调：stickers 变化时更新红点 + 若弹层开着则刷新网格（不重放入场动画）
   setStickersRenderFn(() => {
     updateBadge();
     const modal = document.getElementById('stickerModal');

@@ -284,12 +284,17 @@
   <div id="stickerModal" class="sticker-modal hidden" role="dialog" aria-label="收集图鉴" aria-modal="true">
     <div class="sticker-modal__panel">
       <div class="sticker-modal__header">
-        <h2 class="sticker-modal__title">收集图鉴</h2>
+        <div class="sticker-modal__heading">
+          <h2 class="sticker-modal__title">收集图鉴</h2>
+          <span id="stickerCompleteChip" class="sticker-modal__complete-chip hidden">✨ 已集齐</span>
+        </div>
         <button id="stickerModalClose" class="sticker-modal__close" type="button" aria-label="关闭">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </div>
-      <p class="sticker-modal__hint">小概率出现隐藏款待办，解锁专属贴纸～</p>
+      <!-- 分档图例：稀有/史诗/传说 各自进度（JS 渲染） -->
+      <div id="stickerLegend" class="sticker-legend"></div>
+      <p id="stickerHint" class="sticker-modal__hint">小概率出现隐藏款待办，解锁专属贴纸～</p>
       <div id="stickerGrid" class="sticker-grid"></div>
       <div class="sticker-modal__progress">
         <div class="sticker-modal__progress-bar"><span id="stickerProgressBar" class="sticker-modal__progress-fill"></span></div>
