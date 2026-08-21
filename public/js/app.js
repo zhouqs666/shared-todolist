@@ -298,14 +298,55 @@ function bindEvents() {
     if (e.key === 'Escape') closeAddPanel();
   });
   addBtn.addEventListener('click', addTodo);
-  // 预挂图按钮：选图存入 pendingImage，显示已选角标
+  // 预挂图按钮：选图存入 pendingImage，面板上方浮现缩略图预览（可 × 取消）
   if (attachBtn) {
     attachBtn.addEventListener('click', async () => {
       const file = await pickImage();
       if (!file) return;
       pendingImage = file;
       attachBtn.classList.add('add-panel__attach--has');
+      renderAttachPreview(file);
     });
+  }
+}
+
+/** 已选图片的本地预览 URL（× 取消/提交/关面板时 revoke，防内存泄漏） */
+let attachPreviewUrl = null;
+
+/** 渲染预挂图预览：缩略图 + × 取消（悬浮在添加面板上方） */
+function renderAttachPreview(file) {
+  const wrap = document.getElementById('attachPreview');
+  if (!wrap) return;
+  if (attachPreviewUrl) URL.revokeObjectURL(attachPreviewUrl);
+  attachPreviewUrl = URL.createObjectURL(file);
+  wrap.innerHTML = '';
+  const img = document.createElement('img');
+  img.className = 'add-panel__preview-img';
+  img.src = attachPreviewUrl;
+  img.alt = '已选图片预览';
+  wrap.appendChild(img);
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'add-panel__preview-cancel';
+  cancel.setAttribute('aria-label', '取消已选图片');
+  cancel.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  cancel.addEventListener('click', resetPendingImage);
+  wrap.appendChild(cancel);
+  wrap.hidden = false;
+}
+
+/** 清空预挂图状态：pendingImage + 已选角标 + 预览（提交成功 / ×取消 / 关面板共用） */
+function resetPendingImage() {
+  pendingImage = null;
+  if (attachBtn) attachBtn.classList.remove('add-panel__attach--has');
+  const wrap = document.getElementById('attachPreview');
+  if (wrap) {
+    wrap.hidden = true;
+    wrap.innerHTML = '';
+  }
+  if (attachPreviewUrl) {
+    URL.revokeObjectURL(attachPreviewUrl);
+    attachPreviewUrl = null;
   }
 }
 
@@ -318,16 +359,12 @@ function openAddPanel() {
   setTimeout(() => todoInput.focus(), 200);
 }
 
-/** 收起添加面板 */
+/** 收起添加面板（未提交的预挂图一并清掉，避免残留到下一条待办） */
 function closeAddPanel() {
   if (!addPanel || !addOverlay) return;
   addPanel.classList.remove('add-panel--show');
   addOverlay.classList.remove('add-overlay--show');
-}
-
-/** 清除预挂图按钮的"已选"角标（pendingImage 由调用方按需清） */
-function clearAttachMark() {
-  if (attachBtn) attachBtn.classList.remove('add-panel__attach--has');
+  resetPendingImage();
 }
 
 async function logout() {
@@ -378,8 +415,7 @@ async function addTodo() {
       );
     }
     todoInput.value = '';
-    pendingImage = null; // 提交成功才清预挂图
-    clearAttachMark();
+    resetPendingImage(); // 提交成功才清预挂图（失败路径不清，保留以便重试）
     closeAddPanel(); // 提交成功收起面板
   } catch (err) {
     handleError(toAppError(err), '添加失败');
@@ -393,7 +429,7 @@ async function addTodo() {
 // 每个 id 的"最新意图"：解决连续点击竞态（用户在 API 返回前又改了）
 const latestIntent = new Map(); // id → boolean
 
-async function toggleComplete(id, nextCompleted, opts = {}) {
+async function toggleComplete(id, nextCompleted) {
   const current = getTodos().find((t) => t.id === id);
   if (!current || current.completed === nextCompleted) return; // 幂等
 
@@ -410,25 +446,8 @@ async function toggleComplete(id, nextCompleted, opts = {}) {
     completedAt: nextCompleted ? new Date().toISOString() : null,
   });
   setTodos(sortTodos(getTodos()));
-  // 本端完成 → 庆祝动画
+  // 本端完成 → 庆祝动画（彩带/震动，特效开关默认常开）
   if (nextCompleted) celebrateCompletion(current);
-  // 带感完成：完成动效之上叠加飞心 + 自动贴 heart（写库 + Realtime 推给对方）
-  if (nextCompleted && opts.heartful) {
-    // 隐藏款 + 带感：延迟飞心，等光环/金光主视觉演完（约 300ms）避免画面过满
-    const flyDelay = isHidden(current.rarity) ? 300 : 0;
-    setTimeout(() => {
-      // 重新查询复选框（完成 rerender 后旧引用已脱离 DOM，getBoundingClientRect 会返回 0）
-      const fromEl = document.querySelector(`.todo[data-id="${CSS.escape(id)}"] .todo__check`)
-        || opts.fromEl;
-      flyHeartToTopbar(fromEl);
-      // 自动贴 heart（复用 reactions，对方端通过 Realtime 收到 → 卡片脉冲）
-      try { toggleReaction(id, 'heart', false); } catch (e) { /* 静默，飞心已表达 */ }
-    }, flyDelay);
-  }
-  // 首次引导：完成"对方创建的"待办时，提示一次"长按带感完成"
-  if (nextCompleted && current.createdBy !== (currentUser && currentUser.id)) {
-    showHeartfulHint(id);
-  }
   try {
     const todo = await db.setCompleted(id, nextCompleted, currentUser.id);
     // 竞态保护：如果在 await 期间用户又改了意图，丢弃这个响应
@@ -447,30 +466,6 @@ async function toggleComplete(id, nextCompleted, opts = {}) {
   } finally {
     // 无论成功/丢弃/回滚，这次飞行操作都收尾，解除 Realtime 回声守卫
     endToggle(id);
-  }
-}
-
-/**
- * 轻轻提醒：给未完成待办加上/取消标记（克制提醒对方）。
- * @param {string} id todo id
- * @param {boolean} on true=标记, false=取消
- */
-async function toggleNudge(id, on) {
-  const current = getTodos().find((t) => t.id === id);
-  if (!current) return;
-  const prevNudge = current.nudgeBy;
-  // 乐观更新
-  current.nudgeBy = on ? (currentUser && currentUser.id) : null;
-  setTodos(getTodos());
-  try {
-    const todo = await db.setNudge(id, on ? currentUser.id : null);
-    setTodos(sortTodos(getTodos().map((t) => (t.id === id ? todo : t))));
-  } catch (err) {
-    // 回滚
-    const target = getTodos().find((t) => t.id === id);
-    if (target) target.nudgeBy = prevNudge;
-    setTodos(getTodos());
-    handleError(toAppError(err), '操作失败');
   }
 }
 
@@ -518,9 +513,10 @@ async function removeImageFromTodo(id, prevPath) {
   }
 }
 
-/* ===== 图片全屏预览（lightbox）=====
- * 点徽标打开：黑色全屏层 + 居中大图，点击空白/图片关闭。
- * 底部「删除图片」按钮（红，与"删除待办"区分）→ 调 removeImageFromTodo。
+/* ===== 图片全屏预览（lightbox，标准查看器）=====
+ * 点徽标打开：加载指示（转圈）→ 居中大图；双击缩放（以点击点为中心）+ 放大态拖拽平移。
+ * 底部操作条：换图 / 删除图片（两段式确认，3 秒不点自动还原）。
+ * 删除只解绑待办与图的关系，Storage 文件保留作后路（软删除精神）。
  * 一次只存在一个 lightbox，关闭即从 DOM 移除。
  */
 function openImageLightbox(todo) {
@@ -533,10 +529,21 @@ function openImageLightbox(todo) {
   overlay.setAttribute('aria-modal', 'true');
   overlay.setAttribute('aria-label', '图片预览');
 
+  // 加载指示：onload 前转圈，失败换成提示
+  const loading = document.createElement('div');
+  loading.className = 'img-lightbox__loading';
+  loading.innerHTML = '<i></i><span>加载中…</span>';
+  overlay.appendChild(loading);
+
   const img = document.createElement('img');
   img.className = 'img-lightbox__img';
-  img.src = todo.imagePath;
   img.alt = '';
+  img.addEventListener('load', () => loading.remove());
+  img.addEventListener('error', () => {
+    loading.classList.add('img-lightbox__loading--err');
+    loading.innerHTML = '<span>图片加载失败，请检查网络后重试</span>';
+  });
+  img.src = todo.imagePath;
   overlay.appendChild(img);
 
   const closeBtn = document.createElement('button');
@@ -547,11 +554,45 @@ function openImageLightbox(todo) {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
   overlay.appendChild(closeBtn);
 
+  // 底部操作条：换图 + 删除（两段式确认）
+  const actions = document.createElement('div');
+  actions.className = 'img-lightbox__actions';
+
+  const swapBtn = document.createElement('button');
+  swapBtn.type = 'button';
+  swapBtn.className = 'img-lightbox__act';
+  swapBtn.textContent = '换图';
+  swapBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    close();
+    attachImageToTodo(todo.id, todo.imagePath);
+  });
+  actions.appendChild(swapBtn);
+
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
-  delBtn.className = 'img-lightbox__del';
+  delBtn.className = 'img-lightbox__act img-lightbox__act--del';
   delBtn.textContent = '删除图片';
-  overlay.appendChild(delBtn);
+  let confirmTimer = null;
+  delBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!delBtn.classList.contains('img-lightbox__act--confirm')) {
+      // 第一段：进入确认态，3 秒不点自动还原
+      if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+      delBtn.classList.add('img-lightbox__act--confirm');
+      delBtn.textContent = '再点一次确认删除';
+      confirmTimer = setTimeout(() => {
+        delBtn.classList.remove('img-lightbox__act--confirm');
+        delBtn.textContent = '删除图片';
+      }, 3000);
+      return;
+    }
+    clearTimeout(confirmTimer);
+    close();
+    removeImageFromTodo(todo.id, todo.imagePath);
+  });
+  actions.appendChild(delBtn);
+  overlay.appendChild(actions);
 
   document.body.appendChild(overlay);
   // 锁滚动
@@ -559,27 +600,91 @@ function openImageLightbox(todo) {
   document.body.style.overflow = 'hidden';
   if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
 
+  // Esc 关闭（桌面端）
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+
   const close = () => {
     overlay.remove();
     document.body.style.overflow = prevOverflow;
+    document.removeEventListener('keydown', onKey);
   };
-  overlay.addEventListener('click', (e) => {
-    // 点遮罩或图片本身都关（图片上 stopPropagation 避免误触删除按钮区）
-    if (e.target === overlay || e.target === img) close();
-  });
   closeBtn.addEventListener('click', close);
-  delBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    close();
-    await removeImageFromTodo(todo.id, todo.imagePath);
+
+  // ===== 手势：双击缩放（以点击点为中心）+ 放大态拖拽 + 单击关闭 =====
+  const MAX_SCALE = 2.5;
+  let scale = 1, tx = 0, ty = 0;
+  const apply = () => { img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`; };
+  const zoomWithAnim = () => {
+    img.classList.add('img-lightbox__img--anim');
+    apply();
+    setTimeout(() => img.classList.remove('img-lightbox__img--anim'), 270);
+  };
+  // 限制平移范围：图片边缘不被拖出屏幕
+  const clampPan = () => {
+    if (scale <= 1) { tx = 0; ty = 0; return; }
+    const rect = img.getBoundingClientRect();
+    const baseW = rect.width / scale, baseH = rect.height / scale;
+    const mx = Math.max(0, (baseW * scale - baseW) / 2);
+    const my = Math.max(0, (baseH * scale - baseH) / 2);
+    tx = Math.max(-mx, Math.min(mx, tx));
+    ty = Math.max(-my, Math.min(my, ty));
+  };
+
+  let dragStart = null, moved = false;
+  let lastTapAt = 0, lastTapX = 0, lastTapY = 0, closeTimer = null;
+
+  overlay.addEventListener('pointerdown', (e) => {
+    if (e.target === closeBtn || actions.contains(e.target)) return;
+    dragStart = { x: e.clientX, y: e.clientY, tx, ty };
+    moved = false;
+    clearTimeout(closeTimer); // 按下即取消待执行的"单击关闭"
   });
-  // Esc 关闭（桌面端）
-  document.addEventListener('keydown', function onKey(e) {
-    if (e.key === 'Escape') {
-      close();
-      document.removeEventListener('keydown', onKey);
+  overlay.addEventListener('pointermove', (e) => {
+    if (!dragStart) return;
+    const dx = e.clientX - dragStart.x, dy = e.clientY - dragStart.y;
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) moved = true;
+    if (scale > 1 && moved) {
+      img.classList.remove('img-lightbox__img--anim'); // 拖拽不走过渡
+      tx = dragStart.tx + dx;
+      ty = dragStart.ty + dy;
+      clampPan();
+      apply();
     }
   });
+  overlay.addEventListener('pointerup', (e) => {
+    if (!dragStart) return;
+    dragStart = null;
+    if (moved) return; // 拖拽结束不当点击
+    const now = Date.now();
+    const isDouble =
+      now - lastTapAt < 300 &&
+      Math.abs(e.clientX - lastTapX) < 44 &&
+      Math.abs(e.clientY - lastTapY) < 44;
+    if (isDouble) {
+      lastTapAt = 0;
+      // 以双击点为不动中心缩放/还原
+      const rect = img.getBoundingClientRect();
+      const cx = e.clientX - (rect.left + rect.width / 2);
+      const cy = e.clientY - (rect.top + rect.height / 2);
+      const next = scale > 1 ? 1 : MAX_SCALE;
+      const k = next / scale;
+      tx = cx - (cx - tx) * k;
+      ty = cy - (cy - ty) * k;
+      scale = next;
+      clampPan();
+      zoomWithAnim();
+    } else {
+      lastTapAt = now;
+      lastTapX = e.clientX;
+      lastTapY = e.clientY;
+      // 单击（点遮罩或图片）：延迟 260ms 确认不是双击，且仅在未放大时关闭
+      if (e.target === overlay || e.target === img) {
+        closeTimer = setTimeout(() => { if (scale === 1) close(); }, 260);
+      }
+    }
+  });
+  overlay.addEventListener('pointercancel', () => { dragStart = null; });
 }
 
 /* ===== 完成备注：底部滑出输入面板（一次性模态，复用 add-panel 滑出风格）=====
@@ -1238,62 +1343,20 @@ function buildMetaText(todo) {
 }
 
 /**
- * 渲染/更新"问问进度"标记（原地增删小问号，绝不重建 li）。
- * 由 renderItem（新建）和 updateItem（更新）统一调用，保证两处逻辑一致。
- *
- * 规则：
- *   - nudgeBy 存在 + 未完成 → 显示小问号 + 加 todo--nudged class
- *   - 否则 → 移除小问号 + 去 class
- * 点击小问号取消标记（仅创建者本人可取消）。
- */
-// nudge 提醒图标：twemoji 🤔 思考脸（CC-BY 4.0，彩色矢量，安卓 WebView 不变黑）。
-// 表达"ta 在想进度啦 / 想问问"，比问号更生动温和。
-const NUDGE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" aria-hidden="true"><circle fill="#FFCB4C" cx="18" cy="17.018" r="17"/><path fill="#65471B" d="M14.524 21.036c-.145-.116-.258-.274-.312-.464-.134-.46.13-.918.59-1.021 4.528-1.021 7.577 1.363 7.706 1.465.384.306.459.845.173 1.205-.286.358-.828.401-1.211.097-.11-.084-2.523-1.923-6.182-1.098-.274.061-.554-.016-.764-.184z"/><ellipse fill="#65471B" cx="13.119" cy="11.174" rx="2.125" ry="2.656"/><ellipse fill="#65471B" cx="24.375" cy="12.236" rx="2.125" ry="2.656"/><path fill="#F19020" d="M17.276 35.149s1.265-.411 1.429-1.352c.173-.972-.624-1.167-.624-1.167s1.041-.208 1.172-1.376c.123-1.101-.861-1.363-.861-1.363s.97-.4 1.016-1.539c.038-.959-.995-1.428-.995-1.428s5.038-1.221 5.556-1.341c.516-.12 1.32-.615 1.069-1.694-.249-1.08-1.204-1.118-1.697-1.003-.494.115-6.744 1.566-8.9 2.068l-1.439.334c-.54.127-.785-.11-.404-.512.508-.536.833-1.129.946-2.113.119-1.035-.232-2.313-.433-2.809-.374-.921-1.005-1.649-1.734-1.899-1.137-.39-1.945.321-1.542 1.561.604 1.854.208 3.375-.833 4.293-2.449 2.157-3.588 3.695-2.83 6.973.828 3.575 4.377 5.876 7.952 5.048l3.152-.681z"/><path fill="#65471B" d="M9.296 6.351c-.164-.088-.303-.224-.391-.399-.216-.428-.04-.927.393-1.112 4.266-1.831 7.699-.043 7.843.034.433.231.608.747.391 1.154-.216.405-.74.546-1.173.318-.123-.063-2.832-1.432-6.278.047-.257.109-.547.085-.785-.042zm12.135 3.75c-.156-.098-.286-.243-.362-.424-.187-.442.023-.927.468-1.084 4.381-1.536 7.685.48 7.823.567.415.26.555.787.312 1.178-.242.39-.776.495-1.191.238-.12-.072-2.727-1.621-6.267-.379-.266.091-.553.046-.783-.096z"/></svg>';
-
-function renderNudge(li, todo) {
-  const shouldShow = !!todo.nudgeBy && !todo.completed;
-  const existing = li.querySelector('.todo__nudge');
-
-  if (shouldShow) {
-    li.classList.add('todo--nudged');
-    if (!existing) {
-      // 新增小爱心（节点不存在才建，避免重复）
-      const nudge = document.createElement('span');
-      nudge.className = 'todo__nudge';
-      nudge.setAttribute('aria-label', 'ta 想问问进度');
-      nudge.innerHTML = NUDGE_SVG;
-      // 点击取消（仅创建者本人）。用闭包捕获 todo id，避免 stale
-      nudge.addEventListener('click', (e) => {
-        e.stopPropagation();
-        // 实时从 state 取最新 todo，而非闭包里的旧引用
-        const latest = getTodos().find((t) => t.id === todo.id);
-        if (latest && latest.nudgeBy === (currentUser && currentUser.id)) {
-          toggleNudge(todo.id, false);
-        }
-      });
-      li.appendChild(nudge);
-    }
-  } else {
-    // 移除小爱心（存在才删）
-    li.classList.remove('todo--nudged');
-    if (existing) existing.remove();
-  }
-}
-
-/**
  * 渲染/更新「有图」徽标（原地增删，绝不重建 li）。
- * 由 renderItem（新建）和 updateItem（更新）统一调用，与 renderNudge / renderReactions 同模式。
+ * 由 renderItem（新建）和 updateItem（更新）统一调用，与 renderReactions 同模式。
  *
  * 设计取舍（2026-08-04 改版）：图片不再默认展开（太占屏），改为一个小相纸图标徽标，
- * 挂在 meta 行末尾。点击徽标 → 弹全屏 lightbox 查看大图，lightbox 内含「删除图片」按钮。
+ * 紧跟主文案之后（headline 行内，不额外占行）。点击徽标 → 弹全屏 lightbox 查看大图，
+ * lightbox 内含「删除图片」按钮。
  */
 function renderImage(li, todo) {
   const shouldShow = !!todo.imagePath;
-  const meta = li.querySelector('.todo__meta');
+  const headline = li.querySelector('.todo__headline');
   const existing = li.querySelector('.todo__image-badge');
 
   if (shouldShow) {
-    if (!existing && meta) {
+    if (!existing && headline) {
       const badge = document.createElement('button');
       badge.type = 'button';
       badge.className = 'todo__image-badge';
@@ -1305,7 +1368,7 @@ function renderImage(li, todo) {
         const latest = getTodos().find((t) => t.id === todo.id);
         if (latest && latest.imagePath) openImageLightbox(latest);
       });
-      meta.appendChild(badge);
+      headline.appendChild(badge);
     }
   } else {
     if (existing) existing.remove();
@@ -1329,44 +1392,30 @@ function renderItem(todo) {
   // 对勾 SVG（stroke-dasharray 动画由 CSS 控制）
   checkbox.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-  // ===== 手势区分：轻点=普通完成，长按=弹出居中蓄力层（带感完成）=====
-  // 仅未完成态支持带感（完成态的复选框已隐藏，只能轻点取消）
-  const LONG_PRESS_MS = 400; // 长按判定阈值（非蓄力时长）
-  let chargePressTimer = null;
-  let suppressClickUntil = 0; // 蓄力层触发后抑制随后的 click（防重复 toggle）
-
-  // 轻点仍走 click（保留原实时取 latest 的竞态保护逻辑）
+  // 轻点完成/取消完成（实时取 latest，竞态保护逻辑在 toggleComplete 内）。
+  // 按住超过 350ms 的松手 click 不算轻点：长按已统一由卡片菜单接管，
+  // 若不拦截，长按复选框弹菜单的同时松手 click 会误完成待办。
+  let checkDownAt = 0;
+  checkbox.addEventListener('pointerdown', () => { checkDownAt = Date.now(); });
   checkbox.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (Date.now() < suppressClickUntil) return;
+    if (Date.now() - checkDownAt > 350) return;
     const latest = getTodos().find((t) => t.id === todo.id);
     toggleComplete(todo.id, latest ? !latest.completed : !todo.completed);
   });
-
-  // 长按判定（仅未完成态）：按住超过 400ms → 弹出居中蓄力层
-  if (!todo.completed) {
-    const startChargePress = () => {
-      clearTimeout(chargePressTimer);
-      chargePressTimer = setTimeout(() => {
-        // 判定为长按 → 弹出蓄力层，接管交互（遮罩挡住卡片长按菜单，消除冲突）
-        suppressClickUntil = Date.now() + 800;
-        openHeartfulCharge(todo, checkbox);
-      }, LONG_PRESS_MS);
-    };
-    const cancelChargePress = () => { clearTimeout(chargePressTimer); };
-    checkbox.addEventListener('pointerdown', startChargePress);
-    checkbox.addEventListener('pointerup', cancelChargePress);
-    checkbox.addEventListener('pointerleave', cancelChargePress);
-    checkbox.addEventListener('pointercancel', cancelChargePress);
-  }
 
   // 文本与元信息
   const body = document.createElement('div');
   body.className = 'todo__body';
 
+  // headline：主文案 + 图片徽标同一行（徽标紧跟文案后边，不单独占行撑高卡片）
+  const headline = document.createElement('div');
+  headline.className = 'todo__headline';
+
   const textEl = document.createElement('div');
   textEl.className = 'todo__text';
   textEl.textContent = todo.text; // textContent 防注入
+  headline.appendChild(textEl);
 
   const metaEl = document.createElement('div');
   metaEl.className = 'todo__meta';
@@ -1391,14 +1440,11 @@ function renderItem(todo) {
   metaText.textContent = buildMetaText(todo);
   metaEl.appendChild(metaText);
 
-  body.appendChild(textEl);
+  body.appendChild(headline);
   body.appendChild(metaEl);
 
   li.appendChild(checkbox);
   li.appendChild(body);
-
-  // 轻轻提醒标记（由 renderNudge 统一管理：新建/更新都走它，保证一致）
-  renderNudge(li, todo);
 
   // 图片缩略图（有就显示，由 renderImage 统一管理）
   renderImage(li, todo);
@@ -1412,8 +1458,6 @@ function renderItem(todo) {
   // 长按弹出操作菜单（移动端长按 / 桌面端右键，各走各路不冲突）
   let pressTimer = null;
   const startPress = (e) => {
-    // 排除点在复选框上（避免长按复选框误触菜单）
-    if (e.target.closest && e.target.closest('.todo__check')) return;
     // 视觉进度反馈：卡片轻微缩放，让用户知道"再按一下就触发"
     li.classList.add('todo--pressing');
     pressTimer = setTimeout(() => {
@@ -1443,8 +1487,6 @@ function renderItem(todo) {
 const ICONS = {
   done: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
   undone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>',
-  // ask：twemoji 🤔 思考脸（与右上角 nudge 标记同款，彩色矢量，安卓不变黑）
-  ask: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="100%" height="100%"><circle fill="#FFCB4C" cx="18" cy="17.018" r="17"/><path fill="#65471B" d="M14.524 21.036c-.145-.116-.258-.274-.312-.464-.134-.46.13-.918.59-1.021 4.528-1.021 7.577 1.363 7.706 1.465.384.306.459.845.173 1.205-.286.358-.828.401-1.211.097-.11-.084-2.523-1.923-6.182-1.098-.274.061-.554-.016-.764-.184z"/><ellipse fill="#65471B" cx="13.119" cy="11.174" rx="2.125" ry="2.656"/><ellipse fill="#65471B" cx="24.375" cy="12.236" rx="2.125" ry="2.656"/><path fill="#F19020" d="M17.276 35.149s1.265-.411 1.429-1.352c.173-.972-.624-1.167-.624-1.167s1.041-.208 1.172-1.376c.123-1.101-.861-1.363-.861-1.363s.97-.4 1.016-1.539c.038-.959-.995-1.428-.995-1.428s5.038-1.221 5.556-1.341c.516-.12 1.32-.615 1.069-1.694-.249-1.08-1.204-1.118-1.697-1.003-.494.115-6.744 1.566-8.9 2.068l-1.439.334c-.54.127-.785-.11-.404-.512.508-.536.833-1.129.946-2.113.119-1.035-.232-2.313-.433-2.809-.374-.921-1.005-1.649-1.734-1.899-1.137-.39-1.945.321-1.542 1.561.604 1.854.208 3.375-.833 4.293-2.449 2.157-3.588 3.695-2.83 6.973.828 3.575 4.377 5.876 7.952 5.048l3.152-.681z"/><path fill="#65471B" d="M9.296 6.351c-.164-.088-.303-.224-.391-.399-.216-.428-.04-.927.393-1.112 4.266-1.831 7.699-.043 7.843.034.433.231.608.747.391 1.154-.216.405-.74.546-1.173.318-.123-.063-2.832-1.432-6.278.047-.257.109-.547.085-.785-.042zm12.135 3.75c-.156-.098-.286-.243-.362-.424-.187-.442.023-.927.468-1.084 4.381-1.536 7.685.48 7.823.567.415.26.555.787.312 1.178-.242.39-.776.495-1.191.238-.12-.072-2.727-1.621-6.267-.379-.266.091-.553.046-.783-.096z"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>',
   // 图片：相册/相框线性图标（配图入口）
   image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
@@ -1470,14 +1512,15 @@ function showTodoMenu(todo, liEl) {
   // 关掉已存在的菜单
   closeTodoMenu();
   // 关键：从 state 取最新 todo，而非闭包里的旧引用。
-  // 避免完成/标记状态变化后，菜单仍按旧状态显示选项（如已完成还显示"轻轻提醒"）。
+  // 避免完成状态变化后，菜单仍按旧状态显示选项。
   const latest = getTodos().find((t) => t.id === todo.id);
   if (latest) todo = latest;
 
-  // 遮罩层
+  // 遮罩层（只有点遮罩空白处才关闭；菜单内按钮的点击会冒泡上来，不能一并关闭，
+  // 否则"表情可连点"永远失效——点第一个表情菜单就没了）
   const overlay = document.createElement('div');
   overlay.className = 'action-sheet__overlay';
-  overlay.addEventListener('click', closeTodoMenu);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeTodoMenu(); });
 
   // 菜单容器
   const sheet = document.createElement('div');
@@ -1510,34 +1553,23 @@ function showTodoMenu(todo, liEl) {
   // 表情回应（仅已完成：三个表情，可连点）
   if (todo.completed) {
     REACTION_EMOJIS.forEach((key) => {
-      const isMine = isMyReaction(todo.id, key);
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'action-sheet__icon-btn action-sheet__icon-btn--reaction' + (isMine ? ' action-sheet__icon-btn--mine' : '');
+      btn.className = 'action-sheet__icon-btn action-sheet__icon-btn--reaction' + (isMyReaction(todo.id, key) ? ' action-sheet__icon-btn--mine' : '');
       btn.setAttribute('aria-label', getReactionLabel(key));
       btn.innerHTML = getReactionSvg(key);
       btn.addEventListener('click', () => {
         if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
-        toggleReaction(todo.id, key, isMine);
-        btn.classList.toggle('action-sheet__icon-btn--mine', !isMine);
+        // 状态在点击时实时查（菜单开着连点时，打开时的快照早已过期）
+        const mine = isMyReaction(todo.id, key);
+        toggleReaction(todo.id, key);
+        btn.classList.toggle('action-sheet__icon-btn--mine', !mine);
       });
       actions.appendChild(btn);
     });
   }
 
-  // 轻轻提醒（仅未完成 + 自己创建：问号图标，温和无逼迫感）
-  if (!todo.completed && todo.createdBy === (currentUser && currentUser.id)) {
-    const isNudged = !!todo.nudgeBy;
-    const nudgeBtn = mkIconBtn(ICONS.ask, isNudged ? '取消询问' : '问问进度', isNudged ? 'action-sheet__icon-btn--active' : '');
-    nudgeBtn.addEventListener('click', () => {
-      if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
-      toggleNudge(todo.id, !isNudged);
-      closeTodoMenu();
-    });
-    actions.appendChild(nudgeBtn);
-  }
-
-  // 配图 / 换图（一条待办最多一张图，无图=配图，有图=换图）
+  // 配图 / 换图（唯一的图片入口；删图/换图都收敛在 lightbox 里——"看图的地方就是操作图的地方"）
   const hasImage = !!todo.imagePath;
   const imageBtn = mkIconBtn(ICONS.image, hasImage ? '换图' : '配图', hasImage ? 'action-sheet__icon-btn--active' : '');
   imageBtn.addEventListener('click', async () => {
@@ -1546,17 +1578,6 @@ function showTodoMenu(todo, liEl) {
     await attachImageToTodo(todo.id, hasImage ? todo.imagePath : null);
   });
   actions.appendChild(imageBtn);
-
-  // 删图（仅在有图时出现，红色危险色，与"删除待办"区分）
-  if (hasImage) {
-    const rmImgBtn = mkIconBtn(ICONS.image, '删图', 'action-sheet__icon-btn--danger');
-    rmImgBtn.addEventListener('click', () => {
-      if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
-      closeTodoMenu();
-      removeImageFromTodo(todo.id, todo.imagePath);
-    });
-    actions.appendChild(rmImgBtn);
-  }
 
   // 删除（垃圾桶，rose 危险色）
   const delBtn = mkIconBtn(ICONS.trash, '删除', 'action-sheet__icon-btn--danger');
@@ -1617,10 +1638,6 @@ function updateItem(li, todo) {
       check.setAttribute('aria-label', todo.completed ? '标为未完成' : '标为已完成');
     }
   }
-  // 轻轻提醒标记：原地增删小爱心（绝不重建 li，根治重复/闪烁）
-  // 完成态变化也会走到这里，renderNudge 内部按 completed 决定显隐，
-  // 所以"完成→未完成"会自动恢复小爱心（T6/T7/T8）
-  renderNudge(li, todo);
   // 图片缩略图：配图/换图/删图时增删，绝不重建 li
   renderImage(li, todo);
   // 表情反应区：完成态变化时需要显隐，表情数量变化时需要刷新
@@ -1829,167 +1846,6 @@ function burstCardRing(todoId, rarity) {
     li.classList.add('todo--burst-legendary');
     setTimeout(() => li.classList.remove('todo--burst-legendary'), 750);
   }
-}
-
-/**
- * 带感完成居中蓄力层（长按复选框弹出）。
- * 半透明遮罩接管全屏交互（消除与卡片长按菜单的冲突），中央大爱心+进度环可见（不被手指挡）。
- * 松手即完成：蓄满=带感（飞心+贴heart），未蓄满=普通完成。
- */
-const HEARTFUL_CHARGE_MS = 600; // 蓄力时长（进度环填满）
-let heartfulEl = null;          // 蓄力层 DOM
-let heartfulState = { active: false, charged: false, todo: null, fromEl: null, chargeTimer: null };
-let heartfulDocHandlers = null; // document 级松手/触摸监听（蓄力期间）
-
-function openHeartfulCharge(todo, fromEl) {
-  if (heartfulState.active) return;
-  heartfulEl = document.getElementById('heartfulCharge');
-  if (!heartfulEl) return;
-  heartfulState = { active: true, charged: false, todo, fromEl, chargeTimer: null };
-
-  heartfulEl.hidden = false;
-  // 下一帧启动进度环动画（让浏览器先画出元素）
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => heartfulEl.classList.add('heartful-charge--charging'));
-  });
-
-  // 蓄力计时：到点标记 charged（爱心脉动提示"可以松手了"）
-  heartfulState.chargeTimer = setTimeout(() => {
-    if (heartfulState.active) {
-      heartfulState.charged = true;
-      heartfulEl.classList.add('heartful-charge--charged');
-      if (navigator.vibrate) { try { navigator.vibrate(20); } catch (_) {} }
-    }
-  }, HEARTFUL_CHARGE_MS);
-
-  // 遮罩点击 = 取消（不完成）
-  const overlay = heartfulEl.querySelector('.heartful-charge__overlay');
-  overlay.addEventListener('click', onHeartfulCancel, { once: true });
-
-  // document 级松手监听：蓄力期间任何 pointerup/touchend → 按 charged 状态完成
-  heartfulDocHandlers = {
-    up: () => finishHeartfulCharge(),
-    // pointercancel：系统打断（通知下拉等）。蓄满了仍完成（心意已表达），未满才取消
-    cancel: () => finishHeartfulCharge(!heartfulState.charged),
-  };
-  document.addEventListener('pointerup', heartfulDocHandlers.up);
-  document.addEventListener('touchend', heartfulDocHandlers.up);
-  document.addEventListener('pointercancel', heartfulDocHandlers.cancel);
-}
-
-/** 松手完成：charged=带感，否则普通完成；fromCancel=取消（不完成） */
-function finishHeartfulCharge(fromCancel = false) {
-  if (!heartfulState.active) return;
-  const { todo, charged, fromEl } = heartfulState;
-  closeHeartfulCharge();
-  if (!todo) return;
-  // 取消（拖出/pointercancel）→ 不完成
-  if (fromCancel) return;
-  // 蓄满 → 带感完成（飞心起点用蓄力层爱心，fromEl 传它）；未蓄满 → 普通完成
-  if (charged) {
-    const heartIcon = heartfulEl ? heartfulEl.querySelector('.heartful-charge__icon') : fromEl;
-    toggleComplete(todo.id, true, { heartful: true, fromEl: heartIcon || fromEl });
-  } else {
-    toggleComplete(todo.id, true);
-  }
-}
-
-/** 取消（点遮罩） */
-function onHeartfulCancel() {
-  closeHeartfulCharge();
-}
-
-/** 关闭蓄力层 + 清理监听/计时 */
-function closeHeartfulCharge() {
-  if (heartfulState.chargeTimer) { clearTimeout(heartfulState.chargeTimer); }
-  if (heartfulDocHandlers) {
-    document.removeEventListener('pointerup', heartfulDocHandlers.up);
-    document.removeEventListener('touchend', heartfulDocHandlers.up);
-    document.removeEventListener('pointercancel', heartfulDocHandlers.cancel);
-    heartfulDocHandlers = null;
-  }
-  if (heartfulEl) {
-    heartfulEl.classList.remove('heartful-charge--charging', 'heartful-charge--charged');
-    heartfulEl.hidden = true;
-  }
-  heartfulState = { active: false, charged: false, todo: null, fromEl: null, chargeTimer: null };
-}
-
-/**
- * 带感完成：一颗心从复选框飞向顶栏桃心（爱意送达的视觉隐喻）。
- * @param {HTMLElement} fromEl 飞行起点（复选框）
- */
-function flyHeartToTopbar(fromEl) {
-  const heart = document.getElementById('anniHeart');
-  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  if (!fromEl || !heart) {
-    if (heart) pulseTopbarHeart(heart);
-    return;
-  }
-
-  const startRect = fromEl.getBoundingClientRect();
-  const startX = startRect.left + startRect.width / 2;
-  const startY = startRect.top + startRect.height / 2;
-  const endRect = heart.getBoundingClientRect();
-  const endX = endRect.left + endRect.width / 2;
-  const endY = endRect.top + endRect.height / 2;
-
-  // reduced-motion：跳过飞行，只让桃心跳一下
-  if (reduceMotion) {
-    pulseTopbarHeart(heart);
-    return;
-  }
-
-  const fly = document.createElement('div');
-  fly.className = 'fly-heart';
-  fly.style.left = startX + 'px';
-  fly.style.top = startY + 'px';
-  document.body.appendChild(fly);
-
-  requestAnimationFrame(() => {
-    fly.classList.add('fly-heart--flying');
-    fly.style.setProperty('--end-x', (endX - startX) + 'px');
-    fly.style.setProperty('--end-y', (endY - startY) + 'px');
-  });
-
-  // 飞行中段让桃心准备接收；结束清理
-  setTimeout(() => pulseTopbarHeart(heart), 520);
-  setTimeout(() => { if (fly.parentNode) fly.remove(); }, 850);
-}
-
-/** 顶栏桃心接收跳动（带感完成的爱意送达） */
-function pulseTopbarHeart(heart) {
-  if (!heart) return;
-  heart.classList.remove('topbar__heart--receive');
-  void heart.offsetWidth; // 强制 reflow 重启动画
-  heart.classList.add('topbar__heart--receive');
-  setTimeout(() => heart.classList.remove('topbar__heart--receive'), 600);
-}
-
-/**
- * 带感完成首次引导：完成"对方创建的"待办时，复选框上方弹一次性气泡。
- * localStorage 记 flag，只提示一次，不反复打扰。
- */
-function showHeartfulHint(todoId) {
-  const KEY = 'heartfulHintShown';
-  try { if (localStorage.getItem(KEY)) return; } catch { return; }
-
-  const li = document.querySelector(`.todo[data-id="${CSS.escape(todoId)}"]`);
-  if (!li) return;
-  // 完成后卡片已下沉到已完成区，复选框已隐藏（opacity:0），用 li 定位气泡
-  const hint = document.createElement('span');
-  hint.className = 'todo__check-hint';
-  hint.textContent = '长按 ○ 可以带着心意完成 →';
-  li.appendChild(hint);
-  requestAnimationFrame(() => hint.classList.add('todo__check-hint--show'));
-
-  setTimeout(() => {
-    hint.classList.remove('todo__check-hint--show');
-    setTimeout(() => { if (hint.parentNode) hint.remove(); }, 300);
-  }, 5000);
-
-  try { localStorage.setItem(KEY, '1'); } catch {}
 }
 
 /**

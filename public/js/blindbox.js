@@ -39,23 +39,23 @@ export const RARITY_META = {
     stickerNames: ['初心', '萌芽', '晨光', '清欢'],
     // 图鉴点击时的专属短句（与名称一一对应）
     stickerFlavors: [
-      '一切，从第一条待办开始',
-      '小小的开始，也在认真生长',
+      '一直没变的心意，才叫初心',
+      '小小的日子，也在认真生长',
       '早起的意义，是先想到你',
       '平凡日常里的小确幸',
     ],
     // 稀有度配色（撒花/视觉用）：淡粉
     colors: ['#fda4af', '#fb7185', '#fecdd3'],
-    // 清新·自然意象：嫩芽 / 露珠 / 四叶草 / 小花
+    // 清新·自然意象：嫩芽 / 露珠 / 四叶草 / 小花（多层彩色插画，渐变 id 全局唯一）
     stickerIcons: [
-      // 嫩芽
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/><path d="M12 11C12 7 9 4 5 4c0 4 3 7 7 7z" fill="currentColor" opacity="0.9"/><path d="M12 13c0-3 3-6 7-6 0 4-3 6-7 6z" fill="currentColor" opacity="0.6"/></svg>',
-      // 露珠
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3s-6 7-6 12a6 6 0 0 0 12 0c0-5-6-12-6-12z" fill="currentColor" opacity="0.85"/><ellipse cx="9.5" cy="13" rx="1.5" ry="2" fill="rgba(255,255,255,0.5)"/></svg>',
-      // 四叶草
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5" fill="currentColor" opacity="0.8"/><circle cx="8" cy="12" r="3.5" fill="currentColor" opacity="0.7"/><circle cx="16" cy="12" r="3.5" fill="currentColor" opacity="0.7"/><circle cx="12" cy="16" r="3.5" fill="currentColor" opacity="0.8"/><path d="M12 8v8M8 12h8" stroke="rgba(255,255,255,0.4)" stroke-width="0.8"/></svg>',
-      // 小花
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="2.8" fill="currentColor" opacity="0.7"/><circle cx="7.5" cy="10.5" r="2.8" fill="currentColor" opacity="0.7"/><circle cx="16.5" cy="10.5" r="2.8" fill="currentColor" opacity="0.7"/><circle cx="10" cy="15" r="2.8" fill="currentColor" opacity="0.7"/><circle cx="14" cy="15" r="2.8" fill="currentColor" opacity="0.7"/><circle cx="12" cy="11.5" r="1.8" fill="rgba(255,255,255,0.7)"/></svg>',
+      // 初心·嫩芽：双色新叶 + 茎 + 露珠高光
+      '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="sk1a" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#4ade80"/><stop offset="1" stop-color="#16a34a"/></linearGradient><linearGradient id="sk1b" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#fbcfe8"/><stop offset="1" stop-color="#f472b6"/></linearGradient></defs><path d="M24 43V17" stroke="#22c55e" stroke-width="4" stroke-linecap="round" fill="none"/><path d="M24 28C24 17.5 16.5 9.5 6.5 9.5c0 10 6.5 18.5 17.5 18.5z" fill="url(#sk1b)"/><path d="M24 21c0-8.5 6.5-14.5 15.5-14.5 0 8.5-6 14.5-15.5 14.5z" fill="url(#sk1a)"/><ellipse cx="13.5" cy="16" rx="2.2" ry="3.6" fill="#fff" opacity=".55" transform="rotate(-32 13.5 16)"/><ellipse cx="31" cy="13.5" rx="1.8" ry="3" fill="#fff" opacity=".45" transform="rotate(28 31 13.5)"/><circle cx="38.5" cy="7" r="1.5" fill="#fda4af"/><circle cx="7" cy="6.5" r="1.2" fill="#fda4af" opacity=".7"/></svg>',
+      // 萌芽·露珠：蓝粉渐变水滴 + 高光 + 底部涟漪
+      '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="sk2a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#bae6fd"/><stop offset=".55" stop-color="#7dd3fc"/><stop offset="1" stop-color="#f9a8d4"/></linearGradient></defs><path d="M24 5s-11 12.5-11 21a11 11 0 0 0 22 0c0-8.5-11-21-11-21z" fill="url(#sk2a)"/><ellipse cx="18.5" cy="22" rx="2.6" ry="4.6" fill="#fff" opacity=".65" transform="rotate(18 18.5 22)"/><ellipse cx="29" cy="30" rx="1.6" ry="2.6" fill="#fff" opacity=".35" transform="rotate(-15 29 30)"/><ellipse cx="24" cy="42.5" rx="10" ry="2.5" fill="#38bdf8" opacity=".55"/><circle cx="37" cy="10" r="1.4" fill="#fda4af" opacity=".8"/></svg>',
+      // 晨光·四叶草：四叶团簇 + 白色叶脉 + 弯茎
+      '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="sk3a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4ade80"/><stop offset="1" stop-color="#15803d"/></linearGradient></defs><path d="M24 37c-.5 3 .5 5.5 2.5 7.5" stroke="#22c55e" stroke-width="2.6" stroke-linecap="round" fill="none"/><circle cx="17" cy="17" r="8" fill="url(#sk3a)"/><circle cx="31" cy="17" r="8" fill="url(#sk3a)"/><circle cx="17" cy="31" r="8" fill="url(#sk3a)"/><circle cx="31" cy="31" r="8" fill="url(#sk3a)"/><circle cx="24" cy="24" r="3.6" fill="#15803d"/><path d="M12 13.5l4.5 4.5M33.5 13.5L29 18" stroke="#fff" opacity=".5" stroke-width="1.6" stroke-linecap="round"/><ellipse cx="14.5" cy="14.5" rx="1.8" ry="2.8" fill="#fff" opacity=".5" transform="rotate(-40 14.5 14.5)"/></svg>',
+      // 清欢·小花：五瓣旋花 + 双色花心 + 嫩叶
+      '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="sk4a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbcfe8"/><stop offset="1" stop-color="#fb7185"/></linearGradient></defs><path d="M18 40c-4-1-6.5-4-6-8 3 1 5 3.5 5.5 7z" fill="#4ade80" opacity=".85"/><path d="M30 40c4-1 6.5-4 6-8-3 1-5 3.5-5.5 7z" fill="#4ade80" opacity=".85"/><g fill="url(#sk4a)"><ellipse cx="24" cy="11.5" rx="5.6" ry="7"/><ellipse cx="24" cy="11.5" rx="5.6" ry="7" transform="rotate(72 24 24)"/><ellipse cx="24" cy="11.5" rx="5.6" ry="7" transform="rotate(144 24 24)"/><ellipse cx="24" cy="11.5" rx="5.6" ry="7" transform="rotate(216 24 24)"/><ellipse cx="24" cy="11.5" rx="5.6" ry="7" transform="rotate(288 24 24)"/></g><circle cx="24" cy="24" r="5.8" fill="#fcd34d"/><circle cx="24" cy="24" r="3" fill="#f59e0b"/><ellipse cx="21.5" cy="9.5" rx="1.5" ry="2.6" fill="#fff" opacity=".6"/></svg>',
     ],
   },
   epic: {
@@ -72,16 +72,16 @@ export const RARITY_META = {
     ],
     // 稀有度配色：浅紫
     colors: ['#a78bfa', '#c4b5fd', '#8b5cf6'],
-    // 心动·浪漫意象：心跳 / 玫瑰 / 蝴蝶结 / 涟漪
+    // 心动·浪漫意象：心跳 / 玫瑰 / 蝴蝶结 / 涟漪（多层彩色插画）
     stickerIcons: [
-      // 心跳（爱心）
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.5-9-9c-1-2.5.5-5 3.5-5 2 0 3.5 1.5 5.5 3.5C14 7.5 15.5 6 17.5 6c3 0 4.5 2.5 3.5 5-2 4.5-9 9-9 9z" fill="currentColor"/></svg>',
-      // 玫瑰（多层花瓣）
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M12 9c0-3 2-5 0-6-2 1 0 3 0 6zM9 12c-3 0-5-2-6 0 1 2 3 0 6 0zM15 12c3 0 5-2 6 0-1 2-3 0-6 0zM12 15c0 3 2 5 0 6-2-1 0-3 0-6z" fill="currentColor" opacity="0.65"/><circle cx="12" cy="12" r="1.2" fill="rgba(255,255,255,0.7)"/></svg>',
-      // 蝴蝶结
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12L4 7c-1.5-1-3 0-3 2v6c0 2 1.5 3 3 2l8-5z" fill="currentColor" opacity="0.8"/><path d="M12 12l8-5c1.5-1 3 0 3 2v6c0 2-1.5 3-3 2l-8-5z" fill="currentColor" opacity="0.8"/><rect x="11" y="9" width="2" height="6" rx="1" fill="currentColor"/></svg>',
-      // 涟漪（同心圆扩散）
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.6"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.35"/></svg>',
+      // 心动·心跳：紫粉渐变爱心 + 白色心跳线
+      '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="sk5a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c4b5fd"/><stop offset=".55" stop-color="#a78bfa"/><stop offset="1" stop-color="#f472b6"/></linearGradient></defs><path d="M24 41C12 33 4 25 4 16.5 4 10 8.5 6 14 6c4 0 7.5 2.2 10 5.8C26.5 8.2 30 6 34 6c5.5 0 10 4 10 10.5C44 25 36 33 24 41z" fill="url(#sk5a)"/><path d="M9 22.5h6l3-6.5 4.5 12 3-5.5H34" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity=".85"/><ellipse cx="14.5" cy="14" rx="2.8" ry="4.4" fill="#fff" opacity=".38" transform="rotate(24 14.5 14)"/><circle cx="41" cy="9.5" r="1.6" fill="#f9a8d4"/><circle cx="6.5" cy="11" r="1.3" fill="#c4b5fd"/></svg>',
+      // 悸动·玫瑰：三层花瓣旋心 + 花萼 + 叶
+      '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="sk6a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f9a8d4"/><stop offset="1" stop-color="#db2777"/></linearGradient></defs><path d="M25 30c0 4.5-.8 8.5-3 12" stroke="#34d399" stroke-width="2.6" stroke-linecap="round" fill="none"/><path d="M22 34c-4.5-.5-7-3-7-6.5 3.5-.5 6.5 1.5 7.5 5z" fill="#4ade80"/><path d="M28 36.5c4.5-.5 7-3 7-6.5-3.5-.5-6.5 1.5-7.5 5z" fill="#4ade80"/><circle cx="24" cy="19" r="12" fill="url(#sk6a)"/><circle cx="24" cy="19" r="8" fill="#f9a8d4" opacity=".9"/><circle cx="24" cy="19" r="4.6" fill="#fbcfe8"/><path d="M24 19c1.6-.4 2.6-1.8 2.6-3.6" stroke="#db2777" stroke-width="1.8" stroke-linecap="round" fill="none" opacity=".7"/><ellipse cx="18" cy="12.5" rx="1.7" ry="3" fill="#fff" opacity=".55" transform="rotate(30 18 12.5)"/><circle cx="38.5" cy="8" r="1.5" fill="#f9a8d4"/></svg>',
+      // 钟情·蝴蝶结：双层缎带翼 + 中心结 + 飘带
+      '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="sk7a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ddd6fe"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient><linearGradient id="sk7b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbcfe8"/><stop offset="1" stop-color="#ec4899"/></linearGradient></defs><path d="M21 24C14.5 17 8 15.5 5.5 18.5 3 21.5 4 28 8 31c4 3 10 0 13-4z" fill="url(#sk7a)"/><path d="M27 24c6.5-7 13-8.5 15.5-5.5C45 21.5 44 28 40 31c-4 3-10 0-13-4z" fill="url(#sk7a)"/><path d="M21 24c-5.5-3.8-10-4.8-12.5-3.3M27 24c5.5-3.8 10-4.8 12.5-3.3" stroke="#fff" opacity=".45" fill="none" stroke-width="1.6" stroke-linecap="round"/><path d="M20.5 29.5 16 41l6-3.8L24 41l2.5-11z" fill="url(#sk7b)"/><path d="M27.5 29.5 32 41l-6-3.8L24 41l-2.5-11z" fill="url(#sk7b)"/><rect x="19.5" y="19" width="9" height="10.5" rx="3.4" fill="url(#sk7b)"/><ellipse cx="22" cy="22" rx="1.5" ry="2.3" fill="#fff" opacity=".55"/></svg>',
+      // 炽爱·涟漪：渐变爱心落入同心涟漪
+      '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="sk8a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c4b5fd"/><stop offset="1" stop-color="#ec4899"/></linearGradient></defs><path d="M24 8c4.5 0 8 3.4 8 7.6 0 6.2-8 13.4-8 13.4S16 21.8 16 15.6C16 11.4 19.5 8 24 8z" fill="url(#sk8a)"/><ellipse cx="20.5" cy="13.5" rx="2" ry="3.2" fill="#fff" opacity=".5" transform="rotate(20 20.5 13.5)"/><ellipse cx="24" cy="37.5" rx="16.5" ry="4.2" fill="none" stroke="#a78bfa" stroke-width="2" opacity=".4"/><ellipse cx="24" cy="37.5" rx="10" ry="2.7" fill="none" stroke="#a78bfa" stroke-width="2" opacity=".65"/><ellipse cx="24" cy="37.5" rx="4.4" ry="1.4" fill="#c4b5fd"/><circle cx="9" cy="29.5" r="1.5" fill="#c4b5fd"/><circle cx="39" cy="30.5" r="1.8" fill="#f9a8d4"/></svg>',
     ],
   },
   legendary: {
@@ -98,16 +98,16 @@ export const RARITY_META = {
     ],
     // 稀有度配色：香槟金
     colors: ['#fbbf24', '#fcd34d', '#f59e0b'],
-    // 永恒·珍贵意象：王冠 / 星辰 / 钻石 / 彩虹
+    // 永恒·珍贵意象：王冠 / 星辰 / 钻石 / 星河（香槟金多层插画）
     stickerIcons: [
-      // 王冠
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l3.5 3L12 5l5.5 7L21 9v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9z" fill="currentColor"/><circle cx="3" cy="7" r="1.3" fill="currentColor" opacity="0.6"/><circle cx="21" cy="7" r="1.3" fill="currentColor" opacity="0.6"/><circle cx="12" cy="3" r="1.3" fill="currentColor" opacity="0.6"/></svg>',
-      // 星辰（大星 + 小星点缀）
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.8 7.2L22 12l-7.2 2.8L12 22l-2.8-7.2L2 12l7.2-2.8z" fill="currentColor"/><path d="M18 4l.7 1.8L20.5 6.5l-1.8.7L18 9l-.7-1.8L15.5 6.5l1.8-.7z" fill="currentColor" opacity="0.6"/></svg>',
-      // 钻石（菱形多面）
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2L4 9l8 13 8-13z" fill="currentColor"/><path d="M4 9h16M12 2v20M8 9l4-7 4 7" stroke="rgba(255,255,255,0.4)" stroke-width="0.8" fill="none"/></svg>',
-      // 彩虹（三道弧）
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18a9 9 0 0 1 18 0" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6 18a6 6 0 0 1 12 0" fill="none" stroke="currentColor" stroke-width="2" opacity="0.6"/><path d="M9 18a3 3 0 0 1 6 0" fill="none" stroke="currentColor" stroke-width="2" opacity="0.35"/></svg>',
+      // 永恒·王冠：金冠 + 三珠尖 + 宝石带
+      '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="sk9a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fde68a"/><stop offset="1" stop-color="#f59e0b"/></linearGradient></defs><path d="M7 32 4.5 14l9 6.5L24 8l10.5 12.5 9-6.5L41 32z" fill="url(#sk9a)"/><rect x="6.5" y="32" width="35" height="6.5" rx="2.6" fill="#f59e0b"/><rect x="6.5" y="32" width="35" height="2.4" rx="1.2" fill="#fde68a" opacity=".7"/><circle cx="4" cy="12" r="2.3" fill="#fbbf24"/><circle cx="24" cy="6" r="2.5" fill="#fbbf24"/><circle cx="44" cy="12" r="2.3" fill="#fbbf24"/><circle cx="15" cy="35.2" r="1.7" fill="#fb7185"/><circle cx="24" cy="35.2" r="1.9" fill="#f43f5e"/><circle cx="33" cy="35.2" r="1.7" fill="#fb7185"/><path d="M11.5 27l2.5-7" stroke="#fff" opacity=".55" stroke-width="2" stroke-linecap="round"/></svg>',
+      // 璀璨·星辰：四芒主星 + 光芒 + 小星
+      '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="sk10a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fef3c7"/><stop offset=".5" stop-color="#fcd34d"/><stop offset="1" stop-color="#f59e0b"/></linearGradient></defs><g stroke="#fcd34d" stroke-width="2" stroke-linecap="round" opacity=".5"><path d="M24 2.5v4.5"/><path d="M24 41v4.5"/><path d="M2.5 24H7"/><path d="M41 24h4.5"/><path d="M8.5 8.5l3 3"/><path d="M36.5 36.5l3 3"/><path d="M39.5 8.5l-3 3"/><path d="M11.5 36.5l-3 3"/></g><path d="M24 6c1.6 7.5 4.5 12.5 12 14-7.5 1.5-10.4 6.5-12 14-1.6-7.5-4.5-12.5-12-14 7.5-1.5 10.4-6.5 12-14z" fill="url(#sk10a)"/><circle cx="20.5" cy="16.5" r="1.8" fill="#fff" opacity=".85"/><path d="M37.5 6l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" fill="#fde68a"/></svg>',
+      // 至臻·钻石：切面宝石 + 刻面线 + 高光
+      '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="sk11a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fef9c3"/><stop offset="1" stop-color="#fcd34d"/></linearGradient><linearGradient id="sk11b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fde68a"/><stop offset="1" stop-color="#f59e0b"/></linearGradient></defs><path d="M14 10h20l8 9-18 21L6 19z" fill="url(#sk11a)"/><path d="M18 19h12l-6 21z" fill="url(#sk11b)" opacity=".55"/><path d="M14 10l4 9h12l4-9M18 19l6 21 6-21M6 19h12M30 19h12" stroke="#fff" stroke-width="1.4" opacity=".55" fill="none"/><path d="M16.5 12.5h9" stroke="#fff" stroke-width="2" opacity=".8" stroke-linecap="round"/><path d="M40 4.5l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6z" fill="#fde68a"/></svg>',
+      // 神话·星河：金色旋臂星系 + 流星
+      '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="sk12a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fde68a"/><stop offset="1" stop-color="#f59e0b"/></linearGradient></defs><path d="M24 24c-8.5-6-9.5-16-2.5-21.5" fill="none" stroke="url(#sk12a)" stroke-width="2.6" stroke-linecap="round" opacity=".8"/><path d="M24 24c8.5 6 9.5 16 2.5 21.5" fill="none" stroke="url(#sk12a)" stroke-width="2.6" stroke-linecap="round" opacity=".8"/><circle cx="24" cy="24" r="5.2" fill="url(#sk12a)"/><circle cx="24" cy="24" r="2.2" fill="#fffbeb"/><circle cx="18.5" cy="9" r="1.8" fill="#fcd34d"/><circle cx="30" cy="39" r="1.8" fill="#fcd34d"/><circle cx="13" cy="17" r="1.3" fill="#fde68a"/><circle cx="35" cy="31" r="1.3" fill="#fde68a"/><path d="M44.5 5.5 34.5 15.5" stroke="#fde68a" stroke-width="2" stroke-linecap="round" opacity=".7"/><path d="M37 3.5l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z" fill="#fbbf24"/></svg>',
     ],
   },
 };

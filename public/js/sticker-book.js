@@ -265,17 +265,57 @@ function bindGridInteraction() {
   });
 }
 
-/** 弹跳动画 + 展示贴纸专属短句（带解锁日期，日期不进格子以免撑高） */
+/** 弹跳动画 + 弹出「贴纸故事卡」（弹层内展示，不再走全局 Toast——会被弹层遮挡） */
+let flavorTimer = null;
 function revealFlavor(cell) {
   cell.classList.remove('sticker-cell--pop');
   // 强制 reflow，保证连续点击也能重放动画
   void cell.offsetWidth;
   cell.classList.add('sticker-cell--pop');
-  const flavor = getStickerFlavor(cell.dataset.key);
-  if (!flavor) return;
-  const sticker = getStickers().find((s) => s.stickerKey === cell.dataset.key);
+
+  const key = cell.dataset.key || '';
+  const flavor = getStickerFlavor(key);
+  const card = document.getElementById('stickerFlavor');
+  if (!flavor || !card) return;
+
+  const match = /^(rare|epic|legendary)_(\d+)$/.exec(key);
+  if (!match) return;
+  const meta = RARITY_META[match[1]];
+  const name = meta.stickerNames[parseInt(match[2], 10) - 1] || meta.label;
+  const sticker = getStickers().find((s) => s.stickerKey === key);
   const date = sticker ? formatDate(sticker.unlockedAt) : '';
-  showToast(date ? `${flavor}（${date}解锁）` : flavor);
+
+  card.className = 'sticker-modal__flavor sticker-modal__flavor--' + match[1];
+  card.innerHTML = '';
+
+  const icon = document.createElement('span');
+  icon.className = 'sticker-modal__flavor-icon';
+  icon.innerHTML = getStickerIcon(key);
+  card.appendChild(icon);
+
+  const bodyEl = document.createElement('div');
+  bodyEl.className = 'sticker-modal__flavor-body';
+  const title = document.createElement('div');
+  title.className = 'sticker-modal__flavor-title';
+  title.textContent = `${name} · ${meta.label}${date ? ` · ${date}解锁` : ''}`;
+  const text = document.createElement('div');
+  text.className = 'sticker-modal__flavor-text';
+  text.textContent = flavor;
+  bodyEl.appendChild(title);
+  bodyEl.appendChild(text);
+  card.appendChild(bodyEl);
+
+  // 下一帧加 show 类，保证过渡动画每次都能重放
+  requestAnimationFrame(() => card.classList.add('sticker-modal__flavor--show'));
+  clearTimeout(flavorTimer);
+  flavorTimer = setTimeout(hideFlavorCard, 3200);
+}
+
+/** 隐藏贴纸故事卡 */
+function hideFlavorCard() {
+  clearTimeout(flavorTimer);
+  const card = document.getElementById('stickerFlavor');
+  if (card) card.classList.remove('sticker-modal__flavor--show');
 }
 
 /**
@@ -291,6 +331,8 @@ async function openStickerBook() {
   seenSnapshot = getSeenKeys();
   // 先显示弹层（渲染期间用户能看到加载态）
   modal.classList.remove('hidden');
+  // 锁背景滚动（与其他弹层一致）
+  document.body.style.overflow = 'hidden';
   // 主动拉取最新数据（容错：失败则用本地缓存）
   try {
     const stickers = await db.listStickers();
@@ -305,8 +347,10 @@ async function openStickerBook() {
 /** 关闭图鉴弹层。此刻才把当前所有贴纸标记为已看 → 清红点。 */
 export function closeStickerBook() {
   const modal = document.getElementById('stickerModal');
-  if (!modal) return;
+  if (!modal || modal.classList.contains('hidden')) return;
   modal.classList.add('hidden');
+  hideFlavorCard();
+  document.body.style.overflow = '';
   markKeysSeen(getStickers().map((s) => s.stickerKey));
   updateBadge();
 }
@@ -353,6 +397,12 @@ export function initStickerBook(opts = {}) {
       if (e.target === modal) closeStickerBook();
     });
   }
+  // ESC 关闭（与其他弹层一致的键盘出口）
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const m = document.getElementById('stickerModal');
+    if (m && !m.classList.contains('hidden')) closeStickerBook();
+  });
 
   bindGridInteraction();
 

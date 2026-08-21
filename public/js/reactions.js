@@ -101,11 +101,13 @@ export function isMyReaction(todoId, key) {
 
 /**
  * 切换表情：贴 / 取消（供 action sheet 调用）
+ * 当前是否已贴以本地缓存为准（isMyReaction 实时查询），
+ * 不信任调用方传入的快照——菜单开着连点时快照是陈旧的，会导致重复贴。
  * @param {string} todoId
  * @param {string} emoji
- * @param {boolean} currentlyMine 当前是否已贴
  */
-export async function toggleReaction(todoId, emoji, currentlyMine) {
+export async function toggleReaction(todoId, emoji) {
+  const currentlyMine = isMyReaction(todoId, emoji);
   if (currentlyMine) {
     removeLocal(todoId, emoji, currentUser && currentUser.id);
     rerenderTodo(todoId);
@@ -223,16 +225,26 @@ function rerenderTodo(todoId) {
 
 // ===== Realtime 回调（由 realtime.js 调用）=====
 
-/** 对方/自己贴了表情（Realtime 推送） */
+/** 对方/自己贴了表情（Realtime 推送）
+ *  自己贴的表情也会收到回推（订阅不区分用户），而乐观更新已在本地留了临时行，
+ *  所以按 (userId, emoji) 去重：临时行被真实行替换，绝不重复入列表（否则计数翻倍）。
+ */
 export function onReactionAdded(reaction) {
-  const wasMineBefore = (reactionsByTodo[reaction.todoId] || []).some(
-    (r) => r.emoji === reaction.emoji && r.userId === reaction.userId
+  const list = reactionsByTodo[reaction.todoId] || [];
+  const normKey = normalizeKey(reaction.emoji);
+  const idx = list.findIndex(
+    (r) => r.userId === reaction.userId && normalizeKey(r.emoji) === normKey
   );
-  addLocal(reaction);
+  if (idx >= 0) {
+    if (list[idx].id === reaction.id) return; // 同一行重复推送，幂等
+    list[idx] = reaction; // 用真实行替换乐观临时行
+  } else {
+    addLocal(reaction);
+  }
   rerenderTodo(reaction.todoId);
-  // 对方贴的（非自己）→ 触发该 todo 上的小动画
+  // 对方贴的（非自己、且本地原先没有）→ 触发该 todo 上的小动画
   if (
-    !wasMineBefore &&
+    idx < 0 &&
     reaction.userId !== (currentUser && currentUser.id) &&
     onRemoteReactionFn
   ) {
@@ -240,8 +252,15 @@ export function onReactionAdded(reaction) {
   }
 }
 
-/** 表情被取消（Realtime 推送） */
+/** 表情被取消（Realtime 推送）
+ *  默认 replica identity 下 DELETE 事件只带主键 id，todoId 可能为空——
+ *  此时按 id 从本地缓存反查所属待办（该行一定经 INSERT 回推进过缓存）。 */
 export function onReactionRemoved(reactionId, todoId) {
+  if (!todoId) {
+    for (const [tid, list] of Object.entries(reactionsByTodo)) {
+      if (list.some((r) => r.id === reactionId)) { todoId = tid; break; }
+    }
+  }
   const list = reactionsByTodo[todoId];
   if (!list) return;
   reactionsByTodo[todoId] = list.filter((r) => r.id !== reactionId);

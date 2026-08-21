@@ -159,21 +159,3 @@
   text-align: center;
 }
 
-/* ===== 暗色模式（跟随系统）：夜玫瑰登录页 ===== */
-@media (prefers-color-scheme: dark) {
-  .login {
-    background:
-      radial-gradient(900px 420px at 50% -8%, rgba(244, 63, 94, 0.10), transparent 62%),
-      linear-gradient(180deg, #211a1d 0%, #1a1618 48%, #201a1d 100%);
-  }
-  .login__card {
-    background: rgba(45, 39, 42, 0.86);
-    border-color: rgba(255, 255, 255, 0.07);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 16px 44px rgba(0, 0, 0, 0.4);
-  }
-  .login__error {
-    background: rgba(239, 68, 68, 0.12);
-    border-color: rgba(239, 68, 68, 0.35);
-    color: #fda4af;
-  }
-}

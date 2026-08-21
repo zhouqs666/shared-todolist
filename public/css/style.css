@@ -101,16 +101,6 @@ input, textarea, [contenteditable] {
   --color-primary-dark: #d97706;
   --color-primary-rgb: 245, 158, 11;
 }
-[data-theme="dark"] {
-  --color-primary: #10b981;
-  --color-primary-dark: #059669;
-  --color-primary-rgb: 16, 185, 129;
-  --color-text: #f9fafb;
-  --color-text-muted: #9ca3af;
-  --color-border: #374151;
-  --color-bg: #111827;
-  --color-surface: #1f2937;
-}
 
 /* 主题切换平滑过渡 */
 body,
@@ -516,7 +506,7 @@ input {
   transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.3s var(--ease);
   /* backwards：配合 JS 的入场延迟，延迟期间的卡片停在起始帧（不闪现） */
   animation: todo-enter 0.25s var(--ease) backwards;
-  position: relative; /* 给 .todo__nudge（绝对定位）做定位上下文，否则会飘到祖先容器 */
+  position: relative; /* 绝对定位子元素的定位上下文 */
 }
 
 @media (hover: hover) {
@@ -620,152 +610,6 @@ input {
   .todo__check, .todo__check svg, .todo__check--done { animation: none; transition: none; }
 }
 
-/* ===== 带感完成：居中蓄力层（长按复选框弹出，避开手指遮挡+消除冲突）===== */
-.heartful-charge { position: fixed; inset: 0; z-index: 200; }
-.heartful-charge[hidden] { display: none; }
-/* 全屏半透明遮罩：接管交互，阻挡卡片长按菜单 */
-.heartful-charge__overlay {
-  position: absolute; inset: 0;
-  background: rgba(17, 24, 39, 0);
-  transition: background 0.2s var(--ease);
-}
-.heartful-charge:not([hidden]) .heartful-charge__overlay {
-  background: rgba(17, 24, 39, 0.45);
-  backdrop-filter: blur(2px);
-}
-/* 中央爱心 + 进度环 */
-.heartful-charge__heart {
-  position: absolute;
-  top: 38%; left: 50%;
-  transform: translate(-50%, -50%) scale(0.7);
-  width: 120px; height: 120px;
-  display: flex; align-items: center; justify-content: center;
-  opacity: 0;
-  transition: opacity 0.25s var(--ease), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.heartful-charge:not([hidden]) .heartful-charge__heart {
-  opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
-}
-/* 进度环 SVG（外圈，96px 直径区域）*/
-.heartful-charge__progress {
-  position: absolute; inset: 0;
-  width: 120px; height: 120px;
-  transform: rotate(-90deg); /* 从顶部顺时针 */
-}
-.heartful-charge__track {
-  stroke: rgba(255, 255, 255, 0.18);
-  stroke-width: 3;
-}
-.heartful-charge__bar {
-  stroke: var(--rose-400);
-  stroke-width: 3.5;
-  stroke-linecap: round;
-  /* r=46, 周长 ≈ 289 */
-  stroke-dasharray: 289;
-  stroke-dashoffset: 289;
-  transition: stroke-dashoffset 0.6s linear;
-}
-/* 蓄力中：进度环填满 */
-.heartful-charge--charging .heartful-charge__bar {
-  stroke-dashoffset: 0;
-}
-/* 蓄满：环转高亮 + 爱心脉动 */
-.heartful-charge__icon {
-  position: relative; z-index: 1;
-  color: var(--rose-500);
-  display: flex; align-items: center; justify-content: center;
-  filter: drop-shadow(0 0 12px rgba(244, 63, 94, 0.5));
-  transition: transform 0.3s var(--ease), color 0.2s;
-}
-.heartful-charge--charged .heartful-charge__icon {
-  color: var(--rose-600);
-  animation: heartful-charged-pulse 0.6s var(--ease) infinite;
-}
-.heartful-charge--charged .heartful-charge__bar {
-  stroke: var(--rose-500);
-}
-@keyframes heartful-charged-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.15); }
-}
-/* 提示文案 */
-.heartful-charge__label {
-  position: absolute;
-  top: calc(100% + 20px);
-  left: 50%;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.8);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
-}
-@media (prefers-reduced-motion: reduce) {
-  .heartful-charge__bar { transition: none; }
-  .heartful-charge--charged .heartful-charge__icon { animation: none; }
-  .heartful-charge__heart { transition: opacity 0.15s; }
-}
-
-/* ===== 带感完成：飞心动画（从复选框飞向顶栏桃心）===== */
-.fly-heart {
-  position: fixed;
-  width: 20px;
-  height: 20px;
-  z-index: 300;
-  pointer-events: none;
-  transform: translate(-50%, -50%) scale(0.4);
-  opacity: 0;
-  /* rose 渐变小爱心 + 柔光 */
-  background: radial-gradient(circle, #fff 0%, #fda4af 40%, #f43f5e 75%, transparent 100%);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21s-7.5-4.7-7.5-10.2C4.5 7.6 7 5.5 9.8 5.5c1.4 0 2.7.7 3.2 1.8.5-1.1 1.8-1.8 3.2-1.8 2.8 0 5.3 2.1 5.3 5.3C21.5 16.3 12 21 12 21z'/%3E%3C/svg%3E") center/contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21s-7.5-4.7-7.5-10.2C4.5 7.6 7 5.5 9.8 5.5c1.4 0 2.7.7 3.2 1.8.5-1.1 1.8-1.8 3.2-1.8 2.8 0 5.3 2.1 5.3 5.3C21.5 16.3 12 21 12 21z'/%3E%3C/svg%3E") center/contain no-repeat;
-  filter: drop-shadow(0 0 6px rgba(244, 63, 94, 0.5));
-}
-.fly-heart--flying {
-  animation: fly-heart-to-top 0.8s var(--ease) forwards;
-}
-@keyframes fly-heart-to-top {
-  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
-  15%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  70%  { opacity: 1; transform: translate(calc(-50% + var(--end-x) * 0.85), calc(-50% + var(--end-y) * 0.7 - 30px)) scale(0.9); }
-  100% { opacity: 0; transform: translate(calc(-50% + var(--end-x)), calc(-50% + var(--end-y))) scale(0.3); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .fly-heart--flying { animation: none; opacity: 0; }
-}
-
-/* ===== 带感完成首次引导：复选框上方气泡 ===== */
-.todo__check-hint {
-  position: absolute;
-  top: 30px;
-  right: -4px;
-  background: var(--rose-500);
-  color: #fff;
-  font-size: 11px;
-  padding: 5px 10px;
-  border-radius: 10px;
-  white-space: nowrap;
-  z-index: 6;
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity 0.3s var(--ease), transform 0.3s var(--ease);
-  pointer-events: none;
-  box-shadow: 0 2px 10px rgba(244, 63, 94, 0.3);
-}
-.todo__check-hint::before {
-  content: "";
-  position: absolute;
-  top: -5px;
-  right: 12px;
-  border: 5px solid transparent;
-  border-bottom-color: var(--rose-500);
-  border-top: none;
-}
-.todo__check-hint--show {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 .todo__body {
   flex: 1;
   min-width: 0;
@@ -793,6 +637,14 @@ input {
   align-items: center;
   gap: 5px;
   flex-wrap: wrap;
+}
+/* meta 文字：占满头像以外的剩余宽度、内部自行换行。
+ * 若不设 flex/min-width，flex 换行按整段文字的 max-content 判定，
+ * meta 一长（时间+备注）整块被挤到下一行，头像单独占一行。 */
+.todo__meta-text {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere; /* 长串（网址/英文）也能断行，不撑宽卡片 */
 }
 
 /* 待办项 meta 中的小头像（创建者）：极细玫瑰描边，融入卡片色调 */
@@ -835,7 +687,7 @@ input {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
-  z-index: 100;
+  z-index: 10000; /* 高于一切弹层（图鉴 1000 / lightbox 9999），弹层内反馈不被遮挡 */
   max-width: 80vw;
   display: flex;
   align-items: center;
@@ -1110,7 +962,7 @@ input {
 .action-sheet__icon-btn--reaction {
   color: var(--color-text-muted);
 }
-/* 已选中态（自己贴过 / 已 nudge） */
+/* 已选中态（自己贴过） */
 .action-sheet__icon-btn--mine,
 .action-sheet__icon-btn--active {
   color: var(--color-primary);
@@ -1356,55 +1208,8 @@ input {
   transform: scale(0.88);
 }
 
-/* ===== 轻轻提醒标记（克制、不催促） ===== */
-/* 被标记的待办：左侧一道极淡的玫红竖条（像便利贴的标记） */
-.todo--nudged {
-  border-left: 3px solid #fde68a;
-  /* 边框颜色用 padding-left 补偿，避免内容左移 */
-  padding-left: 11px;
-  position: relative;
-}
-
-/* 右上角提醒标记：twemoji 🤔 思考脸（彩色矢量，安卓不变黑）。
-   温和询问、无逼迫感，极轻微呼吸。 */
-.todo__nudge {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: todo-nudge-pulse 4s ease-in-out infinite;
-  cursor: pointer;
-}
-.todo__nudge svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-@keyframes todo-nudge-pulse {
-  0%, 100% { opacity: 0.55; transform: scale(1); }
-  50%      { opacity: 0.9;  transform: scale(1.12); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .todo__nudge { animation: none; }
-}
-
-/* 完成的待办即使被标记也不显示（已完成无需提醒） */
-.todo--done.todo--nudged {
-  border-left: 1px solid var(--color-border);
-  padding-left: 14px;
-}
-.todo--done .todo__nudge {
-  display: none;
-}
-
 /* ============================================================
-   V2.2 克制版：完成角标 / 悄悄留言（阅后即焚）/ 表情回应 / nudge 问号
+   V2.2 克制版：完成角标 / 悄悄留言（阅后即焚）/ 表情回应
    设计原则：配角隐形，主角是清单。需要时才浮现。
    全部复用 CSS 变量，5 套主题 + 深色自动适配。
    ============================================================ */
@@ -1827,15 +1632,9 @@ input {
   box-shadow: 0 4px 24px rgba(0,0,0,0.3);
 }
 .note-read--night .note-read__seal {
-  background: rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.08);
   color: #fda4af;
   box-shadow: 0 0 0 6px rgba(253, 164, 175, 0.1);
-}
-/* 深色主题下降饱和度，避免过于刺眼 */
-@media (prefers-color-scheme: dark) {
-  .note-read--dawn {
-    background: linear-gradient(165deg, #2a1f17 0%, #2d1e22 50%, #1f1a14 100%);
-  }
 }
 
 /* ===== 留言飞向桃心：爱意送达/珍藏的视觉隐喻 ===== */
@@ -1928,20 +1727,34 @@ input {
   background: rgba(244, 63, 94, 0.05);
 }
 
-/* ===== 待办「有图」徽标（小相纸图标，挂 meta 行末尾）=====
+/* ===== 待办「有图」徽标（小相纸图标，紧跟主文案后边）=====
    图片不默认展开（太占屏），仅以小图标提示「这条有图」。
+   徽标挂在 headline 行内（主文案右侧），不单独占行、不撑高卡片。
    点徽标 → 弹全屏 lightbox 查看大图（见 .img-lightbox）。 */
+.todo__headline {
+  display: flex;
+  flex-wrap: wrap;    /* 文案过长换行时，徽标自然跟在末行文字后 */
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  /* 右上角完成圆圈是绝对定位（top:9/right:11/18px，不占布局流），
+     预留右侧空间防止长文案首行压到圆圈：16px 内边距 + 18px = 距卡片右缘 34px > 圆圈左缘 29px */
+  padding-right: 18px;
+}
+.todo__headline .todo__text {
+  flex: 0 1 auto;     /* 不占满，让徽标紧跟文案，而不是被推到最右 */
+  min-width: 0;
+}
 .todo__image-badge {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  margin-left: auto; /* 推到 meta 行最右 */
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: 7px;
   background: var(--color-accent-soft, rgba(244, 114, 182, 0.14));
   color: var(--color-accent, #f472b6);
   cursor: pointer;
@@ -1949,7 +1762,7 @@ input {
   transition: transform 0.15s var(--ease), background 0.15s var(--ease);
   animation: reactions-enter 0.3s var(--ease);
 }
-.todo__image-badge svg { width: 15px; height: 15px; }
+.todo__image-badge svg { width: 13px; height: 13px; }
 .todo__image-badge:active { transform: scale(0.9); }
 @media (hover: hover) {
   .todo__image-badge:hover { background: var(--color-accent, #f472b6); color: #fff; }
@@ -1958,7 +1771,7 @@ input {
   .todo__image-badge { animation: none; transition: none; }
 }
 
-/* ===== 图片全屏预览（lightbox）===== */
+/* ===== 图片全屏预览（lightbox，标准查看器）===== */
 .img-lightbox {
   position: fixed;
   inset: 0;
@@ -1976,7 +1789,35 @@ input {
   object-fit: contain;
   border-radius: 8px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+  touch-action: none;          /* 手势自管：禁浏览器默认双击缩放/滚动 */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
+/* 缩放动画（拖拽时移除，保持跟手） */
+.img-lightbox__img--anim {
+  transition: transform 0.25s var(--ease);
+}
+/* 加载指示：转圈 → onload 移除；失败态换文案 */
+.img-lightbox__loading {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+}
+.img-lightbox__loading i {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  animation: icon-spin 0.8s linear infinite;
+}
+.img-lightbox__loading--err i { display: none; }
 .img-lightbox__close {
   position: absolute;
   top: max(16px, env(safe-area-inset-top));
@@ -1995,25 +1836,48 @@ input {
 }
 .img-lightbox__close svg { width: 20px; height: 20px; }
 .img-lightbox__close:active { background: rgba(255, 255, 255, 0.3); }
-.img-lightbox__del {
+/* 底部操作条：换图 + 删除（删除两段式，确认态深红） */
+.img-lightbox__actions {
   position: absolute;
   bottom: max(24px, env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
-  padding: 11px 28px;
+  display: flex;
+  gap: 10px;
+}
+.img-lightbox__act {
+  padding: 11px 26px;
   border: none;
   border-radius: 999px;
-  background: #e11d48;
+  background: rgba(255, 255, 255, 0.14);
   color: #fff;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.15s var(--ease), transform 0.1s var(--ease);
+}
+.img-lightbox__act:active { transform: scale(0.96); }
+.img-lightbox__act--del {
+  background: #e11d48;
   box-shadow: 0 4px 16px rgba(225, 29, 72, 0.4);
 }
-.img-lightbox__del:active { transform: translateX(-50%) scale(0.96); }
+.img-lightbox__act--confirm {
+  background: #9f1239;
+  box-shadow: 0 4px 16px rgba(159, 18, 57, 0.5);
+  animation: del-confirm-pulse 0.6s var(--ease);
+}
+@keyframes del-confirm-pulse {
+  0% { transform: scale(0.94); }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
 @media (prefers-reduced-motion: reduce) {
   .img-lightbox { animation: none; }
+  .img-lightbox__img--anim { transition: none; }
+  .img-lightbox__act--confirm { animation: none; }
 }
 
 /* ===== 待办表情胶囊（极小，仅已贴才显示）=====
@@ -2260,6 +2124,54 @@ input {
   border: 2px solid var(--color-surface);
 }
 
+/* ===== 已选图片预览浮条（悬浮在添加面板上方：缩略图 + × 取消）===== */
+.add-panel__preview {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(24, 20, 22, 0.16);
+  animation: add-preview-in 0.22s var(--ease);
+}
+@keyframes add-preview-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.add-panel__preview[hidden] { display: none; }
+.add-panel__preview-img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+  background: var(--color-bg);
+}
+.add-panel__preview-cancel {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(41, 37, 36, 0.82);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+.add-panel__preview-cancel:active { transform: scale(0.9); }
+
 /* 遮罩 */
 .add-overlay {
   position: fixed;
@@ -2308,7 +2220,7 @@ input {
   transform: translateY(100%);
   transition: transform 0.28s var(--ease);
 }
-.action-sheet__overlay--show .note-input-panel {
+.note-input-overlay--show .note-input-panel {
   transform: translateY(0);
 }
 
@@ -2527,6 +2439,7 @@ input {
   pointer-events: none;
 }
 .sticker-modal__panel {
+  position: relative; /* 贴纸故事卡（绝对定位）的定位上下文 */
   width: 100%;
   max-width: 480px;
   max-height: 80vh;
@@ -2573,6 +2486,79 @@ input {
   margin: 0 0 16px;
   font-size: 13px;
   color: var(--color-text-muted);
+}
+
+/* ===== 贴纸故事卡：点击已解锁贴纸时浮现（替代全局 Toast，弹层内展示）===== */
+.sticker-modal__flavor {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: calc(20px + var(--safe-bottom) + 46px); /* 悬浮在进度条上方 */
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  background: linear-gradient(150deg, rgba(253, 164, 175, 0.2), rgba(244, 63, 94, 0.1));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(147, 51, 64, 0.14);
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.28s var(--ease), transform 0.28s var(--ease);
+  pointer-events: none;
+  z-index: 6;
+}
+.sticker-modal__flavor--show {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* 稀有度渐变底 */
+.sticker-modal__flavor--rare {
+  background: linear-gradient(150deg, rgba(253, 164, 175, 0.22), rgba(244, 63, 94, 0.1));
+  border-color: rgba(244, 63, 94, 0.22);
+}
+.sticker-modal__flavor--epic {
+  background: linear-gradient(150deg, rgba(196, 181, 253, 0.24), rgba(139, 92, 246, 0.12));
+  border-color: rgba(139, 92, 246, 0.26);
+}
+.sticker-modal__flavor--legendary {
+  background: linear-gradient(150deg, rgba(253, 230, 138, 0.3), rgba(245, 158, 11, 0.14));
+  border-color: rgba(245, 158, 11, 0.32);
+}
+.sticker-modal__flavor-icon {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border-radius: 11px;
+  box-shadow: 0 1px 3px rgba(147, 51, 64, 0.12);
+  padding: 3px;
+}
+.sticker-modal__flavor-icon svg {
+  width: 100%;
+  height: 100%;
+}
+.sticker-modal__flavor-body {
+  min-width: 0;
+}
+.sticker-modal__flavor-title {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: 3px;
+}
+.sticker-modal__flavor-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sticker-modal__flavor { transition: none; }
 }
 
 /* ===== 贴纸网格（结构：剪影悬念 + 实体贴纸底板）===== */
@@ -2650,10 +2636,11 @@ input {
   line-height: 1.2;
 }
 
-/* 未解锁：本尊图案的剪影（雾显悬念）——不用通用锁，
-   剪影墨色 ≥3:1 保证可辨，同时明显"还没拿到" */
+/* 未解锁：本尊图案的雾显剪影——图标自带彩色，用灰度+降透明做"灰色剪影"，
+   形状可辨（悬念感）同时明显"还没拿到" */
 .sticker-cell:not(.sticker-cell--unlocked) .sticker-cell__icon {
-  color: var(--sticker-locked-ink);
+  filter: grayscale(1) brightness(1.15);
+  opacity: 0.3;
 }
 .sticker-cell:not(.sticker-cell--unlocked) .sticker-cell__name {
   color: var(--sticker-locked-ink);
@@ -2661,7 +2648,7 @@ input {
   font-size: 11px;
 }
 
-/* 已解锁：按稀有度染色（图标色加深一档，白底板上 ≥3:1） */
+/* 已解锁：贴纸自带彩色插画，无需再按稀有度染色 */
 .sticker-cell--unlocked .sticker-cell__name {
   color: var(--color-text);
   font-weight: 600;
@@ -2670,18 +2657,27 @@ input {
   background: linear-gradient(160deg, var(--rose-50), var(--rose-100));
   border-color: rgba(254, 205, 211, 0.6);
 }
-.sticker-cell--rare .sticker-cell__icon { color: var(--rose-500); }
+.sticker-cell--rare .sticker-cell__plate {
+  box-shadow: 0 1px 2px rgba(147, 51, 64, 0.08), 0 2px 6px rgba(147, 51, 64, 0.07),
+    0 0 0 1.5px rgba(251, 113, 133, 0.3);
+}
 .sticker-cell--epic {
   background: linear-gradient(160deg, var(--violet-50), var(--violet-100));
   border-color: rgba(196, 181, 253, 0.6);
 }
-.sticker-cell--epic .sticker-cell__icon { color: var(--violet-500); }
+.sticker-cell--epic .sticker-cell__plate {
+  box-shadow: 0 1px 2px rgba(147, 51, 64, 0.08), 0 2px 6px rgba(147, 51, 64, 0.07),
+    0 0 0 1.5px rgba(139, 92, 246, 0.32);
+}
 .sticker-cell--legendary {
   background: linear-gradient(160deg, var(--gold-50), var(--gold-100));
   border-color: rgba(252, 211, 77, 0.6);
   box-shadow: 0 2px 10px rgba(245, 158, 11, 0.12);
 }
-.sticker-cell--legendary .sticker-cell__icon { color: var(--gold-600); }
+.sticker-cell--legendary .sticker-cell__plate {
+  box-shadow: 0 1px 2px rgba(147, 51, 64, 0.08), 0 2px 6px rgba(147, 51, 64, 0.07),
+    0 0 0 1.5px rgba(245, 158, 11, 0.45), 0 0 12px rgba(251, 191, 36, 0.35);
+}
 
 /* 点击贴纸：弹跳 + 专属短句 */
 @keyframes sticker-pop {
@@ -2797,119 +2793,5 @@ input {
   .sticker-cell--in,
   .sticker-cell--pop {
     animation: none !important;
-  }
-}
-
-
-/* ============================================================
-   暗色模式（跟随系统 prefers-color-scheme，玫瑰夜色调校）
-   原则：变量层整体切换（绝大多数组件自动适配），
-   少数硬编码浅色（顶栏毛玻璃/骨架屏/信纸/离线条）单独覆盖。
-   品牌渐变按钮（FAB/主按钮）保持玫瑰原色，暗色下依旧醒目。
-   ============================================================ */
-@media (prefers-color-scheme: dark) {
-  [data-theme="mint"],
-  :root {
-    --color-text: #f4eff0;        /* 暖白，不发冷 */
-    --color-text-muted: #a89ea3;  /* 暖灰 */
-    --color-border: #484044;
-    --color-bg: #262023;          /* hover 底/输入框底 */
-    --color-surface: #2d272a;     /* 卡片面（带一丝玫瑰灰） */
-    /* 暗色下阴影回归深色（染 rose 在暗底上看不出，反而发灰） */
-    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.38);
-    --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.45);
-  }
-
-  /* 夜玫瑰氛围背景：更暗的底 + 更收敛的顶部微光 */
-  body {
-    background:
-      radial-gradient(1100px 480px at 50% -12%, rgba(244, 63, 94, 0.09), transparent 62%),
-      linear-gradient(180deg, #211a1d 0%, #1a1618 42%, #201a1d 100%);
-    background-attachment: fixed;
-  }
-
-  /* 顶栏毛玻璃：深色半透明 + 玫瑰微光分隔 */
-  .topbar {
-    background: rgba(40, 33, 36, 0.74);
-    border-bottom-color: rgba(253, 164, 175, 0.10);
-  }
-
-  /* 顶栏天数：暗底下换更亮的 rose-400，保证对比 */
-  .topbar__anni-days { color: var(--rose-400); }
-
-  /* 骨架屏：暗色 shimmer（掺一丝玫瑰调，与浅色版对称） */
-  .skeleton__box {
-    background: linear-gradient(
-      90deg,
-      rgba(84, 62, 68, 0.65) 0%,
-      rgba(62, 46, 51, 0.9) 50%,
-      rgba(84, 62, 68, 0.65) 100%
-    );
-    background-size: 200% 100%;
-  }
-
-  /* 离线条：暗色下深红半透明，不再刺眼 */
-  .offline-bar {
-    background: rgba(244, 63, 94, 0.12);
-    color: rgba(253, 164, 175, 0.8);
-  }
-  .offline-bar__dots i { background: rgba(253, 164, 175, 0.75); }
-
-  /* 操作菜单图标 hover：暗色玫瑰底 */
-  .action-sheet__icon-btn:hover { background: rgba(244, 63, 94, 0.14); }
-
-  /* 纪念日面板倒计时行 hover：暗色微光 */
-  .anni-panel__item:hover { background: rgba(255, 255, 255, 0.07); }
-
-  /* 隐藏款稀有卡：暗色下轻微收敛亮度（依旧比普通卡亮，保留高光感） */
-  .todo--rare, .todo--epic, .todo--legendary { filter: brightness(0.9); }
-  .todo--rare.todo--done, .todo--epic.todo--done, .todo--legendary.todo--done { filter: brightness(0.72); }
-
-  /* ===== 心里话场景：暗色夜笺 ===== */
-  .note-write {
-    background: linear-gradient(165deg, #241d20 0%, #1b1719 40%, #241d20 100%);
-  }
-  .note-write__title { color: rgba(253, 164, 175, 0.92); }
-  .note-write__close { color: rgba(253, 164, 175, 0.8); }
-  .note-write__close:hover { background: rgba(244, 63, 94, 0.14); }
-  .note-write__paper {
-    background-color: rgba(255, 255, 255, 0.05);
-    border-color: rgba(253, 164, 175, 0.14);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
-  }
-  .note-write__paper::before { opacity: 0.55; }
-  .note-write__hint { color: rgba(253, 164, 175, 0.55); }
-  .note-read {
-    background: linear-gradient(165deg, #241d20 0%, #1e191c 50%, #2b2024 100%);
-  }
-  .note-read__from { color: rgba(253, 164, 175, 0.75); }
-  .note-read__hint { color: rgba(253, 164, 175, 0.55); }
-  .note-read__content {
-    color: #f4eff0;
-    background: rgba(255, 255, 255, 0.06);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
-  }
-
-  /* ===== 纪念日面板：暗色夜幕贺卡 =====
-     浅色下的亮粉卡在深夜会突兀（顶栏爱心深夜都知道换深玫红），
-     暗色改为低亮度玫瑰夜卡，文字换亮一档保证对比。 */
-  .anni-panel__card {
-    background: linear-gradient(160deg, #3b2c31 0%, #34272c 55%, #3f2c33 100%);
-    border-color: rgba(244, 63, 94, 0.22);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-  }
-  .anni-panel__card::before { opacity: 0.35; }
-  .anni-panel__pre,
-  .anni-panel__suf { color: var(--rose-300); }
-  .anni-panel__days { color: var(--rose-400); }
-  .anni-panel__label { color: rgba(244, 224, 228, 0.85); }
-  .anni-panel__count { color: var(--rose-300); }
-  .anni-panel__divider { background: rgba(253, 164, 175, 0.16); }
-  .anni-panel__item { border-bottom-color: rgba(253, 164, 175, 0.10); }
-  .anni-panel__writenote {
-    color: var(--rose-300);
-    border-top-color: rgba(253, 164, 175, 0.14);
   }
 }

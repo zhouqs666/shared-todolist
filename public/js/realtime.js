@@ -241,10 +241,11 @@ export function initRealtime({ getTodos, setTodos, notifyCompleted, setOnline, g
       'postgres_changes',
       { event: 'DELETE', schema: 'public', table: 'reactions' },
       (payload) => {
+        // 默认 replica identity 下 DELETE 只带主键 id（无 todo_id），
+        // todo_id 交给 reactions.onReactionRemoved 从本地缓存反查
         const id = payload.old?.id;
-        const todoId = payload.old?.todo_id;
         if (!id || !onReactionRemoved) return;
-        onReactionRemoved(id, todoId);
+        onReactionRemoved(id, payload.old?.todo_id);
       }
     )
     // ===== 收集图鉴（stickers）=====

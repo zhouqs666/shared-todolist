@@ -170,7 +170,7 @@ export const db = {
    * @param {string|null} imagePath 图片 public URL（null=删除图片）
    * @param {string|null} prevPath 旧 URL（更换/删除时用于清理旧文件，可选）
    */
-  async setImage(id, imagePath, prevPath) {
+  async setImage(id, imagePath) {
     const { data, error } = await supabase
       .from('todos')
       .update({ image_path: imagePath })
@@ -179,15 +179,8 @@ export const db = {
       .maybeSingle();
     if (error) throw wrapError(error);
     if (!data) throw wrapError({ message: 'NOT_FOUND', code: 'NOT_FOUND' });
-    // 更新成功后，清理旧图片文件（失败不阻断，最多留孤儿）
-    if (prevPath && prevPath !== imagePath) {
-      try {
-        const path = storagePathFromUrl(prevPath);
-        if (path) await supabase.storage.from('todo-attachments').remove([path]);
-      } catch (e) {
-        console.warn('[db] 清理旧图片失败（不影响更新）:', e.message);
-      }
-    }
+    // 删除/换图都不再物理删 Storage 文件（软删除精神：误删可由后台恢复，
+    // 孤儿文件无害，免费层空间足够）。如需清理走后台脚本。
     return toExternal(data);
   },
 
