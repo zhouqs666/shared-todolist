@@ -25,7 +25,10 @@ input, textarea, [contenteditable] {
      ① Primitive：色阶原子（rose/stone/violet/gold），改主题色只改这层
      ② Semantic：语义色（--color-*），组件只引用这层，不直接引用 primitive
      ③ Component：组件级 token（按需新增，引用 semantic）
-     注：变量定义顺序未严格按层排列，但语义上遵循三层。 */
+     注：变量定义顺序未严格按层排列，但语义上遵循三层。
+     【规则】新增组件必须用 semantic（--color-*），禁止直接引用 primitive。
+     【存量】约 14 处组件仍用 var(--rose-500/600)（值=--color-primary，因主色=情感色=rose
+            不会换，改了值不变但有破坏风险，暂不强制改；渐变 var(--rose-400/600) 无对应 semantic 保留）。 */
   /* 主色：玫瑰（与情感色 rose 完全统一，「有爱」的品牌色）。
      原 mint 薄荷绿已退役——绿（工具感）与粉（情感）割裂，统一后整体氛围如情书般温暖。 */
   --color-primary: var(--rose-500);
