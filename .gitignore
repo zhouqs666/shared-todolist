@@ -17,6 +17,7 @@ npm-debug.log*
 # 编辑器
 .vscode/
 .idea/
+.trae/
 .DS_Store
 
 # 构建产物（如以后引入前端构建工具）
