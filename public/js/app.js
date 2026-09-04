@@ -170,7 +170,11 @@ function hideLoading() {
   initStickerBook({ onStickerUnlockedView: onStickerUnlockedView });
 
   // 建立 Realtime 订阅（含 todos / daily_notes / reactions / stickers 四表）
-  initRealtime({
+  // 监听器治理（技术清单第5条）：保存返回值，beforeunload 时 cleanup
+  let presence = null, lastSeenTimer = null, heartTintTimer = null;
+  // （presence/lastSeenTimer 在下方 if(partnerId) 块内赋值，heartTintTimer 在紧跟其后，
+  //   cleanup 需跨作用域访问，故提前用 let 声明在此）
+  const realtimeCh = initRealtime({
     getTodos,
     setTodos,
     setOnline: updateOnlineUI,
@@ -201,7 +205,7 @@ function hideLoading() {
   // ===== 顶栏爱心"会呼吸"初始化 =====
   // 1. 气色：立刻按当前时间上色 + 每 5 分钟刷新（跨时段自动变）
   applyHeartTint();
-  setInterval(applyHeartTint, 5 * 60 * 1000);
+  heartTintTimer = setInterval(applyHeartTint, 5 * 60 * 1000);
 
   // 找对方的 userId（双人 APP：userMap 里除自己外的那一个）
   const partnerId = Object.keys(userMap).find((id) => id !== currentUser.id) || null;
@@ -223,7 +227,7 @@ function hideLoading() {
   //    同时维护 last_seen_at 心跳（每 60s 写一次，保证"今天来过"持久记录）
   if (partnerId) {
     try {
-      initPresence({
+      presence = initPresence({
         userId: currentUser.id,
         partnerId,
         onPartnerOnline: setHeartExcited,
@@ -233,10 +237,24 @@ function hideLoading() {
     }
     // last_seen 心跳：立即写一次 + 每 60s 写一次
     db.updateLastSeen(currentUser.id).catch((e) => console.warn('[db] last_seen 写入失败:', e.message));
-    setInterval(() => {
+    lastSeenTimer = setInterval(() => {
       db.updateLastSeen(currentUser.id).catch(() => {});
     }, 60 * 1000);
   }
+
+  // 监听器治理（技术清单第5条）：beforeunload 时统一 cleanup，
+  // 避免页面快速刷新/重载残留 Realtime channel 与定时器（资源泄漏 + 可能触发无效回调）。
+  // 各项均判空：对应初始化若因条件不满足（如无 partnerId）而未执行，跳过即可。
+  window.addEventListener('beforeunload', () => {
+    try {
+      if (realtimeCh && typeof realtimeCh.unsubscribe === 'function') realtimeCh.unsubscribe();
+    } catch (e) { /* cleanup 失败不应阻塞卸载 */ }
+    try {
+      if (presence && typeof presence.unsubscribe === 'function') presence.unsubscribe();
+    } catch (e) { /* 同上 */ }
+    if (heartTintTimer) clearInterval(heartTintTimer);
+    if (lastSeenTimer) clearInterval(lastSeenTimer);
+  });
 
   // 打开计数 +1：每次冷启动 App 都 +1（不依赖 partnerId，自己的打开次数独立累计）
   // 对方打开 App 时会看到对应次数的光晕，看完清零
