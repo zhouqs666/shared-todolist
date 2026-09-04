@@ -79,30 +79,11 @@ input, textarea, [contenteditable] {
   --sticker-locked-ink: #8f8782;
 }
 
-/* ===== 主题（通过 data-theme 属性切换） ===== */
-/* 当前固定 rose（主色与情感色统一）；旧主题选择器保留以便未来恢复切换 */
-[data-theme="mint"] {
-  --color-primary: #f43f5e;
-  --color-primary-dark: #e11d48;
-  --color-primary-rgb: 244, 63, 94;
-}
-[data-theme="pink"] {
-  --color-primary: #ec4899;
-  --color-primary-dark: #db2777;
-  --color-primary-rgb: 236, 72, 153;
-}
-[data-theme="blue"] {
-  --color-primary: #3b82f6;
-  --color-primary-dark: #2563eb;
-  --color-primary-rgb: 59, 130, 246;
-}
-[data-theme="sunset"] {
-  --color-primary: #f59e0b;
-  --color-primary-dark: #d97706;
-  --color-primary-rgb: 245, 158, 11;
-}
+/* 主题切换 UI 已移除（见 theme.js，setTheme 为 no-op）。
+   :root 默认值即最终色，旧 [data-theme="mint/pink/blue/sunset"] 壳子已清理。
+   未来若恢复切换，需重新接入 JS 与对应 CSS 块（可从 git 历史恢复）。 */
 
-/* 主题切换平滑过渡 */
+/* 平滑过渡：服务于顶栏爱心色按时间段变化（applyHeartTint）等动态色变 */
 body,
 .topbar,
 .todo,
