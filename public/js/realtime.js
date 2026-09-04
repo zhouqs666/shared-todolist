@@ -16,70 +16,10 @@
 import { supabase } from './supabase.js';
 import { sortTodos } from './state.js';
 import { notify } from './notify.js';
+import { toExternal, toNote, toReaction, toSticker } from './transforms.js';
 
-// 复用 db.js 同款的字段转换（避免循环依赖，内联）
-function toExternal(row) {
-  if (!row) return null;
-  // 多图：优先 image_paths（JSONB 数组），兼容旧 image_path 单值（与 db.js 同步）
-  const imagePaths = Array.isArray(row.image_paths)
-    ? row.image_paths
-    : row.image_path
-    ? [row.image_path]
-    : null;
-  return {
-    id: row.id,
-    text: row.text,
-    completed: !!row.completed,
-    createdBy: row.created_by,
-    createdAt: row.created_at,
-    completedBy: row.completed_by || null,
-    completedAt: row.completed_at || null,
-    nudgeBy: row.nudge_by || null, // 轻轻提醒标记人（与 db.js 同步）
-    imagePaths: imagePaths, // 图片附件 URL 数组（与 db.js 同步）
-    imagePath: imagePaths ? imagePaths[0] : null, // 兼容旧代码（与 db.js 同步）
-    completedNote: row.completed_note || null, // 备注（与 db.js 同步）
-    rarity: row.rarity || 'common', // 稀有度（与 db.js 同步）
-    raritySeen: row.rarity_seen !== false, // 隐藏款是否已被对方看过（与 db.js 同步）
-  };
-}
-
-/** daily_notes 行 → 前端 note（与 db.js 同步） */
-function toNote(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    dayKey: row.day_key,
-    authorId: row.author_id,
-    content: row.content,
-    readBy: row.read_by || null,
-    createdAt: row.created_at,
-  };
-}
-
-/** reactions 行 → 前端 reaction（与 db.js 同步） */
-function toReaction(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    todoId: row.todo_id,
-    userId: row.user_id,
-    emoji: row.emoji,
-    createdAt: row.created_at,
-  };
-}
-
-/** stickers 行 → 前端 sticker（与 db.js 同步） */
-function toSticker(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    stickerKey: row.sticker_key,
-    rarity: row.rarity,
-    unlockedBy: row.unlocked_by,
-    todoId: row.todo_id || null,
-    unlockedAt: row.unlocked_at,
-  };
-}
+// 字段转换（toExternal/toNote/toReaction/toSticker）已抽到 ./transforms.js
+// （消除与 db.js 的双份维护，技术优化清单第6条）
 
 /**
  * 初始化 Realtime 订阅

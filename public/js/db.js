@@ -12,32 +12,9 @@
 
 import { supabase } from './supabase.js';
 import { avatarForUsername } from './avatars.js';
+import { toExternal, toNote, toSticker } from './transforms.js';
 
-/** DB 行 → 前端 todo 对象 */
-function toExternal(row) {
-  if (!row) return null;
-  // 多图：优先 image_paths（JSONB 数组），兼容旧 image_path 单值
-  const imagePaths = Array.isArray(row.image_paths)
-    ? row.image_paths
-    : row.image_path
-    ? [row.image_path]
-    : null;
-  return {
-    id: row.id,
-    text: row.text,
-    completed: !!row.completed,
-    createdBy: row.created_by,
-    createdAt: row.created_at,
-    completedBy: row.completed_by || null,
-    completedAt: row.completed_at || null,
-    nudgeBy: row.nudge_by || null, // 轻轻提醒的标记人 id（克制提醒功能）
-    imagePaths: imagePaths, // 图片附件 URL 数组（多图，null=无图）
-    imagePath: imagePaths ? imagePaths[0] : null, // 兼容旧代码（取首张）
-    completedNote: row.completed_note || null, // 备注（完成前后均可加，null=无备注）
-    rarity: row.rarity || 'common', // 稀有度：common(普通)/rare/epic/legendary（隐藏款盲盒）
-    raritySeen: row.rarity_seen !== false, // 隐藏款是否已被对方看过（false=对方端需播惊喜提示）
-  };
-}
+// toExternal 已抽到 ./transforms.js（消除与 realtime.js 的双份维护，技术优化清单第6条）
 
 /**
  * 从 Supabase Storage 的 public URL 里解析出 object path（用于 remove）。
@@ -440,28 +417,4 @@ export const db = {
 
 };
 
-/** stickers DB 行 → 前端 sticker 对象 */
-function toSticker(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    stickerKey: row.sticker_key,
-    rarity: row.rarity,
-    unlockedBy: row.unlocked_by,
-    todoId: row.todo_id || null,
-    unlockedAt: row.unlocked_at,
-  };
-}
-
-/** daily_notes DB 行 → 前端 note 对象 */
-function toNote(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    dayKey: row.day_key,
-    authorId: row.author_id,
-    content: row.content,
-    readBy: row.read_by || null, // 谁已读过（阅后即焚依据）
-    createdAt: row.created_at,
-  };
-}
+// toSticker / toNote 已抽到 ./transforms.js
