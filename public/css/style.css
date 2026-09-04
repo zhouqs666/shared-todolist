@@ -1764,6 +1764,28 @@ input {
   animation: img-lightbox-fade 0.2s var(--ease);
 }
 @keyframes img-lightbox-fade { from { opacity: 0; } to { opacity: 1; } }
+/* track：横向排列所有 slide，translateX(-index*100% + 跟手偏移) 切图 */
+.img-lightbox__track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  touch-action: none;          /* 手势自管：禁浏览器默认双击缩放/滚动 */
+  will-change: transform;
+}
+.img-lightbox__track--anim {
+  transition: transform 0.26s var(--ease);
+}
+/* 每个 slide 占满一屏，居中放一张图 */
+.img-lightbox__slide {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
 .img-lightbox__img {
   max-width: 92vw;
   max-height: 80vh;
@@ -1774,6 +1796,16 @@ input {
   -webkit-user-select: none;
   user-select: none;
   -webkit-user-drag: none;
+  will-change: transform;
+}
+/* 长图（高宽比 > 3）：宽度撑满，不限高度，上下溢出可垂直拖动看全图。
+   否则 contain 到 80vh 会把长图压成窄条，4x 放大也看不清文字。 */
+.img-lightbox__img--long {
+  max-width: 92vw;
+  width: 92vw;
+  max-height: none;
+  height: auto;
+  border-radius: 4px;
 }
 /* 缩放动画（拖拽时移除，保持跟手） */
 .img-lightbox__img--anim {
@@ -1810,13 +1842,59 @@ input {
   justify-content: center;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.4);
   color: #fff;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  transition: background 0.15s var(--ease);
+  z-index: 1;
 }
 .img-lightbox__close svg { width: 20px; height: 20px; }
-.img-lightbox__close:active { background: rgba(255, 255, 255, 0.3); }
+.img-lightbox__close:active { background: rgba(0, 0, 0, 0.6); }
+/* 页指示「1/N」（顶部居中胶囊，单张时 JS 隐藏） */
+.img-lightbox__indicator {
+  position: absolute;
+  top: max(20px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+/* 左右半透明箭头（多图才显示，到边界 JS 隐藏；复用同一左指 SVG，右箭头旋转 180°） */
+.img-lightbox__nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.34);
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  transition: background 0.15s var(--ease);
+  z-index: 1;
+}
+.img-lightbox__nav--prev { left: max(12px, env(safe-area-inset-left)); }
+.img-lightbox__nav--next { right: max(12px, env(safe-area-inset-right)); }
+.img-lightbox__nav svg { width: 22px; height: 22px; }
+.img-lightbox__nav:active { background: rgba(0, 0, 0, 0.55); }
 /* 底部操作条：换图 + 删除（删除两段式，确认态深红） */
 .img-lightbox__actions {
   position: absolute;

@@ -16,6 +16,12 @@ import { avatarForUsername } from './avatars.js';
 /** DB 行 → 前端 todo 对象 */
 function toExternal(row) {
   if (!row) return null;
+  // 多图：优先 image_paths（JSONB 数组），兼容旧 image_path 单值
+  const imagePaths = Array.isArray(row.image_paths)
+    ? row.image_paths
+    : row.image_path
+    ? [row.image_path]
+    : null;
   return {
     id: row.id,
     text: row.text,
@@ -25,8 +31,9 @@ function toExternal(row) {
     completedBy: row.completed_by || null,
     completedAt: row.completed_at || null,
     nudgeBy: row.nudge_by || null, // 轻轻提醒的标记人 id（克制提醒功能）
-    imagePath: row.image_path || null, // 图片附件的 public URL（null=无图）
-    completedNote: row.completed_note || null, // 完成备注（完成后的交代，null=无备注）
+    imagePaths: imagePaths, // 图片附件 URL 数组（多图，null=无图）
+    imagePath: imagePaths ? imagePaths[0] : null, // 兼容旧代码（取首张）
+    completedNote: row.completed_note || null, // 备注（完成前后均可加，null=无备注）
     rarity: row.rarity || 'common', // 稀有度：common(普通)/rare/epic/legendary（隐藏款盲盒）
     raritySeen: row.rarity_seen !== false, // 隐藏款是否已被对方看过（false=对方端需播惊喜提示）
   };
@@ -138,6 +145,22 @@ export const db = {
     return toExternal(data);
   },
 
+  /**
+   * 更新待办文案（只改 text，不动 completed/created_by 等其他字段）。
+   * text 受 schema 的 CHECK (char_length <= 200) 约束，超长会被 DB 拒绝。
+   */
+  async updateTodoText(id, text) {
+    const { data, error } = await supabase
+      .from('todos')
+      .update({ text })
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+    if (error) throw wrapError(error);
+    if (!data) throw wrapError({ message: 'NOT_FOUND', code: 'NOT_FOUND' });
+    return toExternal(data);
+  },
+
   /** 删除 todo（软删除：标记 deleted_at，不物理删除，可恢复） */
   async deleteTodo(id) {
     const { error } = await supabase
@@ -181,6 +204,30 @@ export const db = {
     if (!data) throw wrapError({ message: 'NOT_FOUND', code: 'NOT_FOUND' });
     // 删除/换图都不再物理删 Storage 文件（软删除精神：误删可由后台恢复，
     // 孤儿文件无害，免费层空间足够）。如需清理走后台脚本。
+    return toExternal(data);
+  },
+
+  /**
+   * 设置 todo 的多图数组（覆盖语义：传新数组替换整体）。
+   * @param {string} id todo id
+   * @param {string[]|null} imagePaths 图片 URL 数组（null/空=删除所有图）
+   */
+  async setImagePaths(id, imagePaths) {
+    // 多图写 image_paths；同时同步旧列 image_path = 首张（或 null）。
+    // 否则删最后一张时 image_paths=null，toExternal fallback 到旧列 image_path，
+    // 图片"复活"——旧数据待办删图失败的根因。
+    const paths = imagePaths && imagePaths.length ? imagePaths : null;
+    const { data, error } = await supabase
+      .from('todos')
+      .update({
+        image_paths: paths,
+        image_path: paths ? paths[0] : null,
+      })
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+    if (error) throw wrapError(error);
+    if (!data) throw wrapError({ message: 'NOT_FOUND', code: 'NOT_FOUND' });
     return toExternal(data);
   },
 

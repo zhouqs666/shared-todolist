@@ -20,6 +20,12 @@ import { notify } from './notify.js';
 // 复用 db.js 同款的字段转换（避免循环依赖，内联）
 function toExternal(row) {
   if (!row) return null;
+  // 多图：优先 image_paths（JSONB 数组），兼容旧 image_path 单值（与 db.js 同步）
+  const imagePaths = Array.isArray(row.image_paths)
+    ? row.image_paths
+    : row.image_path
+    ? [row.image_path]
+    : null;
   return {
     id: row.id,
     text: row.text,
@@ -29,8 +35,9 @@ function toExternal(row) {
     completedBy: row.completed_by || null,
     completedAt: row.completed_at || null,
     nudgeBy: row.nudge_by || null, // 轻轻提醒标记人（与 db.js 同步）
-    imagePath: row.image_path || null, // 图片附件 public URL（与 db.js 同步）
-    completedNote: row.completed_note || null, // 完成备注（与 db.js 同步）
+    imagePaths: imagePaths, // 图片附件 URL 数组（与 db.js 同步）
+    imagePath: imagePaths ? imagePaths[0] : null, // 兼容旧代码（与 db.js 同步）
+    completedNote: row.completed_note || null, // 备注（与 db.js 同步）
     rarity: row.rarity || 'common', // 稀有度（与 db.js 同步）
     raritySeen: row.rarity_seen !== false, // 隐藏款是否已被对方看过（与 db.js 同步）
   };

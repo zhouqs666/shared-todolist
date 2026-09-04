@@ -9,6 +9,10 @@
     "androidScheme": "https"
   },
   "plugins": {
+    "SystemBars": {
+      "style": "LIGHT",
+      "insetsHandling": "css"
+    },
     "LocalNotifications": {
       "smallIcon": "ic_stat_icon",
       "iconColor": "#ec4899"

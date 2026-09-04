@@ -13,6 +13,18 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+
+        <!-- 状态栏透明：Android 15+ edge-to-edge 强制下被系统忽略；Android 7-14 上让状态栏背景透明，露出 decor view 内容 -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <!-- 状态栏图标深色（顶栏底色浅 rose，深色图标对比清晰）。API 23+，minSdk 24 OK -->
+        <item name="android:windowLightStatusBar">true</item>
+        <!-- 让挖孔区域被内容利用（iQOO 11 挖孔直屏，shortEdges 让顶栏延伸到挖孔两侧） -->
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <!-- decor view 背景：rose 色。
+             注意必须用纯色（#RRGGBB），不能用 @drawable，否则 SystemBars 插件
+             getThemeColor() 取到的 TypedValue.data 是 resource id 而非颜色，
+             setBackgroundColor(int) 会得到错误颜色。 -->
+        <item name="android:windowBackground">#FFE4E6</item>
     </style>
 
 
@@ -20,5 +32,9 @@
         <!-- 纯粉色背景，避免透明 PNG 导致启动黑屏 -->
         <item name="android:background">@drawable/splash_background</item>
         <item name="android:windowBackground">@drawable/splash_background</item>
+        <!-- splash 阶段也透明状态栏 + 深色图标 + 利用挖孔，与运行时统一，避免切换跳变 -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
 </resources>

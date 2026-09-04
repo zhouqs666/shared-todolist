@@ -33,7 +33,7 @@ import { initTheme, isFxEnabled } from './theme.js';
 import { initNotify, requestPermission, isNative } from './notify.js';
 import { initMessages, onNoteAdded, onNoteRemoved, onNoteUpdated } from './messages.js';
 import { initReactions, renderReactions, onReactionAdded, onReactionRemoved, REACTION_EMOJIS, isMyReaction, toggleReaction, getReactionSvg, getReactionLabel } from './reactions.js';
-import { pickImage, uploadTodoImage } from './image-utils.js';
+import { pickImage, pickImages, uploadTodoImage } from './image-utils.js';
 import { checkForUpdate, setUpdateSupabase, notifyAppReady, getCurrentBundleInfo } from './update.js';
 import confetti from './vendor/canvas-confetti.esm.min.js';
 import { supabase } from './supabase.js';
@@ -254,6 +254,10 @@ function hideLoading() {
   // 通知插件当前版本可用，避免下次启动被误判为崩溃而回滚
   notifyAppReady();
 
+  // [热更新自检 v2.7.15] 仅 console 打日志，对 App 视觉/交互无任何影响。
+  // 用于验证热更新链路：远程调试时在 console 看到 "v2.7.15" 即说明热更新已生效。
+  console.log('%c有爱 v2.7.15 已加载', 'color:#f43f5e;font-weight:bold');
+
   // 监听 auth 状态变化（token 失效时自动跳登录）
   auth.onAuthChange((event) => {
     if (event === 'SIGNED_OUT') {
@@ -396,7 +400,9 @@ async function addTodo() {
     if (imageToUpload) {
       try {
         const url = await uploadTodoImage(todo.id, imageToUpload);
-        await db.setImage(todo.id, url);
+        // 走多图列 image_paths（统一存储；旧 image_path 列仅作历史回退读）
+        await db.setImagePaths(todo.id, [url]);
+        todo.imagePaths = [url];
         todo.imagePath = url;
       } catch (imgErr) {
         console.error('[app] 图片上传失败（待办已创建）:', imgErr);
@@ -474,17 +480,23 @@ async function toggleComplete(id, nextCompleted) {
  * 选图 → 压缩上传 → 写入 image_path（含旧图清理）→ 乐观更新本地。
  * 任一步失败：Toast 提示，不影响待办本身。
  * @param {string} id todo id
- * @param {string|null} prevPath 旧图 URL（换图时用于清理旧文件）
+ * @param {string[]|null} prevPaths 旧图 URL 数组（追加时基于此扩展）
  */
-async function attachImageToTodo(id, prevPath) {
-  const file = await pickImage();
-  if (!file) return; // 用户取消
+async function attachImageToTodo(id, prevPaths) {
+  const files = await pickImages();
+  if (!files || files.length === 0) return; // 用户取消
   showLoading();
   try {
-    const url = await uploadTodoImage(id, file);
-    const todo = await db.setImage(id, url, prevPath); // db 内部会清理旧图文件
+    // 串行上传（避免并发触发 Supabase 免费层限流；多图通常 2-3 张，可接受）
+    const newUrls = [];
+    for (const f of files) {
+      newUrls.push(await uploadTodoImage(id, f));
+    }
+    const base = Array.isArray(prevPaths) ? prevPaths.slice() : [];
+    const combined = base.concat(newUrls);
+    const todo = await db.setImagePaths(id, combined);
     setTodos(sortTodos(getTodos().map((t) => (t.id === id ? todo : t))));
-    showToast('已配图');
+    showToast(files.length > 1 ? '已配 ' + files.length + ' 张图' : '已配图');
   } catch (err) {
     console.error('[app] 配图失败:', err);
     handleError(toAppError(err), '配图失败，请重试');
@@ -494,15 +506,19 @@ async function attachImageToTodo(id, prevPath) {
 }
 
 /**
- * 删除已存在待办的图片（长按菜单 / lightbox 入口）。
- * db.setImage(id, null, prevPath) → 置空 image_path 并清理 Storage 旧文件 → 乐观更新本地。
+ * 删除已存在待办的当前图（lightbox 入口）。
+ * 只解绑待办与该图的关系（从 image_paths 数组移除），Storage 文件保留作后路（软删除精神）。
+ * db.setImagePaths(id, remaining) → 乐观更新本地。
  * @param {string} id todo id
- * @param {string} prevPath 旧图 URL（用于清理 Storage 文件）
+ * @param {string} urlToRemove 要删除的图 URL
+ * @param {string[]|null} prevPaths 旧图 URL 数组
  */
-async function removeImageFromTodo(id, prevPath) {
+async function removeImageFromTodo(id, urlToRemove, prevPaths) {
+  const base = Array.isArray(prevPaths) ? prevPaths.slice() : [];
+  const remaining = base.filter((u) => u !== urlToRemove);
   showLoading();
   try {
-    const todo = await db.setImage(id, null, prevPath);
+    const todo = await db.setImagePaths(id, remaining);
     setTodos(sortTodos(getTodos().map((t) => (t.id === id ? todo : t))));
     showToast('已删除图片');
   } catch (err) {
@@ -513,15 +529,20 @@ async function removeImageFromTodo(id, prevPath) {
   }
 }
 
-/* ===== 图片全屏预览（lightbox，标准查看器）=====
- * 点徽标打开：加载指示（转圈）→ 居中大图；双击缩放（以点击点为中心）+ 放大态拖拽平移。
- * 底部操作条：换图 / 删除图片（两段式确认，3 秒不点自动还原）。
+/* ===== 图片全屏预览（lightbox，多图 carousel + pinch 缩放）=====
+ * 点徽标打开：横向滑动切图 + 双指 pinch 缩放当前图 + 双击放大 + 放大态拖拽。
+ * 顶部页指示「1/N」（单张时隐藏）。底部操作条：加图 / 删除当前图（两段式确认）。
  * 删除只解绑待办与图的关系，Storage 文件保留作后路（软删除精神）。
  * 一次只存在一个 lightbox，关闭即从 DOM 移除。
  */
 function openImageLightbox(todo) {
-  // 已打开则不重复
   if (document.querySelector('.img-lightbox')) return;
+
+  const imgs = Array.isArray(todo.imagePaths)
+    ? todo.imagePaths.slice()
+    : todo.imagePath ? [todo.imagePath] : [];
+  if (imgs.length === 0) return;
+  let index = 0; // 当前图索引
 
   const overlay = document.createElement('div');
   overlay.className = 'img-lightbox';
@@ -529,22 +550,103 @@ function openImageLightbox(todo) {
   overlay.setAttribute('aria-modal', 'true');
   overlay.setAttribute('aria-label', '图片预览');
 
-  // 加载指示：onload 前转圈，失败换成提示
-  const loading = document.createElement('div');
-  loading.className = 'img-lightbox__loading';
-  loading.innerHTML = '<i></i><span>加载中…</span>';
-  overlay.appendChild(loading);
+  // track：横向排列所有 slide，translateX 切图
+  const track = document.createElement('div');
+  track.className = 'img-lightbox__track';
+  overlay.appendChild(track);
 
-  const img = document.createElement('img');
-  img.className = 'img-lightbox__img';
-  img.alt = '';
-  img.addEventListener('load', () => loading.remove());
-  img.addEventListener('error', () => {
-    loading.classList.add('img-lightbox__loading--err');
-    loading.innerHTML = '<span>图片加载失败，请检查网络后重试</span>';
+  // 每个 slide 装一张图
+  // long 标记：高宽比 > 3 的长图，宽度撑满 + scale=1 允许垂直拖动看全图
+  // （否则 contain 到 80vh 会把长图压成窄条，放大也看不清）
+  const slides = imgs.map((url, i) => {
+    const slide = document.createElement('div');
+    slide.className = 'img-lightbox__slide';
+    const loading = document.createElement('div');
+    loading.className = 'img-lightbox__loading';
+    loading.innerHTML = '<i></i><span>加载中…</span>';
+    slide.appendChild(loading);
+    const img = document.createElement('img');
+    img.className = 'img-lightbox__img';
+    img.alt = '';
+    const item = { slide, img, long: false };
+    const checkLong = () => {
+      if (!img.naturalWidth || !img.naturalHeight) return;
+      // 长图检测：高宽比 > 3（竖长）或 < 1/3（横长）
+      if (img.naturalHeight / img.naturalWidth > 3 || img.naturalWidth / img.naturalHeight > 3) {
+        item.long = true;
+        img.classList.add('img-lightbox__img--long');
+        // 初始定位到图头：flex 居中下长图上下溢出，设 ty=-overflow 让图头露在顶部，
+        // 用户下滑从头看到尾（符合阅读直觉，不用先往上滑找头）
+        requestAnimationFrame(() => {
+          if (!states[i]) return;
+          const r = img.getBoundingClientRect();
+          const sr = slide.getBoundingClientRect();
+          const overflow = Math.max(0, (r.height - sr.height) / 2);
+          if (overflow > 0) {
+            // ty=+overflow：img 下移，图头从上方溢出处移到 slide 顶部露出
+            // （负值会上移露出图尾，做反了——血泪教训）
+            states[i].ty = overflow;
+            if (i === index) applyCurrent();
+          }
+        });
+      }
+    };
+    img.addEventListener('load', () => { loading.remove(); checkLong(); });
+    img.addEventListener('error', () => {
+      loading.classList.add('img-lightbox__loading--err');
+      loading.innerHTML = '<span>图片加载失败，请检查网络后重试</span>';
+    });
+    img.src = url;
+    // 缓存兜底：complete 且有尺寸说明已加载，但 load 事件可能已错过
+    if (img.complete && img.naturalWidth > 0) { loading.remove(); checkLong(); }
+    slide.appendChild(img);
+    track.appendChild(slide);
+    return item;
   });
-  img.src = todo.imagePath;
-  overlay.appendChild(img);
+
+  // 页指示「1/N」（单张时隐藏）
+  const indicator = document.createElement('div');
+  indicator.className = 'img-lightbox__indicator';
+  overlay.appendChild(indicator);
+
+  // 左右半透明箭头（多图才显示，到边界隐藏；点按切图，业界 lightbox 标配）
+  // 左右各用原生绘制的 SVG，不做旋转，视觉绝对对称自然。
+  const ARROW_PREV =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
+  const ARROW_NEXT =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+  const prevBtn = document.createElement('button');
+  prevBtn.type = 'button';
+  prevBtn.className = 'img-lightbox__nav img-lightbox__nav--prev';
+  prevBtn.setAttribute('aria-label', '上一张');
+  prevBtn.innerHTML = ARROW_PREV;
+  prevBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (index > 0) snapTo(index - 1);
+  });
+  overlay.appendChild(prevBtn);
+
+  const nextBtn = document.createElement('button');
+  nextBtn.type = 'button';
+  nextBtn.className = 'img-lightbox__nav img-lightbox__nav--next';
+  nextBtn.setAttribute('aria-label', '下一张');
+  nextBtn.innerHTML = ARROW_NEXT;
+  nextBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (index < imgs.length - 1) snapTo(index + 1);
+  });
+  overlay.appendChild(nextBtn);
+
+  const updateIndicator = () => {
+    const multi = imgs.length > 1;
+    // 顶部 1/N（多图才显示）
+    if (!multi) { indicator.style.display = 'none'; }
+    else { indicator.style.display = ''; indicator.textContent = (index + 1) + ' / ' + imgs.length; }
+    // 箭头：多图才显示，到边界隐藏（业界习惯：边界处直接消失，不再点空）
+    prevBtn.style.display = (multi && index > 0) ? '' : 'none';
+    nextBtn.style.display = (multi && index < imgs.length - 1) ? '' : 'none';
+  };
+  updateIndicator();
 
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
@@ -554,54 +656,56 @@ function openImageLightbox(todo) {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
   overlay.appendChild(closeBtn);
 
-  // 底部操作条：换图 + 删除（两段式确认）
+  // 底部操作条：加图 + 删除当前图（两段式确认）
   const actions = document.createElement('div');
   actions.className = 'img-lightbox__actions';
 
-  const swapBtn = document.createElement('button');
-  swapBtn.type = 'button';
-  swapBtn.className = 'img-lightbox__act';
-  swapBtn.textContent = '换图';
-  swapBtn.addEventListener('click', (e) => {
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'img-lightbox__act';
+  addBtn.textContent = '加图';
+  addBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     close();
-    attachImageToTodo(todo.id, todo.imagePath);
+    attachImageToTodo(todo.id, todo.imagePaths);
   });
-  actions.appendChild(swapBtn);
+  actions.appendChild(addBtn);
 
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
   delBtn.className = 'img-lightbox__act img-lightbox__act--del';
-  delBtn.textContent = '删除图片';
+  delBtn.textContent = '删除当前图';
   let confirmTimer = null;
   delBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (!delBtn.classList.contains('img-lightbox__act--confirm')) {
-      // 第一段：进入确认态，3 秒不点自动还原
       if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
       delBtn.classList.add('img-lightbox__act--confirm');
       delBtn.textContent = '再点一次确认删除';
       confirmTimer = setTimeout(() => {
         delBtn.classList.remove('img-lightbox__act--confirm');
-        delBtn.textContent = '删除图片';
+        delBtn.textContent = '删除当前图';
       }, 3000);
       return;
     }
     clearTimeout(confirmTimer);
+    const urlToRemove = imgs[index];
     close();
-    removeImageFromTodo(todo.id, todo.imagePath);
+    removeImageFromTodo(todo.id, urlToRemove, todo.imagePaths);
   });
   actions.appendChild(delBtn);
   overlay.appendChild(actions);
 
   document.body.appendChild(overlay);
-  // 锁滚动
   const prevOverflow = document.body.style.overflow;
   document.body.style.overflow = 'hidden';
   if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
 
-  // Esc 关闭（桌面端）
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const onKey = (e) => {
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowLeft' && index > 0) snapTo(index - 1);
+    else if (e.key === 'ArrowRight' && index < imgs.length - 1) snapTo(index + 1);
+  };
   document.addEventListener('keydown', onKey);
 
   const close = () => {
@@ -611,51 +715,186 @@ function openImageLightbox(todo) {
   };
   closeBtn.addEventListener('click', close);
 
-  // ===== 手势：双击缩放（以点击点为中心）+ 放大态拖拽 + 单击关闭 =====
-  const MAX_SCALE = 2.5;
-  let scale = 1, tx = 0, ty = 0;
-  const apply = () => { img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`; };
-  const zoomWithAnim = () => {
+  // ===== carousel 切图 + 每张图 pinch/双击/拖拽 =====
+  const MAX_SCALE = 4;
+  const states = imgs.map(() => ({ scale: 1, tx: 0, ty: 0 })); // 每张图的变换
+  let trackOffset = 0; // track 跟手横向偏移（百分比，切图过程中）
+
+  const applyTrack = () => {
+    track.style.transform = 'translateX(' + (-index * 100 + trackOffset) + '%)';
+  };
+  const applyCurrent = () => {
+    const s = states[index];
+    slides[index].img.style.transform =
+      'translate(' + s.tx + 'px, ' + s.ty + 'px) scale(' + s.scale + ')';
+  };
+  const clampPan = (i) => {
+    const s = states[i];
+    const imgRect = slides[i].img.getBoundingClientRect();
+    const slideRect = slides[i].slide.getBoundingClientRect();
+    // 长图未放大：img 高度溢出 slide，允许垂直拖动看上下（横向不动）
+    if (s.scale <= 1 && slides[i].long) {
+      const overflow = Math.max(0, (imgRect.height - slideRect.height) / 2);
+      s.tx = 0;
+      s.ty = Math.max(-overflow, Math.min(overflow, s.ty));
+      return;
+    }
+    if (s.scale <= 1) { s.tx = 0; s.ty = 0; return; }
+    const baseW = imgRect.width / s.scale, baseH = imgRect.height / s.scale;
+    const mx = Math.max(0, (baseW * s.scale - baseW) / 2);
+    const my = Math.max(0, (baseH * s.scale - baseH) / 2);
+    s.tx = Math.max(-mx, Math.min(mx, s.tx));
+    s.ty = Math.max(-my, Math.min(my, s.ty));
+  };
+  // 切到指定 index（带动画），不重置目标图变换（保留各自的缩放状态）
+  const snapTo = (i) => {
+    index = Math.max(0, Math.min(imgs.length - 1, i));
+    trackOffset = 0;
+    track.classList.add('img-lightbox__track--anim');
+    applyTrack();
+    setTimeout(() => track.classList.remove('img-lightbox__track--anim'), 270);
+    updateIndicator();
+  };
+
+  const activePointers = new Map();
+  let pinchStartDist = 0, pinchStartScale = 1, isPinching = false;
+  let dragStart = null, moved = false, lastTapAt = 0, lastTapX = 0, lastTapY = 0, closeTimer = null;
+
+  const twoFingerDist = () => {
+    const pts = [...activePointers.values()];
+    return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+  };
+  // 以屏幕点 (gx,gy) 为不动点缩放当前图 k 倍
+  const zoomAtPoint = (gx, gy, k) => {
+    const s = states[index];
+    const rect = slides[index].img.getBoundingClientRect();
+    const cx = gx - (rect.left + rect.width / 2);
+    const cy = gy - (rect.top + rect.height / 2);
+    s.tx = s.tx + cx * (1 - k);
+    s.ty = s.ty + cy * (1 - k);
+  };
+  const zoomWithAnim = (targetScale, gx, gy) => {
+    const s = states[index];
+    const img = slides[index].img;
+    const k = targetScale / s.scale;
+    zoomAtPoint(gx, gy, k);
+    s.scale = targetScale;
+    if (s.scale <= 1) { s.tx = 0; s.ty = 0; }
+    clampPan(index);
     img.classList.add('img-lightbox__img--anim');
-    apply();
+    applyCurrent();
     setTimeout(() => img.classList.remove('img-lightbox__img--anim'), 270);
   };
-  // 限制平移范围：图片边缘不被拖出屏幕
-  const clampPan = () => {
-    if (scale <= 1) { tx = 0; ty = 0; return; }
-    const rect = img.getBoundingClientRect();
-    const baseW = rect.width / scale, baseH = rect.height / scale;
-    const mx = Math.max(0, (baseW * scale - baseW) / 2);
-    const my = Math.max(0, (baseH * scale - baseH) / 2);
-    tx = Math.max(-mx, Math.min(mx, tx));
-    ty = Math.max(-my, Math.min(my, ty));
-  };
-
-  let dragStart = null, moved = false;
-  let lastTapAt = 0, lastTapX = 0, lastTapY = 0, closeTimer = null;
 
   overlay.addEventListener('pointerdown', (e) => {
-    if (e.target === closeBtn || actions.contains(e.target)) return;
-    dragStart = { x: e.clientX, y: e.clientY, tx, ty };
-    moved = false;
-    clearTimeout(closeTimer); // 按下即取消待执行的"单击关闭"
+    if (e.target === closeBtn || actions.contains(e.target) ||
+        prevBtn.contains(e.target) || nextBtn.contains(e.target)) return;
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointers.size === 2) {
+      isPinching = true;
+      dragStart = null;
+      moved = false;
+      clearTimeout(closeTimer);
+      lastTapAt = 0;
+      pinchStartDist = twoFingerDist();
+      pinchStartScale = states[index].scale;
+      slides[index].img.classList.remove('img-lightbox__img--anim');
+      return;
+    }
+    if (activePointers.size === 1) {
+      const s = states[index];
+      dragStart = { x: e.clientX, y: e.clientY, tx: s.tx, ty: s.ty };
+      moved = false;
+      clearTimeout(closeTimer);
+    }
   });
   overlay.addEventListener('pointermove', (e) => {
+    if (!activePointers.has(e.pointerId)) return;
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const s = states[index];
+    if (isPinching && activePointers.size >= 2) {
+      const pts = [...activePointers.values()];
+      const mx = (pts[0].x + pts[1].x) / 2;
+      const my = (pts[0].y + pts[1].y) / 2;
+      if (pinchStartDist > 0) {
+        let next = pinchStartScale * (twoFingerDist() / pinchStartDist);
+        next = Math.max(1, Math.min(MAX_SCALE, next));
+        const k = next / s.scale;
+        if (k !== 1) {
+          zoomAtPoint(mx, my, k);
+          s.scale = next;
+          if (s.scale <= 1) { s.tx = 0; s.ty = 0; }
+          clampPan(index);
+          applyCurrent();
+        }
+      }
+      return;
+    }
     if (!dragStart) return;
     const dx = e.clientX - dragStart.x, dy = e.clientY - dragStart.y;
     if (Math.abs(dx) > 6 || Math.abs(dy) > 6) moved = true;
-    if (scale > 1 && moved) {
-      img.classList.remove('img-lightbox__img--anim'); // 拖拽不走过渡
-      tx = dragStart.tx + dx;
-      ty = dragStart.ty + dy;
-      clampPan();
-      apply();
+    if (s.scale > 1 && moved) {
+      // 放大态：平移当前图
+      slides[index].img.classList.remove('img-lightbox__img--anim');
+      s.tx = dragStart.tx + dx;
+      s.ty = dragStart.ty + dy;
+      clampPan(index);
+      applyCurrent();
+    } else if (slides[index].long && s.scale <= 1 && moved && Math.abs(dy) >= Math.abs(dx)) {
+      // 长图未放大且纵向为主：垂直拖动看全图（宽度撑满，上下溢出可拖）
+      slides[index].img.classList.remove('img-lightbox__img--anim');
+      s.tx = 0;
+      s.ty = dragStart.ty + dy;
+      clampPan(index);
+      applyCurrent();
+    } else if (s.scale <= 1 && moved && Math.abs(dx) > Math.abs(dy)) {
+      // 未放大且横向为主：跟手滑 track 切图
+      const overlayW = overlay.clientWidth || 1;
+      trackOffset = (dx / overlayW) * 100;
+      track.classList.remove('img-lightbox__track--anim');
+      applyTrack();
     }
   });
   overlay.addEventListener('pointerup', (e) => {
+    const wasPinching = isPinching;
+    activePointers.delete(e.pointerId);
+    if (activePointers.size < 2) isPinching = false;
+    if (wasPinching) {
+      if (activePointers.size === 1) {
+        const [p] = [...activePointers.values()];
+        const s = states[index];
+        dragStart = { x: p.x, y: p.y, tx: s.tx, ty: s.ty };
+        moved = false;
+      } else {
+        dragStart = null;
+      }
+      return;
+    }
     if (!dragStart) return;
+    const dx = e.clientX - dragStart.x, dy = e.clientY - dragStart.y;
     dragStart = null;
-    if (moved) return; // 拖拽结束不当点击
+    const s = states[index];
+    if (moved) {
+      if (s.scale > 1) return; // 放大态拖拽结束，不切图
+      // 长图垂直拖动结束：保持当前 ty，不切图不 tap
+      if (slides[index].long && Math.abs(dy) >= Math.abs(dx)) return;
+      // 未放大横向滑：判断切图（滑过 15% 宽度切图）
+      const overlayW = overlay.clientWidth || 1;
+      const percent = (dx / overlayW) * 100;
+      if (percent < -15 && index < imgs.length - 1) {
+        snapTo(index + 1);
+      } else if (percent > 15 && index > 0) {
+        snapTo(index - 1);
+      } else {
+        // 回弹
+        trackOffset = 0;
+        track.classList.add('img-lightbox__track--anim');
+        applyTrack();
+        setTimeout(() => track.classList.remove('img-lightbox__track--anim'), 270);
+      }
+      return;
+    }
+    // 没移动 → 点击（双击放大 / 单击关闭）
     const now = Date.now();
     const isDouble =
       now - lastTapAt < 300 &&
@@ -663,34 +902,44 @@ function openImageLightbox(todo) {
       Math.abs(e.clientY - lastTapY) < 44;
     if (isDouble) {
       lastTapAt = 0;
-      // 以双击点为不动中心缩放/还原
-      const rect = img.getBoundingClientRect();
-      const cx = e.clientX - (rect.left + rect.width / 2);
-      const cy = e.clientY - (rect.top + rect.height / 2);
-      const next = scale > 1 ? 1 : MAX_SCALE;
-      const k = next / scale;
-      tx = cx - (cx - tx) * k;
-      ty = cy - (cy - ty) * k;
-      scale = next;
-      clampPan();
-      zoomWithAnim();
+      const target = s.scale > 1 ? 1 : MAX_SCALE;
+      zoomWithAnim(target, e.clientX, e.clientY);
     } else {
       lastTapAt = now;
       lastTapX = e.clientX;
       lastTapY = e.clientY;
-      // 单击（点遮罩或图片）：延迟 260ms 确认不是双击，且仅在未放大时关闭
-      if (e.target === overlay || e.target === img) {
-        closeTimer = setTimeout(() => { if (scale === 1) close(); }, 260);
-      }
+      // 单击关闭（仅未放大时），延迟确认不是双击
+      closeTimer = setTimeout(() => { if (states[index].scale === 1) close(); }, 260);
     }
   });
-  overlay.addEventListener('pointercancel', () => { dragStart = null; });
+  overlay.addEventListener('pointercancel', (e) => {
+    activePointers.delete(e.pointerId);
+    if (activePointers.size < 2) isPinching = false;
+    dragStart = null;
+  });
 }
 
 /* ===== 完成备注：底部滑出输入面板（一次性模态，复用 add-panel 滑出风格）=====
  * 长按已完成待办 → 备注 → 弹此面板。覆盖语义：输入框预填原备注，可改可清空。
  * 不自动保存（必须点保存才写入，避免误触覆盖）。
  */
+// 备注占位文案池：每次打开面板随机抽一条，诗意且贴备注场景（收尾交代/叮嘱留话）。
+// 风格：短、留白，像两人之间给某件事留的便条，完成前后都适用。
+const NOTE_PLACEHOLDERS = [
+  '事毕，灯也熄了',
+  '花浇过了，安心睡',
+  '窗已关严，风进不来',
+  '先搁着，等你回来再说',
+  '信已寄出，风替我送',
+  '这事我记下了',
+  '路远，慢慢来不急',
+  '雨大，今日不出门',
+  '做完了，你先歇',
+  '留半盏灯，等你回',
+];
+function pickNotePlaceholder() {
+  return NOTE_PLACEHOLDERS[Math.floor(Math.random() * NOTE_PLACEHOLDERS.length)];
+}
 function openNotePanel(todo) {
   // 已打开则不重复
   if (document.querySelector('.note-input-overlay')) return;
@@ -716,7 +965,7 @@ function openNotePanel(todo) {
   textarea.className = 'note-input-panel__textarea';
   textarea.maxLength = 100;
   textarea.rows = 2;
-  textarea.placeholder = '比如「蚊子已打死」';
+  textarea.placeholder = pickNotePlaceholder();
   textarea.value = latest.completedNote || ''; // 预填原备注（覆盖语义）
   // 回车保存（移动端键盘的"完成"键也触发）
   textarea.addEventListener('keydown', (e) => {
@@ -783,6 +1032,86 @@ async function saveNote(id, text) {
     // 回滚
     const target = getTodos().find((t) => t.id === id);
     if (target) target.completedNote = prev;
+    setTodos(getTodos());
+    handleError(toAppError(err), '保存失败');
+  }
+}
+
+/* ===== 编辑待办文案：底部滑出输入面板（复用 note-panel 滑出风格）=====
+ * 长按待办 → 编辑 → 弹此面板。预填原 text，可改；空文本不允许。
+ */
+function openEditPanel(todo) {
+  if (document.querySelector('.note-input-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'note-input-overlay';
+  const latest = getTodos().find((t) => t.id === todo.id) || todo;
+
+  const panel = document.createElement('div');
+  panel.className = 'note-input-panel';
+
+  const handle = document.createElement('div');
+  handle.className = 'note-input-panel__handle';
+  panel.appendChild(handle);
+
+  const label = document.createElement('div');
+  label.className = 'note-input-panel__label';
+  label.textContent = '编辑待办';
+  panel.appendChild(label);
+
+  const textarea = document.createElement('textarea');
+  textarea.className = 'note-input-panel__textarea';
+  textarea.maxLength = 200; // 与 todos.text 的 CHECK 一致
+  textarea.rows = 2;
+  textarea.value = latest.text || '';
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      saveEditText(latest.id, textarea.value.trim());
+    }
+  });
+  panel.appendChild(textarea);
+
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'note-input-panel__save';
+  saveBtn.textContent = '保存';
+  saveBtn.addEventListener('click', () => saveEditText(latest.id, textarea.value.trim()));
+  panel.appendChild(saveBtn);
+
+  overlay.appendChild(panel);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeNotePanel(); });
+  document.body.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
+  requestAnimationFrame(() => overlay.classList.add('note-input-overlay--show'));
+  setTimeout(() => textarea.focus(), 280);
+  document.addEventListener('keydown', onNoteEsc);
+  function onNoteEsc(e) {
+    if (e.key === 'Escape') {
+      closeNotePanel();
+      document.removeEventListener('keydown', onNoteEsc);
+    }
+  }
+}
+
+/**
+ * 保存编辑后的待办文案（乐观更新 + 失败回滚）。
+ * 空文本不允许（待办必须有内容）。
+ */
+async function saveEditText(id, text) {
+  if (!text) { showToast('内容不能为空'); return; }
+  const current = getTodos().find((t) => t.id === id);
+  const prev = current && current.text;
+  if (current) {
+    current.text = text;
+    setTodos(getTodos()); // 触发重渲染
+  }
+  closeNotePanel();
+  try {
+    await db.updateTodoText(id, text);
+    showToast('已保存');
+  } catch (err) {
+    const target = getTodos().find((t) => t.id === id);
+    if (target) target.text = prev;
     setTodos(getTodos());
     handleError(toAppError(err), '保存失败');
   }
@@ -1334,10 +1663,10 @@ function buildMetaText(todo) {
     if (todo.completedAt) {
       meta += ` · ${formatRelativeTime(todo.completedAt)}`;
     }
-    // 完成备注：用「」包裹，像一句轻声的话，区别于其他 meta 信息
-    if (todo.completedNote) {
-      meta += ` ·「${todo.completedNote}」`;
-    }
+  }
+  // 备注：完成前后均可加，用「」包裹，像一句轻声的话，区别于其他 meta 信息
+  if (todo.completedNote) {
+    meta += ` ·「${todo.completedNote}」`;
   }
   return meta;
 }
@@ -1492,6 +1821,8 @@ const ICONS = {
   image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
   // 备注：聊天气泡（完成后的交代/收尾说明，语义=留句话）
   note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+  // 编辑：铅笔（编辑待办文案）
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>',
 };
 
 /** 构造一个图标按钮（纯图标，无文案） */
@@ -1537,9 +1868,18 @@ function showTodoMenu(todo, liEl) {
   const actions = document.createElement('div');
   actions.className = 'action-sheet__actions';
 
-  // 完成备注（仅已完成时：完成后的交代/收尾说明，如"蚊子已打死"）
+  // 编辑待办文案（改文字内容，不动 completed/created_by 等其他字段）
+  const editBtn = mkIconBtn(ICONS.edit, '编辑');
+  editBtn.addEventListener('click', () => {
+    if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+    closeTodoMenu();
+    openEditPanel(todo);
+  });
+  actions.appendChild(editBtn);
+
+  // 备注（完成前后均可加：未完成时可留交代/叮嘱，完成后可留收尾说明）
   // 完成动作本身由复选框承担（点对勾=完成），菜单里不再放完成按钮，避免冗余入口
-  if (todo.completed) {
+  {
     const hasNote = !!todo.completedNote;
     const noteBtn = mkIconBtn(ICONS.note, hasNote ? '修改备注' : '加备注', hasNote ? 'action-sheet__icon-btn--active' : '');
     noteBtn.addEventListener('click', () => {
@@ -1569,13 +1909,13 @@ function showTodoMenu(todo, liEl) {
     });
   }
 
-  // 配图 / 换图（唯一的图片入口；删图/换图都收敛在 lightbox 里——"看图的地方就是操作图的地方"）
-  const hasImage = !!todo.imagePath;
-  const imageBtn = mkIconBtn(ICONS.image, hasImage ? '换图' : '配图', hasImage ? 'action-sheet__icon-btn--active' : '');
+  // 配图 / 加图（唯一的图片入口；删图/换图都收敛在 lightbox 里——"看图的地方就是操作图的地方"）
+  const hasImage = !!(todo.imagePaths && todo.imagePaths.length);
+  const imageBtn = mkIconBtn(ICONS.image, hasImage ? '加图' : '配图', hasImage ? 'action-sheet__icon-btn--active' : '');
   imageBtn.addEventListener('click', async () => {
     if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
     closeTodoMenu();
-    await attachImageToTodo(todo.id, hasImage ? todo.imagePath : null);
+    await attachImageToTodo(todo.id, todo.imagePaths);
   });
   actions.appendChild(imageBtn);
 
@@ -1627,6 +1967,11 @@ function updateItem(li, todo) {
     li.classList.add(doneClass);
   } else if (!todo.completed && li.classList.contains(doneClass)) {
     li.classList.remove(doneClass);
+  }
+  // 主文案：编辑待办后 text 会变，原地更新（不重建 li，避免动画/状态抖动）
+  const textEl = li.querySelector('.todo__text');
+  if (textEl && textEl.textContent !== todo.text) {
+    textEl.textContent = todo.text;
   }
   // 自绘复选框状态（class + aria，不触发 click）
   const check = li.querySelector('.todo__check');

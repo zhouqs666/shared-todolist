@@ -12,34 +12,53 @@
 import { supabase } from './supabase.js';
 
 const BUCKET = 'todo-attachments';
-const MAX_EDGE = 1280; // 压缩后最长边
-const JPEG_QUALITY = 0.8;
+const SHORT_EDGE_MAX = 1280; // 短边阈值：超过才压缩
+const JPEG_QUALITY = 0.92;  // 提到 0.92，减少文字边缘伪影
+
+// 文件 MIME → 扩展名（直接原文件上传分支用）
+function extFromType(type) {
+  if (type === 'image/png') return 'png';
+  if (type === 'image/webp') return 'webp';
+  if (type === 'image/gif') return 'gif';
+  return 'jpg';
+}
 
 /**
- * 压缩图片：等比缩放到长边 ≤ MAX_EDGE，照片转 JPEG，PNG 透明图保留 PNG。
+ * 压缩图片：**短边阈值**策略。
+ *
+ *   - 短边 ≤ SHORT_EDGE_MAX：直接上传原文件，不经过 canvas。
+ *     长图（如手机长截图，长边可达数千像素）短边通常 ≤ 1280，
+ *     保留原分辨率可保住文字清晰度；跳过 canvas 同时避免 JPEG 二次损失。
+ *   - 短边 > SHORT_EDGE_MAX：等比缩到短边 = SHORT_EDGE_MAX（普通大照片压缩），
+ *     PNG 保留 PNG 无损，其余转 JPEG 0.92。
+ *   - webp/gif：一律直接原文件上传（避免动图被 canvas 取首帧变静态）。
+ *
  * @param {File} file 原始图片文件
  * @returns {Promise<{blob:Blob, ext:string}>}
  */
 export function compressImage(file) {
   return new Promise((resolve, reject) => {
-    // PNG（含透明通道）保留 PNG，避免黑底；其它统一转 JPEG（体积小）
-    const isPng = file.type === 'image/png';
-    const ext = isPng ? 'png' : 'jpg';
+    const ext = extFromType(file.type);
+    // webp/gif 直接原文件上传（动图保护）
+    if (ext === 'webp' || ext === 'gif') {
+      resolve({ blob: file, ext });
+      return;
+    }
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       URL.revokeObjectURL(url);
-      let { width, height } = img;
-      // 等比缩放
-      if (width > MAX_EDGE || height > MAX_EDGE) {
-        if (width >= height) {
-          height = Math.round((height * MAX_EDGE) / width);
-          width = MAX_EDGE;
-        } else {
-          width = Math.round((width * MAX_EDGE) / height);
-          height = MAX_EDGE;
-        }
+      const shortEdge = Math.min(img.width, img.height);
+      // 短边 ≤ 阈值：保留原文件，避免长图文字失真 + JPEG 二次损失
+      if (shortEdge <= SHORT_EDGE_MAX) {
+        resolve({ blob: file, ext });
+        return;
       }
+      // 短边 > 阈值：等比缩到短边 = SHORT_EDGE_MAX
+      const ratio = SHORT_EDGE_MAX / shortEdge;
+      const width = Math.round(img.width * ratio);
+      const height = Math.round(img.height * ratio);
+      const isPng = ext === 'png';
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
@@ -83,6 +102,24 @@ export function pickImage() {
     };
     // 部分浏览器取消选择时不触发 change，无法可靠监听取消；这里不做超时兜底，
     // 调用方按 await 结果处理即可（null = 未选）。
+    input.click();
+  });
+}
+
+/**
+ * 弹出系统选图器（多选），返回选中的文件数组（用户取消返回 null）。
+ * @returns {Promise<File[]|null>}
+ */
+export function pickImages() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.onchange = () => {
+      if (!input.files || input.files.length === 0) { resolve(null); return; }
+      resolve(Array.from(input.files));
+    };
     input.click();
   });
 }
