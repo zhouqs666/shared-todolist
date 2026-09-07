@@ -164,11 +164,14 @@ input {
   justify-content: space-between;
   gap: 8px;
   padding: 16px 20px;
-  /* 毛玻璃：内容从下方滚过时透出模糊光影，与氛围背景融为一体 */
-  background: rgba(255, 255, 255, 0.72);
-  -webkit-backdrop-filter: blur(20px) saturate(1.7);
-  backdrop-filter: blur(20px) saturate(1.7);
-  border-bottom: 1px solid rgba(194, 65, 12, 0.08);
+  /* v2.7.50 顶栏毛玻璃增强：
+     - 背景透明度 rgba(255,255,255,0.72) → rgba(253,251,247,0.72) 暖白
+     - backdrop-filter blur 20→24 + saturate 1.7→1.85 + brightness 1.02（更"漂浮"） */
+  background: rgba(253, 251, 247, 0.72);
+  -webkit-backdrop-filter: blur(24px) saturate(1.85) brightness(1.02);
+  backdrop-filter: blur(24px) saturate(1.85) brightness(1.02);
+  /* v2.7.50 顶栏边框：rgba(194,65,12,0.08) → var(--color-border) 米杏渐层 */
+  border-bottom: 1px solid var(--color-border);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -590,9 +593,15 @@ input {
     transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .todo__check:active {
-  transform: scale(0.88);
-  opacity: 1;
+  /* v2.7.50 P2.1 轻量化：按下时背景填充 rose-500 + SVG 变白（"心意"反馈）
+     保留圆形形状（不改 JS SVG path），避免破坏现有克制调性 */
+  background: var(--rose-500);
   border-color: var(--rose-500);
+  transform: scale(1.15); /* 更大 spring 弹反馈（之前 0.88 是"按下去"，现在是"亮起来"） */
+  opacity: 1;
+}
+.todo__check:active svg {
+  fill: var(--cream-50);
 }
 @media (hover: hover) {
   .todo__check:hover {
@@ -707,24 +716,26 @@ input {
   position: fixed;
   left: 50%;
   bottom: 30px;
-  transform: translateX(-50%) translateY(20px);
-  background: rgba(41, 37, 36, 0.88);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  transform: translateX(-50%) translateY(24px);
+  /* v2.7.50 Toast 升级：暖墨背景 + backdrop-filter blur(8px)（已有）+ 圆角 14→12 + 阴影暖色染色 */
+  background: rgba(47, 40, 32, 0.92);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   color: #fff;
-  padding: 10px 18px;
-  border-radius: 14px;
+  padding: 12px 20px;
+  border-radius: 12px;
   font-size: 14px;
   letter-spacing: 0.2px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
+  transition: opacity 0.28s var(--ease), transform 0.28s var(--ease);
   z-index: 10000; /* 高于一切弹层（图鉴 1000 / lightbox 9999），弹层内反馈不被遮挡 */
   max-width: 80vw;
   display: flex;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 8px 24px rgba(24, 20, 22, 0.22);
+  /* v2.7.50 阴影：用 --shadow-lg 暖色染色（之前是冷灰 rgba(24,20,22)） */
+  box-shadow: var(--shadow-lg);
 }
 
 .toast--show {
