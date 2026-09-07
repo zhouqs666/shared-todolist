@@ -275,7 +275,8 @@ function openReadMode(note) {
   // 清理可能的 leaving 残留（连续阅多条时），再显示
   readPane.classList.remove('note-read--leaving');
   // 时段氛围：按对方写下时的小时数切换（清旧态再加新态）
-  readPane.classList.remove('note-read--dawn', 'note-read--night');
+  // v2.7.51 P3.3：四档清理（dawn/noon/dusk/night）
+  readPane.classList.remove('note-read--dawn', 'note-read--noon', 'note-read--dusk', 'note-read--night');
   const mood = moodForNote(note);
   if (mood) readPane.classList.add(mood);
   readPane.hidden = false;
@@ -299,11 +300,19 @@ function openReadMode(note) {
   requestAnimationFrame(() => modalEl.classList.add('note-modal--show'));
 }
 
-/** 根据留言写下时的时段返回氛围 class（晨光 5-10 / 星空 22-5 / 其它空） */
+/** 根据留言写下时的时段返回氛围 class
+ *  v2.7.51 P3.3 纪念日时段配色微调：从二档（晨/夜）升级为四档（晨/午/昏/夜），覆盖 10-22 长段空白
+ *   晨光 dawn（5-10）：金粉暖色调
+ *   午间 noon（10-14）：阳光奶油调，更明亮
+ *   黄昏 dusk（18-22）：暮色蜜桃调，更温柔
+ *   星空 night（22-5）：深蓝夜幕 + 微光粒子
+ */
 function moodForNote(note) {
   if (!note || !note.createdAt) return '';
   const h = new Date(note.createdAt).getHours();
   if (h >= 5 && h < 10) return 'note-read--dawn';
+  if (h >= 10 && h < 14) return 'note-read--noon';
+  if (h >= 18 && h < 22) return 'note-read--dusk';
   if (h >= 22 || h < 5) return 'note-read--night';
   return '';
 }

@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="Dql8CNvfLJFzwZyHRnPFWD">
+<head data-page-node-id="WBb5aqgXZmtbmeNcPqL98v">
+<meta charset="UTF-8" data-page-node-id="ynmUIq5ccf9AtshuVIWZeh">
+<meta name="viewport" content="width=390, initial-scale=1.0" data-page-node-id="p18RYxvROnlHlaHoR6dgvd">
+<title>原型 #06 · 浮层合集 · 「有爱」v2 改版</title>
+<!--
+  4 个浮层合并展示（2x2 网格）：
+  A: 长按操作菜单（底部 Sheet · 5 项）
+  B: 添加面板（添加新待办）
+  C: 图片 Lightbox
+  D: APK 更新提示面板
+-->
+<style>
+:root {
+  --rose-50:#fdf5f0; --rose-100:#f9e3d4; --rose-200:#f1c4a8;
+  --rose-300:#e89e76; --rose-400:#d9774b; --rose-500:#c2410c;
+  --rose-600:#a8340a; --rose-700:#872a08; --rose-800:#6a1f06;
+  --cream-50:#fdfbf7; --cream-100:#faf6f1; --cream-200:#f3ebde;
+  --cream-300:#e8dcc6; --cream-400:#d6c4a3; --cream-500:#b8a17e;
+  --cream-600:#8e7752; --cream-700:#66553b; --cream-800:#3f3322;
+  --stone-50:#f8f6f3; --stone-100:#ede8e0; --stone-200:#d9d2c5;
+  --stone-300:#b8aea0; --stone-400:#928676; --stone-500:#6b6051;
+  --stone-600:#4a4135; --stone-700:#2f2820; --stone-800:#1a1610;
+  --legendary-300:#e8d49b; --legendary-500:#c1932e; --legendary-700:#8a6618;
+  --ink-500:#2f456a; --ink-700:#1a2942;
+  --danger-500:#a8340a;
+
+  --color-primary:var(--rose-500);
+  --color-primary-rgb:194,65,12;
+  --color-text:var(--stone-700);
+  --color-text-muted:var(--stone-500);
+  --color-text-subtle:var(--stone-400);
+  --color-text-rose:var(--rose-500);
+  --color-border:var(--cream-300);
+  --color-border-subtle:var(--cream-200);
+  --color-bg:var(--cream-100);
+  --color-bg-elevated:var(--cream-50);
+
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:20px; --space-6:24px; --space-7:32px;
+  --radius-sm:8px; --radius-md:12px; --radius-lg:16px; --radius-xl:20px; --radius-2xl:28px; --radius-full:9999px;
+
+  --font-cn:"LXGW WenKai","Source Han Serif SC","Songti SC",serif;
+  --font-en:"Inter","SF Pro Text",system-ui,sans-serif;
+  --font-mono:"Berkeley Mono","JetBrains Mono",monospace;
+
+  --shadow-sm:0 2px 6px rgba(194,65,12,0.06);
+  --shadow-md:0 6px 18px rgba(194,65,12,0.10);
+  --shadow-lg:0 12px 32px rgba(194,65,12,0.14);
+  --shadow-xl:0 24px 48px rgba(194,65,12,0.18);
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html, body { background:#3f3322; }
+body { font-family:var(--font-cn); color:var(--color-text); line-height:1.6; -webkit-font-smoothing:antialiased; }
+
+body {
+  background:radial-gradient(ellipse at center, #4a1605 0%, #231b10 100%);
+  min-height:100vh;
+  padding:80px 32px 60px;
+}
+.stage-label {
+  position:fixed; top:16px; left:24px;
+  color:var(--cream-300); font-family:var(--font-en);
+  font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+}
+.stage-tag {
+  position:fixed; top:16px; right:24px;
+  color:var(--rose-300); font-family:var(--font-en);
+  font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+}
+.page-title {
+  text-align:center;
+  margin-bottom:32px;
+}
+.page-title .overline {
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  letter-spacing:0.24em; text-transform:uppercase;
+  color:var(--cream-400);
+}
+.page-title h1 {
+  margin-top:6px;
+  font-family:var(--font-cn);
+  font-size:24px;
+  color:var(--cream-100);
+  font-weight:600;
+}
+
+.grid {
+  display:grid;
+  grid-template-columns:repeat(2, 390px);
+  gap:48px 32px;
+  justify-content:center;
+  max-width:1200px;
+  margin:0 auto;
+}
+.cell {
+  display:flex; flex-direction:column;
+  align-items:center;
+}
+.cell-label {
+  margin-bottom:16px;
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  letter-spacing:0.18em; text-transform:uppercase;
+  color:var(--cream-300);
+}
+.cell-label .num {
+  font-family:var(--font-mono);
+  color:var(--rose-300);
+  margin-right:8px;
+}
+
+.phone {
+  width:390px; height:560px;
+  background:var(--color-bg);
+  border-radius:36px;
+  box-shadow:
+    0 0 0 8px #1a1610,
+    0 0 0 9px #3f3322,
+    0 30px 80px rgba(0,0,0,0.45);
+  overflow:hidden;
+  position:relative;
+}
+.phone.tall { height:844px; }
+
+/* Status Bar */
+.status-bar {
+  height:44px;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 28px;
+  font-family:var(--font-en); font-size:15px; font-weight:600;
+  color:var(--stone-800);
+}
+.status-bar .icons { display:flex; gap:6px; align-items:center; }
+
+/* Scrim */
+.scrim {
+  position:absolute; inset:0;
+  background:rgba(35,27,16,0.55);
+  backdrop-filter:blur(8px);
+  z-index:50;
+}
+
+/* =================================== */
+/* A · 长按操作菜单 */
+/* =================================== */
+.action-sheet {
+  position:absolute;
+  left:0; right:0; bottom:0;
+  background:var(--cream-50);
+  border-radius:28px 28px 0 0;
+  z-index:51;
+  box-shadow:0 -24px 48px rgba(194,65,12,0.18);
+  padding:0 0 36px;
+}
+.action-sheet .handle {
+  width:48px; height:4px;
+  background:var(--cream-300);
+  border-radius:2px;
+  margin:12px auto 0;
+}
+.action-sheet .target {
+  margin:18px 24px 0;
+  padding:14px 16px;
+  background:var(--cream-100);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-md);
+  display:flex; align-items:center; gap:12px;
+}
+.action-sheet .target .checkbox {
+  width:20px; height:20px;
+  border:1.5px solid var(--stone-300);
+  border-radius:5px;
+}
+.action-sheet .target .ttl {
+  font-family:var(--font-cn);
+  font-size:14px;
+  color:var(--color-text);
+  flex:1;
+}
+.action-sheet .target .meta {
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--color-text-subtle);
+}
+
+.action-list {
+  margin:18px 0 0;
+  padding:0 16px;
+}
+.action-item {
+  display:flex; align-items:center; gap:14px;
+  padding:16px 8px;
+  border-bottom:1px solid var(--color-border-subtle);
+  font-family:var(--font-cn);
+  font-size:15px;
+  color:var(--color-text);
+  cursor:pointer;
+  min-height:56px;
+}
+.action-item:last-child { border-bottom:none; }
+.action-item .ic {
+  width:32px; height:32px;
+  background:var(--cream-100);
+  border-radius:var(--radius-sm);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--color-text-muted);
+}
+.action-item .lbl { flex:1; }
+.action-item .hint {
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--color-text-subtle);
+  letter-spacing:0.04em;
+}
+.action-item.danger { color:var(--rose-700); }
+.action-item.danger .ic {
+  background:rgba(168,52,10,0.06);
+  color:var(--rose-700);
+}
+
+/* =================================== */
+/* B · 添加面板 */
+/* =================================== */
+.add-sheet {
+  position:absolute;
+  left:0; right:0; bottom:0;
+  background:var(--cream-50);
+  border-radius:28px 28px 0 0;
+  z-index:51;
+  box-shadow:0 -24px 48px rgba(194,65,12,0.18);
+  padding:0 20px 24px;
+}
+.add-title {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:18px 4px 12px;
+  border-bottom:1px solid var(--color-border-subtle);
+  margin-bottom:16px;
+}
+.add-title h3 {
+  font-family:var(--font-cn);
+  font-size:17px; font-weight:600;
+}
+.add-title .close {
+  font-size:24px; color:var(--color-text-subtle);
+  line-height:1;
+}
+.add-input {
+  width:100%;
+  height:48px;
+  background:var(--cream-100);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-sm);
+  padding:0 16px;
+  font-family:var(--font-cn);
+  font-size:15px;
+  color:var(--color-text);
+  display:flex; align-items:center;
+  margin-bottom:12px;
+}
+.add-input .placeholder { color:var(--color-text-subtle); font-size:14px; }
+.add-input.focused {
+  border-color:var(--color-primary);
+  box-shadow:0 0 0 3px rgba(194,65,12,0.12);
+}
+
+.add-textarea {
+  width:100%;
+  min-height:80px;
+  background:var(--cream-100);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-sm);
+  padding:12px 16px;
+  font-family:var(--font-cn);
+  font-size:14px;
+  color:var(--color-text);
+  margin-bottom:12px;
+}
+
+.add-row {
+  display:flex; gap:8px; margin-bottom:12px;
+}
+.add-chip {
+  flex:1;
+  height:44px;
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-sm);
+  background:var(--cream-100);
+  display:flex; align-items:center; justify-content:center;
+  gap:6px;
+  font-family:var(--font-cn);
+  font-size:13px;
+  color:var(--color-text-muted);
+}
+.add-chip.active {
+  background:var(--rose-50);
+  border-color:var(--rose-300);
+  color:var(--rose-700);
+}
+
+.add-who {
+  display:flex; gap:8px; margin-bottom:16px;
+}
+.add-who .who {
+  flex:1;
+  height:40px;
+  background:var(--cream-100);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-sm);
+  display:flex; align-items:center; justify-content:center;
+  gap:6px;
+  font-family:var(--font-cn);
+  font-size:13px;
+  color:var(--color-text-muted);
+}
+.add-who .who.active {
+  background:var(--cream-200);
+  border-color:var(--color-primary);
+  color:var(--color-text);
+}
+
+.add-confirm {
+  width:100%;
+  height:52px;
+  background:var(--color-primary);
+  color:var(--cream-50);
+  border:none;
+  border-radius:var(--radius-sm);
+  font-family:var(--font-cn);
+  font-size:15px; font-weight:600;
+  display:flex; align-items:center; justify-content:center;
+  gap:8px;
+  box-shadow:var(--shadow-md);
+}
+
+/* =================================== */
+/* C · 图片 Lightbox */
+/* =================================== */
+.lightbox {
+  position:absolute; inset:0;
+  background:#0d0a06;
+  z-index:60;
+  display:flex; flex-direction:column;
+}
+.lightbox .topbar {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 16px;
+  height:56px;
+  color:var(--cream-50);
+}
+.lightbox .topbar .meta {
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  letter-spacing:0.18em; text-transform:uppercase;
+  opacity:0.7;
+}
+.lightbox .topbar .counter {
+  font-family:var(--font-mono);
+  font-size:11px;
+  opacity:0.7;
+  letter-spacing:0.04em;
+}
+.lightbox .topbar .close {
+  width:36px; height:36px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:50%;
+  background:rgba(250,246,241,0.12);
+  color:var(--cream-50);
+}
+.lightbox .photo {
+  flex:1;
+  display:flex; align-items:center; justify-content:center;
+  padding:0 24px;
+  position:relative;
+}
+.lightbox .photo svg {
+  width:100%;
+  max-height:380px;
+  border-radius:var(--radius-md);
+  box-shadow:var(--shadow-xl);
+}
+.lightbox .bottom {
+  padding:20px 24px 36px;
+  color:var(--cream-100);
+}
+.lightbox .caption {
+  font-family:var(--font-cn);
+  font-size:15px;
+  line-height:1.7;
+  margin-bottom:14px;
+}
+.lightbox .caption .from {
+  color:var(--rose-300);
+  font-weight:600;
+}
+.lightbox .photo-actions {
+  display:flex; gap:24px; justify-content:center;
+}
+.lightbox .photo-action {
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  font-family:var(--font-en);
+  font-size:11px;
+  letter-spacing:0.14em;
+  color:var(--cream-300);
+  text-transform:uppercase;
+}
+.lightbox .photo-action .ic {
+  width:32px; height:32px;
+  border-radius:50%;
+  background:rgba(250,246,241,0.12);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--cream-50);
+}
+
+/* =================================== */
+/* D · APK 更新面板 */
+/* =================================== */
+.update-sheet {
+  position:absolute;
+  left:0; right:0; bottom:0;
+  background:var(--cream-50);
+  border-radius:28px 28px 0 0;
+  z-index:51;
+  box-shadow:0 -24px 48px rgba(194,65,12,0.18);
+  padding:0 24px 36px;
+}
+.update-sheet .force {
+  background:linear-gradient(90deg, var(--rose-600), var(--rose-500));
+  color:var(--cream-50);
+  margin:0 -24px 18px;
+  padding:10px 24px;
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+  display:flex; align-items:center; gap:8px;
+}
+.update-title {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:8px;
+}
+.update-title h3 {
+  font-family:var(--font-cn);
+  font-size:20px; font-weight:600;
+}
+.update-title .ver {
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--color-text-subtle);
+  letter-spacing:0.04em;
+}
+.update-meta {
+  display:flex; gap:12px;
+  margin-bottom:18px;
+}
+.update-meta .badge {
+  font-family:var(--font-en);
+  font-size:10px; font-weight:700;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+  padding:2px 8px;
+  border-radius:3px;
+  background:var(--rose-50);
+  color:var(--rose-700);
+}
+
+.update-list {
+  background:var(--cream-100);
+  border-radius:var(--radius-md);
+  padding:14px 16px;
+  margin-bottom:18px;
+}
+.update-list .label {
+  font-family:var(--font-en);
+  font-size:10px; font-weight:600;
+  letter-spacing:0.18em; text-transform:uppercase;
+  color:var(--color-text-subtle);
+  margin-bottom:8px;
+}
+.update-list ul {
+  list-style:none;
+}
+.update-list li {
+  padding:6px 0;
+  display:flex; align-items:flex-start; gap:10px;
+  font-family:var(--font-cn);
+  font-size:13px;
+  color:var(--color-text-muted);
+}
+.update-list li::before {
+  content:"";
+  flex-shrink:0;
+  width:6px; height:6px;
+  border-radius:50%;
+  background:var(--rose-500);
+  margin-top:7px;
+}
+
+.update-progress {
+  margin-bottom:18px;
+}
+.update-progress .row {
+  display:flex; justify-content:space-between;
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--color-text-muted);
+  margin-bottom:6px;
+}
+.update-progress .row b {
+  color:var(--color-text-rose);
+  font-weight:500;
+}
+.update-progress .bar {
+  height:8px;
+  background:var(--cream-200);
+  border-radius:4px;
+  overflow:hidden;
+  position:relative;
+}
+.update-progress .bar .fill {
+  height:100%;
+  width:68%;
+  background:linear-gradient(90deg, var(--rose-400), var(--rose-500));
+  border-radius:4px;
+  position:relative;
+}
+.update-progress .bar .fill::after {
+  content:"";
+  position:absolute; inset:0;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+  animation:shimmer 1.6s infinite;
+}
+@keyframes shimmer {
+  0% { transform:translateX(-100%); }
+  100% { transform:translateX(100%); }
+}
+
+.update-actions {
+  display:flex; gap:12px;
+}
+.btn-half {
+  flex:1;
+  height:48px;
+  border-radius:var(--radius-sm);
+  font-family:var(--font-cn);
+  font-size:15px; font-weight:600;
+  display:flex; align-items:center; justify-content:center;
+}
+.btn-primary-fill {
+  background:var(--color-primary);
+  color:var(--cream-50);
+  border:none;
+  box-shadow:var(--shadow-md);
+}
+.btn-ghost-line {
+  background:transparent;
+  border:1px solid var(--color-border);
+  color:var(--color-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:120ms !important;
+    transition-duration:120ms !important;
+  }
+}
+</style>
+</head>
+<body data-page-node-id="Mhzz9JVUM4RE4u1msfqWUs">
+
+<div class="stage-label" data-page-node-id="FvlocfLscpZpkIv2rbV2sW">PROTOTYPE · 06 · OVERLAYS</div>
+<div class="stage-tag" data-page-node-id="onDcCyjIAjjyYW7vDZy8cc">v1 · 改版稿</div>
+
+<div class="page-title" data-page-node-id="ye7kMc3Az6DegyBevYhKax">
+  <div class="overline" data-page-node-id="hphzu2uxB74EWKvmrd5oMq">4 OVERLAYS · 浮层合集</div>
+  <h1 data-page-node-id="AALrFtn3BdNh7TburwwLrz">长按 · 添加 · 看图 · 更新</h1>
+</div>
+
+<div class="grid" data-page-node-id="KX2Wg7Z9Tb4btjXfLEOdBm">
+
+  <!-- ============ A · 长按操作菜单 ============ -->
+  <div class="cell" data-page-node-id="LPPkjqr10pmTs6Gd8nJqbU">
+    <div class="cell-label" data-page-node-id="P1VkT11k92dAMcelM2Q7nd"><span class="num" data-page-node-id="MLiZz1LyXhBPA0FWsbFcLu">A</span>LONG PRESS MENU · 长按操作</div>
+    <div class="phone" data-page-node-id="89KA4qPE4K9DekcTvVHx0s">
+      <div class="status-bar" data-page-node-id="675GnGh1HOlSfrkvK2WNaV">
+        <span data-page-node-id="yeEtguHbe6NfMqFXZIEE20">9:41</span>
+        <div class="icons" data-page-node-id="TYdVsRCJ1m5XjFd4V95wXN">
+          <span data-page-node-id="6Y9NPLL1r1pAdicFVr37wj">●●●</span>
+          <svg width="16" height="11" viewBox="0 0 16 11" data-page-node-id="l4pboMbFxLRhnj10KivWDN"><path d="M1 8 Q8 0 15 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="C0wCy0yrByht4MhYinXTYN"/><path d="M3.5 8 Q8 3 12.5 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="C1iWsW3v9BKzvBmflezKKN"/><circle cx="8" cy="8" r="1.4" fill="#2f2820" data-page-node-id="4LVgVAQ8Lg4PTHXZHuTNVq"/></svg>
+          <svg width="24" height="11" viewBox="0 0 24 11" data-page-node-id="qEQ5L3mN9wQziGBd3IEENx"><rect x="0.5" y="0.5" width="20" height="10" rx="2" stroke="#2f2820" fill="none" data-page-node-id="9avOPPw7wD12EXMS1lcLsX"/><rect x="2" y="2" width="16" height="7" rx="1" fill="#2f2820" data-page-node-id="5JcHrOibCVhXnrOxod7jCr"/><rect x="21" y="3" width="2" height="5" rx="1" fill="#2f2820" data-page-node-id="v1V5A7jwCQLQrp5RhB7tGl"/></svg>
+        </div>
+      </div>
+      <div class="scrim" data-page-node-id="nP0oqv32bqoN5quy7OejZP"></div>
+      <div class="action-sheet" data-page-node-id="oRJtN5c6Nps2NKlzXBMoDc">
+        <div class="handle" data-page-node-id="4uNGEXyYUQ55qCwjY2PdH6"></div>
+        <div class="target" data-page-node-id="HqpcEcijyAAkEHrmZJfMD4">
+          <div class="checkbox" data-page-node-id="hkgMGsVHjh9MClOjvrcc9I"></div>
+          <div class="ttl" data-page-node-id="HjhDFVtKBr3FbZC16kKalC">陪她去挑圣诞礼物，要记得藏起来</div>
+          <div class="meta" data-page-node-id="bDldLMTJ8rnAhucdNz8SgE">DUE · 12·24</div>
+        </div>
+        <div class="action-list" data-page-node-id="eA2vuCOXIoF2mV2URX3Ik6">
+          <div class="action-item" data-page-node-id="aNPUH20oQEqq1gRrAGiPHH">
+            <span class="ic" data-page-node-id="scMhbfzeMDxHexhDbwiqAt">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="Rp7WKq066kdkhJYmI3bHLM">
+                <path d="M4 20 L9 15 L13 19 L20 12 M14 12 L20 12 L20 18" data-page-node-id="ac6avjp6Kej4twFfck7AiN"/>
+              </svg>
+            </span>
+            <span class="lbl" data-page-node-id="kwXGTEApWHtGuoLMiO7MJc">编辑</span>
+            <span class="hint" data-page-node-id="DjaGEo7A2j1DYyzSiJiOIF">TITLE · TIME</span>
+          </div>
+          <div class="action-item" data-page-node-id="47ggxIHUmXBKuUH0BdlAWN">
+            <span class="ic" data-page-node-id="LfHrnJ0RbhshXswc1r3P7f">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" data-page-node-id="1Cl4IxPdN06SGLaSLF8dmr">
+                <rect x="3" y="6" width="18" height="14" rx="2" data-page-node-id="KgOj2gi0ZWWXI7PrwQxZR1"/>
+                <circle cx="12" cy="13" r="3.5" data-page-node-id="e6aENX960eYcaBlODA53vL"/>
+                <rect x="8" y="3" width="6" height="3" rx="1" data-page-node-id="OFheEhKr3Kg0xVkaLOGLFQ"/>
+              </svg>
+            </span>
+            <span class="lbl" data-page-node-id="uOXMQn9lwPl1O4q9y4sUpe">配图</span>
+            <span class="hint" data-page-node-id="G7qFRYpzszg7WTALFlirFM">CAMERA · LIB</span>
+          </div>
+          <div class="action-item" data-page-node-id="OQhl7uDT7ieejHiIf4oYta">
+            <span class="ic" data-page-node-id="gE6vc3cBDTDMHhbFrxBKIJ">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" data-page-node-id="9XZoBVueAYRykMr8WNCECW">
+                <path d="M4 6 L20 6 M4 12 L16 12 M4 18 L12 18" data-page-node-id="fZhvgUSSmJBZvLADernB2F"/>
+              </svg>
+            </span>
+            <span class="lbl" data-page-node-id="XnZoyvNwI2j8aYI90BRmMH">备注</span>
+            <span class="hint" data-page-node-id="ftzis9jmwAFn91POGN019U">PRIVATE</span>
+          </div>
+          <div class="action-item" data-page-node-id="N3x6pQ3jToSANHTRSOiGS5">
+            <span class="ic" data-page-node-id="FKA1bvJSvjAMRoUv7KFFQb">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="#c2410c" data-page-node-id="1akASLsDKCqYEq7WEBOSDj">
+                <path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" data-page-node-id="BPdHtZ3KXBUjnviFG7sIcQ"/>
+              </svg>
+            </span>
+            <span class="lbl" data-page-node-id="V25F5H1KvPbnU77EtbF5t3">送一个反应</span>
+            <span class="hint" data-page-node-id="qXnRceFhCjsHEQAuEGDwd6">6 STICKERS</span>
+          </div>
+          <div class="action-item" data-page-node-id="AmoPZYFf3dYBwzjty5mUWi">
+            <span class="ic" data-page-node-id="iBaI3Lo4vtF9rj73zCYXe9">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="NLR1e2oj8IIzfQpqFqhezn">
+                <path d="M19 12 L5 12 M12 19 L5 12 L12 5" data-page-node-id="kroyjuJf1oyR0GNjeV7CW2"/>
+              </svg>
+            </span>
+            <span class="lbl" data-page-node-id="KIR1397ct5KdyGgUILbL4o">转给大宝贝</span>
+            <span class="hint" data-page-node-id="jgRD8GGRQ0JFD8ZZeJfNf4">SHIFT</span>
+          </div>
+          <div class="action-item danger" data-page-node-id="M9gxpufL9wzxuhJQARDuCS">
+            <span class="ic" data-page-node-id="ZGBuybMGyH5xH0WDm1WLj9">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" data-page-node-id="HKjWqcHy9wJpuiElakzHk1">
+                <path d="M5 7 L19 7 M9 7 V5 H15 V7 M7 7 L8 20 H16 L17 7" data-page-node-id="FNCWEgZCxJ3jVvoqAZ0FWL"/>
+              </svg>
+            </span>
+            <span class="lbl" data-page-node-id="7mbLJwH06CCBWbYFq22w4d">删除</span>
+            <span class="hint" style="color:var(--rose-700);" data-page-node-id="koVkoGqaHsa6EWlGREZDAo">SWIPE TO CONFIRM</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ B · 添加面板 ============ -->
+  <div class="cell" data-page-node-id="oXZ4RtTQCteNsjTzO9xgHS">
+    <div class="cell-label" data-page-node-id="UKmMIJfwZHUPAhplS2ddnH"><span class="num" data-page-node-id="UcbwKs3JICbAohsFdMo0KK">B</span>ADD PANEL · 添加面板</div>
+    <div class="phone" data-page-node-id="K1LXNrdGw1jQpr5R1z1Fk3">
+      <div class="status-bar" data-page-node-id="aBKQhdtpWI8bgxK8bj8EnK">
+        <span data-page-node-id="0eY81XqohlnBhDRHbMdp5D">9:41</span>
+        <div class="icons" data-page-node-id="QEvoYFwSOm2tyZnwygYaGD">
+          <span data-page-node-id="SIa5Bl6GnKeZt08LUNzJXC">●●●</span>
+          <svg width="16" height="11" viewBox="0 0 16 11" data-page-node-id="WFwoDpygbKBAF69QA9FCUw"><path d="M1 8 Q8 0 15 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="rB9bYcvuQUkQb5b3HHaK49"/><path d="M3.5 8 Q8 3 12.5 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="9dxzdIAVIpcDNkRThHotHE"/><circle cx="8" cy="8" r="1.4" fill="#2f2820" data-page-node-id="Bi3vm4dbCeVab0YbBCfEFU"/></svg>
+          <svg width="24" height="11" viewBox="0 0 24 11" data-page-node-id="7POntq1OYCaNXQnTSu7mZ9"><rect x="0.5" y="0.5" width="20" height="10" rx="2" stroke="#2f2820" fill="none" data-page-node-id="Z1oa7DhCpqjhefp29RznpC"/><rect x="2" y="2" width="16" height="7" rx="1" fill="#2f2820" data-page-node-id="ncDS2VK8agp1W8dV1QPjof"/><rect x="21" y="3" width="2" height="5" rx="1" fill="#2f2820" data-page-node-id="N9QC6TPENQXdgqP9McWwZK"/></svg>
+        </div>
+      </div>
+      <div class="scrim" data-page-node-id="FVUwkOF9SM6LDtuEZNYmGr"></div>
+      <div class="add-sheet" data-page-node-id="JkH72FTRtSbSm7NJQjcjDi">
+        <div class="handle" style="width:48px;height:4px;background:var(--cream-300);border-radius:2px;margin:12px auto 0;" data-page-node-id="qSlrq2j6VSP0rkepZxnZZj"></div>
+        <div class="add-title" data-page-node-id="lwJ6E9LbylxOiDCL0AQiqi">
+          <h3 data-page-node-id="vhxwI6kBefyg3bHuFhU8Nw">想一起做的一件事</h3>
+          <span class="close" data-page-node-id="o4Pm4i6tPyYDD7xDvUDS4A">×</span>
+        </div>
+        <div class="add-input focused" data-page-node-id="y9yUWSU71Cwg1kkE0rnbOB">
+          <span class="placeholder" data-page-node-id="JjAZgl1XzAtUbHS9hohlBK">把这周末的日出拍下来送给她…</span>
+        </div>
+        <div class="add-textarea" data-page-node-id="vciKmXhJgvNq9GTmO5B2Ae">
+          <div style="color:var(--color-text-subtle); font-size:13px;" data-page-node-id="WE2zWqxIIX4e1D0zOfEqzC">写下为什么想做这件事，她会看到的。</div>
+        </div>
+
+        <div class="add-row" data-page-node-id="Gh1moJOTOtGufZpNRD8Beo">
+          <div class="add-chip" data-page-node-id="8ZqOl8CSHZDRK9jxP6ifuf">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" data-page-node-id="8rRf6VOqVBXQsAB0ruJFS1"><rect x="3" y="5" width="18" height="16" rx="2" data-page-node-id="wTIkrurubu50cUHBpd8cu7"/><path d="M3 10 H21 M8 3 V7 M16 3 V7" data-page-node-id="Dfh81By6lPfm8xYyV8TWaB"/></svg>
+            <span data-page-node-id="6IfaJHi1H9xkBHt3AHks3W">提醒</span>
+          </div>
+          <div class="add-chip active" data-page-node-id="WjX6SrGao0ZhntE3GyJcVH">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" data-page-node-id="5eu1k1PgleaEFqKlZCnfMf"><circle cx="12" cy="12" r="9" data-page-node-id="Z2NOQ9l6D5gGEr4dGBBpV5"/><path d="M12 7 V12 L15 14" data-page-node-id="kn9FXEXgXIqGWlY11QsORp"/></svg>
+            <span data-page-node-id="h2QtPgjDbfj0F0uLpV8Oda">截止 12·24</span>
+          </div>
+        </div>
+
+        <div class="add-row" data-page-node-id="4kOU50b5eOTFq9G6Li0fa5">
+          <div class="add-chip" data-page-node-id="a4KDIYvueL961lsTByNwwh">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" data-page-node-id="acWWnrTmbwCOrv1hWGSljo"><path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" data-page-node-id="AzFQadPpHYAlskIvhqUJHG"/></svg>
+            <span data-page-node-id="E89rjiDDQFAcn5oHQlZomE">稀有度 · 普通</span>
+          </div>
+          <div class="add-chip" data-page-node-id="KPs7fapvWxFcSC9x7mVeVA">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" data-page-node-id="FzdCMHiRk4lVbWi2F3BLxw"><path d="M12 3 L13.5 9 L20 9 L14.5 13 L16.5 19 L12 15.5 L7.5 19 L9.5 13 L4 9 L10.5 9 Z" data-page-node-id="Sk1fISWpHoeHRQuJetsOVZ"/></svg>
+            <span data-page-node-id="rfEjR3E8778VWzmEfDc6R8">隐藏款</span>
+          </div>
+        </div>
+
+        <div class="add-who" data-page-node-id="YwT3mmmq7hBGzF0BGoBJMG">
+          <div class="who active" data-page-node-id="6t7ktlGIidEtDMxGHXhO0Z">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#c2410c" data-page-node-id="XCf0w7cTbXeLOvThyXCQn3"><path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" data-page-node-id="fMCtovv3yY0pdzJUfgcvrQ"/></svg>
+            我来负责
+          </div>
+          <div class="who" data-page-node-id="r6t3CL4EElNlpSwGpQFECj">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2f456a" stroke-width="1.5" data-page-node-id="grRtsLPWm31IDWDhODLdCd"><rect x="4" y="4" width="16" height="16" rx="2" data-page-node-id="KeeHAEr67NpKTRhKP1IHxe"/></svg>
+            让她来做
+          </div>
+          <div class="who" data-page-node-id="DL8k2nRDmGfD7UeKJTNXfr">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" data-page-node-id="LWLG8JKWgUXt0iTE873LAX"><path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" data-page-node-id="Ib2V7ta0D4bgXapsIf2AOA"/></svg>
+            我们一起
+          </div>
+        </div>
+
+        <button class="add-confirm" data-page-node-id="nuCbximKBObeohauvD0Mv3">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="qZCT5p8TzmpaBBzZu7cV8S"><path d="M5 12 L10 17 L19 7" data-page-node-id="2xFUxenvZxAD2C3vskEg1v"/></svg>
+          写入我们的清单
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ C · 图片 Lightbox ============ -->
+  <div class="cell" data-page-node-id="RfBVDVrVfGgQuIFMqekTl5">
+    <div class="cell-label" data-page-node-id="npBUTcD0MP8dpBSCGa4Vvk"><span class="num" data-page-node-id="JCNzQ6tO0E3Mdy7V2h2Jvg">C</span>IMAGE LIGHTBOX · 图片查看</div>
+    <div class="phone" data-page-node-id="hCwoGIyBxXDMcLfBuRHMEz">
+      <div class="lightbox" data-page-node-id="32nuElvSDaTM9LYD8PwiTD">
+        <div class="topbar" data-page-node-id="BvJPCRelDcQAcG4QmjiaDy">
+          <span class="counter" data-page-node-id="qChIpH1VhkZ2rtCWFL4Zm2">3 / 12</span>
+          <span class="meta" data-page-node-id="omD8ghyfpFHoqEnqx1yVx7">DEC 18 · 14:22</span>
+          <div class="close" data-page-node-id="9PfXeBT8r0jqRdqc5dtUDu">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" data-page-node-id="cPvUF3TCbTLkSsJB3deacM"><path d="M6 6 L18 18 M18 6 L6 18" data-page-node-id="xLeVdWqObYi1oSuERxHeEA"/></svg>
+          </div>
+        </div>
+        <div class="photo" data-page-node-id="RpMFRzupVsuJmD5C1pk70g">
+          <svg viewBox="0 0 320 380" preserveAspectRatio="xMidYMid meet" data-page-node-id="osuIMrHhTVNvpD8ovQZhE9">
+            <defs data-page-node-id="YRcFfFfKpS7owIWrGUDMzd">
+              <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1" data-page-node-id="KH0ryQckcAiMMI418Ouxz6">
+                <stop offset="0" stop-color="#f9c9d6" data-page-node-id="j3mjuvl8nqSOFNvLqY3JT9"/>
+                <stop offset="0.6" stop-color="#f9e3d4" data-page-node-id="ne8CMhG3Q7jEJRQa4gkROO"/>
+                <stop offset="1" stop-color="#f3ebde" data-page-node-id="pKsllZJTxVzolOyn1egFsi"/>
+              </linearGradient>
+            </defs>
+            <rect width="320" height="380" fill="url(#sky)" data-page-node-id="LZkim0Knzsk8I9Dzftt2DC"/>
+            <!-- 山影 -->
+            <path d="M0 280 L80 200 L120 230 L180 170 L240 240 L320 200 L320 380 L0 380 Z" fill="#a8340a" opacity="0.4" data-page-node-id="lWxnicbfjlXvqLXeGMRCTk"/>
+            <path d="M0 320 L60 280 L150 310 L220 290 L320 320 L320 380 L0 380 Z" fill="#872a08" opacity="0.7" data-page-node-id="MmTCTj9qNCIIUIXy9wC92C"/>
+            <!-- 太阳 -->
+            <circle cx="220" cy="160" r="40" fill="#c1932e" opacity="0.85" data-page-node-id="uarREUhlctieAUyLewi3mj"/>
+            <circle cx="220" cy="160" r="50" fill="#c1932e" opacity="0.18" data-page-node-id="hToHLh6CKwWg1wRjzpwds1"/>
+            <!-- 飞鸟 -->
+            <path d="M120 100 q 6 -6, 12 0 q 6 -6, 12 0" fill="none" stroke="#4a1605" stroke-width="1.5" stroke-linecap="round" data-page-node-id="8T6LfMTWiqiYJMv2W741GN"/>
+            <path d="M150 120 q 5 -5, 10 0 q 5 -5, 10 0" fill="none" stroke="#4a1605" stroke-width="1.5" stroke-linecap="round" data-page-node-id="bMt0cNPO1v7ZKGHGR0kgJv"/>
+          </svg>
+        </div>
+        <div class="bottom" data-page-node-id="pfUxa9p2LZbpqQnibN8k9x">
+          <div class="caption" data-page-node-id="HDlSQ9mwWtjtFu2XMziAen">
+            「一起看过的第一个日出」<br data-page-node-id="G6viA5p10eyXz4vPcWKBsu">
+            <span style="font-size:12px; opacity:0.7; font-style:italic;" data-page-node-id="AFQwUAOY1jGIGQ3DLe73zu">— 摄于 2025·11·23 · 青岛 · 来自</span> <span class="from" data-page-node-id="9pRM6kHDCqZHml6WxrR83V">小宝贝</span>
+          </div>
+          <div class="photo-actions" data-page-node-id="1NH00yNHejdK3itBuqNUYK">
+            <div class="photo-action" data-page-node-id="tmaaHjjv4umUufO9kDfFnT">
+              <span class="ic" data-page-node-id="BSuquZRUpEgFd7eDjaJHUG">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#c2410c" data-page-node-id="M0hD3JM9w1wW1n1GbV14Co"><path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" data-page-node-id="R42f0pK4ChFza0et4z0tfL"/></svg>
+              </span>
+              心动 · 3
+            </div>
+            <div class="photo-action" data-page-node-id="v4jTIGqiNJfB0NgsQyBspI">
+              <span class="ic" data-page-node-id="LMPqnLLjd49o8yaXkrQJl5">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" data-page-node-id="UKMaiaO1CbQp7Sq8noJEZJ"><path d="M5 5 L19 5 L19 19 L5 19 Z M5 5 L12 12 L19 5" data-page-node-id="9FbDDE7DuhdRHtOgnQ8c91"/></svg>
+              </span>
+              保存
+            </div>
+            <div class="photo-action" data-page-node-id="ylKdj5UXOSRbjFJZZm1pgt">
+              <span class="ic" data-page-node-id="WVkcMdSGo7TNGHfXySzGOf">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" data-page-node-id="xKM0UeSXhj080nIrmEzOnZ"><path d="M5 12 L10 17 L19 7" data-page-node-id="eyCcMqLbaNUfMlh327kfcX"/></svg>
+              </span>
+              设为壁纸
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ D · APK 更新提示面板 ============ -->
+  <div class="cell" data-page-node-id="A1Jm6vj2st0SMbNERnwbx5">
+    <div class="cell-label" data-page-node-id="cwmpLwmNyGqfUDKzEyMGrR"><span class="num" data-page-node-id="QSCKT9O1ByK4qdaZQri0bp">D</span>UPDATE PANEL · APK 更新</div>
+    <div class="phone" data-page-node-id="jSE6seRFWmhe6WKSA2mCtK">
+      <div class="status-bar" data-page-node-id="TFlKlcBsFEk4PXbwuXhhyk">
+        <span data-page-node-id="UTxmK4B4T1OHCEwVaNBmrc">9:41</span>
+        <div class="icons" data-page-node-id="bQBNjT9xBolvvAWFAtM8E9">
+          <span data-page-node-id="B0Bl8fCeQ2u95CifyxcRHu">●●●</span>
+          <svg width="16" height="11" viewBox="0 0 16 11" data-page-node-id="lvm1YRDShRH5dw2EvDVlYc"><path d="M1 8 Q8 0 15 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="3Cc8xHmWfZFm42DpTfQ9ig"/><path d="M3.5 8 Q8 3 12.5 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="fCG5QtsrgDsQfaw5Uu0lz5"/><circle cx="8" cy="8" r="1.4" fill="#2f2820" data-page-node-id="wwckgaOxmBpj2gg5Y2zVQm"/></svg>
+          <svg width="24" height="11" viewBox="0 0 24 11" data-page-node-id="ugEUdOQijsa1AX8Ify5hUZ"><rect x="0.5" y="0.5" width="20" height="10" rx="2" stroke="#2f2820" fill="none" data-page-node-id="y9ACYmxmyzJsTwePny2FFW"/><rect x="2" y="2" width="16" height="7" rx="1" fill="#2f2820" data-page-node-id="bGEOGcl6ewCU8gnTAZ0ZdZ"/><rect x="21" y="3" width="2" height="5" rx="1" fill="#2f2820" data-page-node-id="8e4ZlSBHxlyzMCqUFFp0jA"/></svg>
+        </div>
+      </div>
+      <div class="scrim" data-page-node-id="QhD82MY6EGJaGyvCMNwney"></div>
+      <div class="update-sheet" data-page-node-id="du59gtTDeciR0qYjAYLru9">
+        <div class="force" data-page-node-id="dGuGGqvFPWRdcPKnfUC1R8">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="vAcOjTs8CTT9YFUsVcm5eg"><path d="M12 4 L12 14 M12 18 L12 19" stroke-linecap="round" data-page-node-id="0uzFx9kLTRP9i5YEO22srX"/><circle cx="12" cy="12" r="10" data-page-node-id="pVCZXtH2mEzQ9FFM5AbJQD"/></svg>
+          <span data-page-node-id="0q1QgDZBdCFuOeanB6xbYo">FORCE UPDATE · 强制更新</span>
+        </div>
+
+        <div class="update-title" data-page-node-id="tkTG10ttPGB2GzUFjK3uiH">
+          <h3 data-page-node-id="BHAvBshHcI7rYdX6RwdCeC">新版本已就绪</h3>
+          <span class="ver" data-page-node-id="XsveUL0ZDtmFEFkp7N26u3">v2.8.0 · 12 MB</span>
+        </div>
+
+        <div class="update-meta" data-page-node-id="C4VO2E7ssE8VHmxVibhL5F">
+          <span class="badge" data-page-node-id="rtgDqUdWULB8dc0JnCBcWN">v2.8.0</span>
+          <span class="badge" style="background:rgba(193,147,46,0.12); color:var(--legendary-700);" data-page-node-id="KscjP4N3oFFVuVoL4jEKzF">CRITICAL</span>
+          <span class="badge" style="background:var(--stone-100); color:var(--stone-500);" data-page-node-id="10hwb8VDSMYYabRGxncpne">2026·01·18</span>
+        </div>
+
+        <div class="update-list" data-page-node-id="XGORZKRpISiGv1978eu349">
+          <div class="label" data-page-node-id="SIySulszpmttKGXmkFkqtS">CHANGELOG · 这次有什么</div>
+          <ul data-page-node-id="FJht8n6TFgzPiThs7Y8oKH">
+            <li data-page-node-id="QgFzz1WffNNmzXuDrdOUe9">全心「双心交错」品牌符号上线</li>
+            <li data-page-node-id="rYlk9uMTxwAmnqttKbg64g">长按 FAB 展开「心意菜单」更浪漫</li>
+            <li data-page-node-id="6fGYAH9NWocfkZDjXgjjKk">贴纸图鉴新增 4 款 LEGENDARY 烫金</li>
+            <li data-page-node-id="uj0neflGx8gIDgCv96WYF7">修复了某些日子纪念日不跳转的小问题</li>
+          </ul>
+        </div>
+
+        <div class="update-progress" data-page-node-id="xuYYLQtEaw1zHcYyjmBBH0">
+          <div class="row" data-page-node-id="HvIvVnW7FmNvB98YMajjI1">
+            <span data-page-node-id="PncheuK0GfsFiGAtjVNj8w">下载中 · 4G</span>
+            <span data-page-node-id="DFQPEsBHdoJQthnEBGpk4E"><b data-page-node-id="eyPcy42yOS0HVOTxZHClW1">68%</b> · 4.2 / 6.2 MB</span>
+          </div>
+          <div class="bar" data-page-node-id="eDJhe8V6LkCDWfnIoy35y1"><div class="fill" data-page-node-id="78Qfd7dxhHmhYRzS5mzwfH"></div></div>
+        </div>
+
+        <div class="update-actions" data-page-node-id="4jH66EPLcDFiBJ6yePgAW4">
+          <button class="btn-half btn-ghost-line" data-page-node-id="rTiLSib9YFRKYxW0y5Srfg">稍后</button>
+          <button class="btn-half btn-primary-fill" data-page-node-id="1N3ovsRggqYGenIyBwMAvy">立即重启</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

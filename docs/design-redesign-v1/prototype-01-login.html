@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="TbhWBmi42tpbhmP5QxNjrS">
+<head data-page-node-id="BAhzXEoFy4vN1xWWpzxyTZ">
+<meta charset="UTF-8" data-page-node-id="kVd4yikJq5gsDf81udIBlF">
+<meta name="viewport" content="width=390, initial-scale=1.0" data-page-node-id="YvGo0bxdZoDBTw81yGViNR">
+<title>原型 #01 · 登录页 · 「有爱」v2 改版</title>
+<!--
+  设计系统：Warm Editorial（克制浪漫 · 暖奢呼吸感 · 双主角对称）
+  设计令牌：rose-500 #c2410c (5% 点缀) / cream-100 #faf6f1 (主底) / 双心交错符号
+  字体：LXGW WenKai + Inter + Berkeley Mono
+-->
+<style>
+:root {
+  /* Primitive · 原子色 */
+  --rose-50:#fdf5f0; --rose-100:#f9e3d4; --rose-200:#f1c4a8;
+  --rose-300:#e89e76; --rose-400:#d9774b; --rose-500:#c2410c;
+  --rose-600:#a8340a; --rose-700:#872a08; --rose-800:#6a1f06; --rose-900:#4a1605;
+  --cream-50:#fdfbf7; --cream-100:#faf6f1; --cream-200:#f3ebde;
+  --cream-300:#e8dcc6; --cream-400:#d6c4a3; --cream-500:#b8a17e;
+  --cream-600:#8e7752; --cream-700:#66553b; --cream-800:#3f3322; --cream-900:#231b10;
+  --stone-50:#f8f6f3; --stone-100:#ede8e0; --stone-200:#d9d2c5;
+  --stone-300:#b8aea0; --stone-400:#928676; --stone-500:#6b6051;
+  --stone-600:#4a4135; --stone-700:#2f2820; --stone-800:#1a1610;
+  --legendary-300:#e8d49b; --legendary-500:#c1932e; --legendary-700:#8a6618;
+  --ink-500:#2f456a; --ink-700:#1a2942;
+  /* Semantic */
+  --color-primary:var(--rose-500);
+  --color-primary-dark:var(--rose-600);
+  --color-primary-rgb:194,65,12;
+  --color-text:var(--stone-700);
+  --color-text-muted:var(--stone-500);
+  --color-text-subtle:var(--stone-400);
+  --color-text-rose:var(--rose-500);
+  --color-border:var(--cream-300);
+  --color-border-subtle:var(--cream-200);
+  --color-border-strong:var(--cream-400);
+  --color-bg:var(--cream-100);
+  --color-bg-elevated:var(--cream-50);
+  /* Spacing */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:20px; --space-6:24px; --space-7:32px; --space-8:40px;
+  --space-9:48px; --space-10:56px; --space-11:64px; --space-12:80px;
+  /* Radius */
+  --radius-sm:8px; --radius-md:12px; --radius-lg:16px; --radius-xl:20px; --radius-2xl:28px; --radius-full:9999px;
+  /* Type */
+  --font-cn:"LXGW WenKai","Source Han Serif SC","Songti SC","Noto Serif CJK SC","STSong",serif;
+  --font-en:"Inter","SF Pro Text","Helvetica Neue",system-ui,sans-serif;
+  --font-mono:"Berkeley Mono","JetBrains Mono","SF Mono","Menlo",monospace;
+  /* Motion */
+  --dur-fast:180ms; --dur-base:280ms; --dur-slow:480ms;
+  --dur-deliberate:720ms; --dur-ceremony:1200ms;
+  --ease-out:cubic-bezier(0.22,1,0.36,1);
+  --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
+  --ease-breath:cubic-bezier(0.45,0,0.55,1);
+  /* Depth */
+  --shadow-sm:0 2px 6px rgba(194,65,12,0.06);
+  --shadow-md:0 6px 18px rgba(194,65,12,0.10);
+  --shadow-lg:0 12px 32px rgba(194,65,12,0.14);
+  --shadow-xl:0 24px 48px rgba(194,65,12,0.18);
+  --shadow-glow-rose:0 0 24px rgba(194,65,12,0.25);
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html, body { background:#3f3322; }
+body { font-family:var(--font-cn); color:var(--color-text); line-height:1.6; -webkit-font-smoothing:antialiased; }
+
+/* ======= 设备外框 ======= */
+.stage {
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:32px;
+  background:radial-gradient(ellipse at center, #4a1605 0%, #231b10 100%);
+}
+.stage-label {
+  position:fixed;
+  top:16px;
+  left:24px;
+  color:var(--cream-300);
+  font-family:var(--font-en);
+  font-size:11px;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+}
+.stage-tag {
+  position:fixed;
+  top:16px;
+  right:24px;
+  color:var(--rose-300);
+  font-family:var(--font-en);
+  font-size:11px;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+}
+.phone {
+  width:390px;
+  height:844px;
+  background:var(--color-bg);
+  border-radius:48px;
+  box-shadow:
+    0 0 0 10px #1a1610,
+    0 0 0 11px #3f3322,
+    0 60px 120px rgba(0,0,0,0.45);
+  overflow:hidden;
+  position:relative;
+}
+
+/* ======= iOS Status Bar ======= */
+.status-bar {
+  height:44px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 28px;
+  font-family:var(--font-en);
+  font-size:15px;
+  font-weight:600;
+  color:var(--stone-800);
+  position:relative;
+  z-index:10;
+}
+.status-bar .icons { display:flex; gap:6px; align-items:center; }
+.signal { letter-spacing:-1px; font-size:14px; }
+
+/* ======= 登录页主体 ======= */
+.login-screen {
+  height:800px;
+  background:var(--color-bg);
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:0 32px;
+  overflow:hidden;
+}
+
+/* 顶部柔光背景 */
+.login-screen::before {
+  content:"";
+  position:absolute;
+  top:-180px;
+  left:50%;
+  transform:translateX(-50%);
+  width:520px;
+  height:520px;
+  background:radial-gradient(circle, rgba(249,227,212,0.55) 0%, rgba(249,227,212,0) 70%);
+  pointer-events:none;
+}
+
+/* 纸纹背景（极淡颗粒） */
+.login-screen::after {
+  content:"";
+  position:absolute;
+  inset:0;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.06'/></svg>");
+  opacity:0.6;
+  pointer-events:none;
+  mix-blend-mode:multiply;
+}
+
+/* ======= 双心交错品牌符号 ======= */
+.brand-mark {
+  margin-top:96px;
+  position:relative;
+  width:96px;
+  height:96px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  animation:breath 4800ms var(--ease-breath) infinite;
+}
+.brand-mark svg {
+  position:absolute;
+  width:96px;
+  height:96px;
+}
+.brand-mark .heart-r {
+  animation:breath-r 4800ms var(--ease-breath) infinite;
+}
+@keyframes breath {
+  0%,100% { transform:scale(1); }
+  50% { transform:scale(1.04); }
+}
+@keyframes breath-r {
+  0%,100% { transform:translate(0,0) scale(0.92); opacity:0.7; }
+  50% { transform:translate(2px,1px) scale(0.94); opacity:0.78; }
+}
+
+/* ======= 标题 ======= */
+.welcome {
+  margin-top:40px;
+  text-align:center;
+  position:relative;
+  z-index:2;
+}
+.welcome .overline {
+  font-family:var(--font-en);
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:0.24em;
+  text-transform:uppercase;
+  color:var(--color-text-subtle);
+  margin-bottom:12px;
+}
+.welcome h1 {
+  font-family:var(--font-cn);
+  font-size:36px;
+  font-weight:600;
+  color:var(--color-text);
+  line-height:1.25;
+  letter-spacing:-0.01em;
+}
+.welcome h1 em {
+  font-style:normal;
+  color:var(--color-text-rose);
+  font-weight:700;
+}
+.welcome .sub {
+  margin-top:16px;
+  font-family:var(--font-cn);
+  font-size:15px;
+  color:var(--color-text-muted);
+  line-height:1.7;
+}
+
+/* ======= 表单卡片 ======= */
+.form-card {
+  margin-top:48px;
+  width:100%;
+  background:var(--color-bg-elevated);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-lg);
+  padding:28px 24px;
+  box-shadow:var(--shadow-sm);
+  position:relative;
+  z-index:2;
+}
+.field { margin-bottom:18px; position:relative; }
+.field-label {
+  font-family:var(--font-en);
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+  color:var(--color-text-subtle);
+  margin-bottom:8px;
+  display:block;
+}
+.field-input {
+  width:100%;
+  height:48px;
+  background:var(--cream-50);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-sm);
+  padding:0 16px;
+  font-family:var(--font-en);
+  font-size:15px;
+  color:var(--color-text);
+  display:flex;
+  align-items:center;
+  position:relative;
+}
+.field-input.partner { padding-left:46px; }
+.field-input .partner-mark {
+  position:absolute;
+  left:14px;
+  width:22px;
+  height:22px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.field-input .placeholder {
+  color:var(--color-text-subtle);
+  font-family:var(--font-cn);
+  font-size:14px;
+}
+.field-input .placeholder-en {
+  color:var(--color-text-subtle);
+  font-family:var(--font-en);
+  font-size:13px;
+  letter-spacing:0.04em;
+}
+.field-input .helper {
+  margin-left:auto;
+  color:var(--color-text-subtle);
+  font-family:var(--font-en);
+  font-size:12px;
+}
+.divider {
+  height:1px;
+  background:var(--color-border-subtle);
+  margin:20px 0 18px;
+  position:relative;
+}
+.divider .or {
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  background:var(--color-bg-elevated);
+  padding:0 12px;
+  font-family:var(--font-en);
+  font-size:11px;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+  color:var(--color-text-subtle);
+}
+
+/* ======= 按钮 ======= */
+.btn-primary {
+  width:100%;
+  height:52px;
+  background:var(--color-primary);
+  color:var(--cream-50);
+  border:none;
+  border-radius:var(--radius-sm);
+  font-family:var(--font-cn);
+  font-size:15px;
+  font-weight:600;
+  letter-spacing:0.04em;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  cursor:pointer;
+  box-shadow:var(--shadow-md);
+  position:relative;
+  overflow:hidden;
+  transition:transform var(--dur-fast) var(--ease-out);
+}
+.btn-primary::after {
+  content:"";
+  position:absolute;
+  inset:0;
+  background:radial-gradient(circle at center, rgba(255,255,255,0.18), transparent 70%);
+  opacity:0;
+  transition:opacity var(--dur-fast);
+}
+.btn-primary:hover { transform:translateY(-1px); box-shadow:var(--shadow-lg); }
+.btn-primary:hover::after { opacity:1; }
+.btn-primary:active { transform:scale(0.97); }
+
+.btn-ghost {
+  margin-top:12px;
+  width:100%;
+  height:48px;
+  background:transparent;
+  color:var(--color-text-muted);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-sm);
+  font-family:var(--font-cn);
+  font-size:14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+}
+.btn-ghost .dot {
+  width:6px;
+  height:6px;
+  background:var(--rose-500);
+  border-radius:50%;
+  margin-right:8px;
+}
+
+/* ======= 底部小字 + 仪式点缀 ======= */
+.legal {
+  margin-top:auto;
+  margin-bottom:24px;
+  text-align:center;
+  font-family:var(--font-cn);
+  font-size:12px;
+  color:var(--color-text-subtle);
+  line-height:1.7;
+  position:relative;
+  z-index:2;
+}
+.legal .stamp {
+  display:inline-block;
+  margin:0 4px;
+  font-family:var(--font-en);
+  font-size:10px;
+  font-weight:600;
+  letter-spacing:0.18em;
+  color:var(--legendary-700);
+  border:1.5px solid var(--legendary-700);
+  padding:2px 6px;
+  border-radius:3px;
+  transform:rotate(-3deg);
+  background:rgba(193,147,46,0.06);
+}
+.legal-link {
+  color:var(--stone-600);
+  text-decoration:underline;
+  text-underline-offset:3px;
+  text-decoration-color:var(--stone-300);
+  text-decoration-thickness:1px;
+  transition:color var(--dur-fast) var(--ease-out);
+}
+.legal-link:hover {
+  color:var(--rose-500);
+  text-decoration-color:var(--rose-300);
+}
+
+/* ======= 角落装饰花瓣 ======= */
+.petal-deco {
+  position:absolute;
+  width:120px;
+  height:120px;
+  opacity:0.5;
+  pointer-events:none;
+  z-index:1;
+}
+.petal-deco.tl { top:120px; left:-40px; transform:rotate(-30deg); }
+.petal-deco.br { bottom:80px; right:-40px; transform:rotate(160deg); }
+
+/* 底部一行情诗 */
+.poem {
+  margin-top:20px;
+  text-align:center;
+  font-family:var(--font-cn);
+  font-style:italic;
+  font-size:13px;
+  color:var(--color-text-subtle);
+  letter-spacing:0.04em;
+  position:relative;
+  z-index:2;
+}
+
+/* ======= 指纹登录提示 ======= */
+.touch-id {
+  position:absolute;
+  bottom:36px;
+  left:50%;
+  transform:translateX(-50%);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+  z-index:2;
+}
+.touch-id .icon {
+  width:36px;
+  height:36px;
+  border:1.5px solid var(--rose-400);
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:var(--rose-500);
+  animation:breath 4800ms var(--ease-breath) infinite;
+}
+.touch-id .txt {
+  font-family:var(--font-en);
+  font-size:11px;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+  color:var(--color-text-subtle);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:120ms !important;
+    transition-duration:120ms !important;
+  }
+}
+</style>
+</head>
+<body data-page-node-id="CboPMx7Lh8i3T0RoLkzu15">
+
+<div class="stage-label" data-page-node-id="9kmVaKMMNQJA1JYP4CRddS">PROTOTYPE · 01 · LOGIN</div>
+<div class="stage-tag" data-page-node-id="RUlcGDLRjZWJABHzcdUIVk">v1 · 改版稿</div>
+
+<div class="stage" data-page-node-id="dc8whoit89LbaIDHAAWBEP">
+  <div class="phone" data-page-node-id="yzwIi1dE1t8bIZKP2tMNni">
+
+    <!-- Status Bar -->
+    <div class="status-bar" data-page-node-id="viU5AbePdNXbM1i4GYqehf">
+      <span data-page-node-id="daPt3vNVTdP5Ou65lagLCQ">9:41</span>
+      <div class="icons" data-page-node-id="2GhRzYoaag5Ta2ycldFyBC">
+        <span class="signal" data-page-node-id="GsbnbOT2FbuHMXpoRfEiUL">●●●</span>
+        <svg width="16" height="11" viewBox="0 0 16 11" data-page-node-id="9wwqdOcd7SFQAzzEIiCFB5"><path d="M1 8 Q8 0 15 8" stroke="#2f2820" stroke-width="1.2" fill="none" stroke-linecap="round" data-page-node-id="kpMxwwEowhYG3US6aAGkrE"/><path d="M3.5 8 Q8 3 12.5 8" stroke="#2f2820" stroke-width="1.2" fill="none" stroke-linecap="round" data-page-node-id="7I4z4kfrfS8SjvrslxCrQ4"/><circle cx="8" cy="8" r="1.4" fill="#2f2820" data-page-node-id="VCqPGVhtpKYVCdb4DCgbGj"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11" data-page-node-id="TGNxmynKU5k0oY1ArxfrY8"><rect x="0.5" y="0.5" width="20" height="10" rx="2" stroke="#2f2820" fill="none" data-page-node-id="5S3tIBgJ9NG15lJXFF6PRm"/><rect x="2" y="2" width="16" height="7" rx="1" fill="#2f2820" data-page-node-id="ST1VNNdgdcMFsNAayedFQx"/><rect x="21" y="3" width="2" height="5" rx="1" fill="#2f2820" data-page-node-id="XoOf7ILFMLKvSnpCMFNBDQ"/></svg>
+      </div>
+    </div>
+
+    <!-- 登录主体 -->
+    <div class="login-screen" data-page-node-id="3q7imgUJHa7SeB2yvFkjut">
+
+      <!-- 角落装饰花瓣 -->
+      <svg class="petal-deco tl" viewBox="0 0 120 120" data-page-node-id="fLwgGpreL3DcBORBtQlSnr">
+        <g fill="#f1c4a8" opacity="0.5" data-page-node-id="5YXI5ovkjrC5dNTGU8kl1O">
+          <ellipse cx="60" cy="60" rx="14" ry="28" transform="rotate(0 60 60)" data-page-node-id="MzXc8hmP13ZUY8lXPACQf4"/>
+          <ellipse cx="60" cy="60" rx="14" ry="28" transform="rotate(72 60 60)" data-page-node-id="1d8VMJ4i1oV4IhlYargaUK"/>
+          <ellipse cx="60" cy="60" rx="14" ry="28" transform="rotate(144 60 60)" data-page-node-id="du5UbKAFeo2X5FOQVgx2gf"/>
+          <ellipse cx="60" cy="60" rx="14" ry="28" transform="rotate(216 60 60)" data-page-node-id="4BJ7ythzsfXuy7DFioto01"/>
+          <ellipse cx="60" cy="60" rx="14" ry="28" transform="rotate(288 60 60)" data-page-node-id="nVDkX4cbbxRyrkUhztqotH"/>
+          <circle cx="60" cy="60" r="6" fill="#c2410c" data-page-node-id="OGbQa1EZUOQtxCSWSGkICc"/>
+        </g>
+      </svg>
+      <svg class="petal-deco br" viewBox="0 0 120 120" data-page-node-id="y7XlLcXjTZjy3N2dUblsQX">
+        <g fill="#e89e76" opacity="0.4" data-page-node-id="pX7TlCmyBE69lgiDsJJOSq">
+          <ellipse cx="60" cy="60" rx="14" ry="28" transform="rotate(0 60 60)" data-page-node-id="HTUrpXA1JzIUNS1nxS6RQ1"/>
+          <ellipse cx="60" cy="60" rx="14" ry="28" transform="rotate(72 60 60)" data-page-node-id="Z7doav5s8cAuB0FhVPCkBL"/>
+          <ellipse cx="60" cy="60" rx="14" ry="28" transform="rotate(144 60 60)" data-page-node-id="jfHSGwtDOhok86Eg1enxkW"/>
+          <ellipse cx="60" cy="60" rx="14" ry="28" transform="rotate(216 60 60)" data-page-node-id="dospXQhk85sBrRJpCC6oBF"/>
+          <ellipse cx="60" cy="60" rx="14" ry="28" transform="rotate(288 60 60)" data-page-node-id="RWnMJFE83Od6TsHe9IuAhl"/>
+          <circle cx="60" cy="60" r="6" fill="#a8340a" data-page-node-id="aWCYtfCzGeTClbHfBr9Mi1"/>
+        </g>
+      </svg>
+
+      <!-- 双心交错品牌符号 -->
+      <div class="brand-mark" data-page-node-id="8NZuPf9A7lCxWw7UItsadH">
+        <svg class="heart-l" viewBox="0 0 96 96" data-page-node-id="ClqXNw0l6zojdk5I0UA5yR">
+          <path d="M48 84 C 18 64, 12 36, 28 24 C 40 16, 48 28, 48 36 C 48 28, 56 16, 68 24 C 84 36, 78 64, 48 84 Z"
+                fill="none" stroke="#c2410c" stroke-width="1.8" stroke-linejoin="round" data-page-node-id="ylAA9UZo6uxbxT8d45RiP4"/>
+        </svg>
+        <svg class="heart-r" viewBox="0 0 96 96" data-page-node-id="0BUEKUKXjDNQByMFO0qDCi">
+          <path d="M48 84 C 18 64, 12 36, 28 24 C 40 16, 48 28, 48 36 C 48 28, 56 16, 68 24 C 84 36, 78 64, 48 84 Z"
+                fill="none" stroke="#2f2820" stroke-width="1.4" stroke-linejoin="round" data-page-node-id="jahZPAyDepJClnwFdPKPbn"/>
+        </svg>
+        <!-- 火漆钉 -->
+        <svg viewBox="0 0 96 96" style="position:absolute;" data-page-node-id="qgdtZpMQGDIySZ5ZQj6FtF">
+          <circle cx="48" cy="48" r="3" fill="#c1932e" data-page-node-id="kuZoTBwZITNWA8vYhVhafD"/>
+        </svg>
+      </div>
+
+      <!-- 欢迎语 -->
+      <div class="welcome" data-page-node-id="LJL5FTWuMuPdE6CF12RCuO">
+        <div class="overline" data-page-node-id="BGTPgJhyXOooNlveXeHNp9">WELCOME · 欢迎回家</div>
+        <h1 data-page-node-id="0CNdVDeRHO2T0RH7MAEDwy">亲爱的，<br data-page-node-id="10dXb2R1NkmlYxtDzo6TTW"><em data-page-node-id="t2ssFj0PTdLrDKoGGu8ZYK">我们</em>又开始新的一天</h1>
+        <div class="sub" data-page-node-id="VkkpdLfxkzLRKYzR9zKH9Y">登录后，与最爱的人同步今日的心愿。</div>
+      </div>
+
+      <!-- 表单 -->
+      <div class="form-card" data-page-node-id="DbW5lZPb4hHO9yzO9NvJPS">
+        <div class="field" data-page-node-id="MoWCucu3VGOGmeFKy53zh6">
+          <label class="field-label" data-page-node-id="fyRNnsfmAw5NwjMS5X0u5y">PAIR CODE · 配对码</label>
+          <div class="field-input partner" data-page-node-id="6603dGpYCJ41l36ikNPSjn">
+            <span class="partner-mark" data-page-node-id="b32suUVfeW38XZjduwd7st">
+              <svg width="22" height="22" viewBox="0 0 24 24" data-page-node-id="C7fmgYjMnDxDEurnisVnb5">
+                <path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z"
+                      fill="none" stroke="#c2410c" stroke-width="1.4" data-page-node-id="nF6Tr7DhtJY5fQoJfAlaKE"/>
+              </svg>
+            </span>
+            <span class="placeholder-en" data-page-node-id="8mzq9MqwYwrNAgt6NPSZZC">YL · 8 位字符</span>
+            <span class="helper" data-page-node-id="lJH59SvS957OgqXInyoMGK">——  ——  ——  ——</span>
+          </div>
+        </div>
+        <div class="divider" data-page-node-id="Jvc0xSCTUIb7kCeq4oi2S5"><span class="or" data-page-node-id="zPRcOsesRDBwr39tTGBXDd">OR</span></div>
+        <div class="field" data-page-node-id="WNrLAiBQkWitaS5rLYS7V7">
+          <label class="field-label" data-page-node-id="C97KDJNk3dpntVaDlhI1HZ">PHONE · 手机号</label>
+          <div class="field-input" data-page-node-id="YK427fe5cRrgOo41EID4oC">
+            <span class="placeholder" data-page-node-id="ZRm4JEuIoOxmZ1LtmaCrZ6">+86  ___  ____  ____</span>
+          </div>
+        </div>
+        <button class="btn-primary" data-page-node-id="fqy8ayFUwc3peOZUQU0UF4">
+          <svg width="14" height="14" viewBox="0 0 24 24" data-page-node-id="vGzpe1faJS8JOUBWfBhErq">
+            <path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z"
+                  fill="#faf6f1" data-page-node-id="wzgAqn5At6OFjhHRfLt1Cf"/>
+          </svg>
+          进入我们的角落
+        </button>
+        <button class="btn-ghost" data-page-node-id="F0CIp7IYwLpF1xm3vSpmsS">
+          <span class="dot" data-page-node-id="gwP9G8sODei0Iy1hslKeCd"></span>
+          还没有配对 · 创建新房间
+        </button>
+      </div>
+
+      <!-- 情诗 -->
+      <div class="poem" data-page-node-id="ncyWy3DJK7DXxgbNbxVdiw">「你是我漫长岁月里，最想留住的人」</div>
+
+      <!-- 指纹 / Face ID -->
+      <div class="touch-id" data-page-node-id="PrMBqQPZHrNQWSsjelkqTY">
+        <div class="icon" data-page-node-id="UGoD1KmaJzFCzlFlbU9F89">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c2410c" stroke-width="1.4" stroke-linecap="round" data-page-node-id="4y7Ut5ospncGZHel02pi73">
+            <path d="M12 4 C 7 4, 4 8, 4 12 M20 12 C 20 8, 17 4, 12 4 M7 20 C 5 17, 5 14, 7 12 M17 12 C 19 14, 19 17, 17 20 M9 16 C 9 13, 11 12, 12 12 C 13 12, 15 13, 15 16" data-page-node-id="uGfOAIG6ykuphRv40MxjHA"/>
+          </svg>
+        </div>
+        <div class="txt" data-page-node-id="B0Fqn1QxAfIXaFRC0cDi67">Touch ID · 一触即达</div>
+      </div>
+
+      <!-- 法律小字 + 烫金印章 -->
+      <div class="legal" data-page-node-id="IL9pyQxvViQEoJAHtYsN1a">
+        登录即代表同意 <a href="#" class="legal-link" data-page-node-id="UnQ0rlDbTGTmU9kN615QGJ">服务条款</a> 与 <a href="#" class="legal-link" data-page-node-id="j41PWYPjmhgHgDZI98gvz7">隐私政策</a>
+        <br data-page-node-id="FaMZH2JgbwQWmVLXCakrwp">
+        <span class="stamp" data-page-node-id="LChKAyqr6eBIcctxk1kGsD">EST · 2026</span> 爱情是慢的，我们陪你慢慢来
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

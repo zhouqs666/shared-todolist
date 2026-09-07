@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="1QXoSPvgqPJlVAYalHjx3Z">
+<head data-page-node-id="rd1A894t2b1Gkd0obB8ORt">
+<meta charset="UTF-8" data-page-node-id="WNktbdVFGfcagF3hMuv0Oh">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="6hOT7Xios8kgkO3dp2M2zA">
+<title>「有爱」App 视觉重构 · 设计改版说明 · v1</title>
+<style>
+:root {
+  --rose-50:#fdf5f0; --rose-100:#f9e3d4; --rose-200:#f1c4a8;
+  --rose-300:#e89e76; --rose-400:#d9774b; --rose-500:#c2410c;
+  --rose-600:#a8340a; --rose-700:#872a08; --rose-800:#6a1f06;
+  --cream-50:#fdfbf7; --cream-100:#faf6f1; --cream-200:#f3ebde;
+  --cream-300:#e8dcc6; --cream-400:#d6c4a3; --cream-500:#b8a17e;
+  --cream-600:#8e7752; --cream-700:#66553b; --cream-800:#3f3322;
+  --stone-50:#f8f6f3; --stone-100:#ede8e0; --stone-200:#d9d2c5;
+  --stone-300:#b8aea0; --stone-400:#928676; --stone-500:#6b6051;
+  --stone-600:#4a4135; --stone-700:#2f2820; --stone-800:#1a1610;
+  --legendary-300:#e8d49b; --legendary-500:#c1932e; --legendary-700:#8a6618;
+  --ink-500:#2f456a; --ink-700:#1a2942;
+
+  --color-primary:var(--rose-500);
+  --color-text:var(--stone-700);
+  --color-text-muted:var(--stone-500);
+  --color-text-subtle:var(--stone-400);
+  --color-text-rose:var(--rose-500);
+  --color-border:var(--cream-300);
+  --color-border-subtle:var(--cream-200);
+  --color-bg:var(--cream-100);
+  --color-bg-elevated:var(--cream-50);
+
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:20px; --space-6:24px; --space-7:32px; --space-8:40px; --space-9:48px; --space-10:56px; --space-11:64px; --space-12:80px;
+
+  --radius-sm:8px; --radius-md:12px; --radius-lg:16px; --radius-xl:20px; --radius-2xl:28px; --radius-full:9999px;
+
+  --font-cn:"LXGW WenKai","Source Han Serif SC","Songti SC","Noto Serif CJK SC",serif;
+  --font-en:"Inter","SF Pro Text",system-ui,sans-serif;
+  --font-mono:"Berkeley Mono","JetBrains Mono",monospace;
+
+  --shadow-sm:0 2px 6px rgba(194,65,12,0.06);
+  --shadow-md:0 6px 18px rgba(194,65,12,0.10);
+  --shadow-lg:0 12px 32px rgba(194,65,12,0.14);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { background:var(--color-bg); }
+body {
+  font-family:var(--font-cn);
+  color:var(--color-text);
+  line-height:1.7;
+  -webkit-font-smoothing:antialiased;
+  font-size:15px;
+}
+
+.layout {
+  display:grid;
+  grid-template-columns:240px 1fr;
+  min-height:100vh;
+}
+.sidebar {
+  background:var(--cream-50);
+  border-right:1px solid var(--color-border-subtle);
+  padding:48px 24px;
+  position:sticky;
+  top:0;
+  height:100vh;
+  overflow-y:auto;
+}
+.sidebar .title {
+  font-family:var(--font-cn);
+  font-size:18px;
+  font-weight:600;
+  color:var(--color-text);
+  margin-bottom:6px;
+}
+.sidebar .ver {
+  font-family:var(--font-en);
+  font-size:11px;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+  color:var(--color-text-subtle);
+  margin-bottom:32px;
+}
+.sidebar nav ul { list-style:none; }
+.sidebar nav li {
+  margin-bottom:4px;
+}
+.sidebar nav a {
+  display:block;
+  padding:8px 12px;
+  font-family:var(--font-cn);
+  font-size:13px;
+  color:var(--color-text-muted);
+  text-decoration:none;
+  border-radius:var(--radius-sm);
+  border-left:2px solid transparent;
+  transition:all 180ms;
+}
+.sidebar nav a:hover {
+  background:var(--cream-100);
+  color:var(--color-text);
+  border-left-color:var(--rose-500);
+}
+.sidebar nav .num {
+  font-family:var(--font-mono);
+  font-size:10px;
+  color:var(--color-text-subtle);
+  margin-right:6px;
+  letter-spacing:0.06em;
+}
+
+.content {
+  padding:80px 80px 120px;
+  max-width:100%;
+  overflow-x:hidden;
+}
+
+section { margin-bottom:80px; }
+section .overline {
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  letter-spacing:0.24em; text-transform:uppercase;
+  color:var(--color-text-subtle);
+  margin-bottom:14px;
+}
+section h1 {
+  font-family:var(--font-cn);
+  font-size:44px; font-weight:700;
+  color:var(--color-text);
+  line-height:1.2;
+  letter-spacing:-0.015em;
+  margin-bottom:18px;
+}
+section h2 {
+  font-family:var(--font-cn);
+  font-size:30px; font-weight:600;
+  color:var(--color-text);
+  margin:32px 0 16px;
+  letter-spacing:-0.01em;
+}
+section h3 {
+  font-family:var(--font-cn);
+  font-size:22px; font-weight:600;
+  color:var(--color-text);
+  margin:24px 0 12px;
+}
+section h4 {
+  font-family:var(--font-cn);
+  font-size:17px; font-weight:600;
+  color:var(--color-text);
+  margin:20px 0 10px;
+}
+section p {
+  font-family:var(--font-cn);
+  font-size:15px;
+  color:var(--color-text-muted);
+  margin-bottom:14px;
+  line-height:1.8;
+}
+section ul, section ol {
+  font-family:var(--font-cn);
+  font-size:15px;
+  color:var(--color-text-muted);
+  margin:8px 0 16px 20px;
+  line-height:1.8;
+}
+section li { margin-bottom:6px; }
+section em {
+  font-style:normal;
+  color:var(--color-text-rose);
+  font-weight:600;
+}
+section strong {
+  font-weight:600;
+  color:var(--color-text);
+}
+section code {
+  font-family:var(--font-mono);
+  font-size:13px;
+  padding:2px 6px;
+  background:var(--cream-200);
+  border-radius:4px;
+  color:var(--rose-700);
+}
+section pre {
+  background:var(--cream-800);
+  color:var(--cream-200);
+  padding:20px 24px;
+  border-radius:var(--radius-md);
+  overflow-x:auto;
+  font-family:var(--font-mono);
+  font-size:13px;
+  line-height:1.6;
+  margin:14px 0;
+}
+section pre code {
+  background:none;
+  color:inherit;
+  padding:0;
+}
+
+/* Cover */
+.cover {
+  padding:24px 32px 32px;
+  background:linear-gradient(135deg, var(--rose-50), var(--cream-100));
+  border-radius:var(--radius-lg);
+  border:1px solid var(--color-border-subtle);
+  margin-bottom:40px;
+  position:relative;
+  overflow:hidden;
+}
+.cover::before {
+  content:"";
+  position:absolute;
+  top:-60px; right:-40px;
+  width:240px; height:240px;
+  background:radial-gradient(circle, rgba(249,227,212,0.6), transparent 70%);
+}
+.cover .stamp {
+  display:inline-block;
+  padding:4px 10px;
+  border:1.5px solid var(--legendary-700);
+  font-family:var(--font-en);
+  font-size:10px; font-weight:700;
+  letter-spacing:0.24em;
+  color:var(--legendary-700);
+  background:rgba(193,147,46,0.08);
+  transform:rotate(-2deg);
+  margin-bottom:14px;
+}
+.cover h1 {
+  font-size:40px;
+  margin-bottom:10px;
+}
+.cover .lede {
+  font-size:16px;
+  color:var(--color-text-muted);
+  max-width:680px;
+}
+
+/* Before/After Comparison */
+.compare {
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  gap:18px;
+  align-items:stretch;
+  margin:24px 0;
+}
+.compare-card {
+  padding:18px 20px;
+  background:var(--color-bg-elevated);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-md);
+  box-shadow:var(--shadow-sm);
+}
+.compare-card.before {
+  background:var(--cream-200);
+  border-color:var(--cream-400);
+}
+.compare-card.after {
+  background:var(--rose-50);
+  border-color:var(--rose-200);
+}
+.compare-card .label {
+  font-family:var(--font-en);
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.24em;
+  text-transform:uppercase;
+  margin-bottom:8px;
+}
+.compare-card.before .label { color:var(--rose-700); }
+.compare-card.after .label { color:var(--moss-700, #37492c); }
+.compare-card h5 {
+  font-family:var(--font-cn);
+  font-size:15px;
+  font-weight:600;
+  margin-bottom:6px;
+}
+.compare-card ul {
+  list-style:none;
+  margin:0;
+}
+.compare-card li {
+  padding-left:14px;
+  position:relative;
+  font-size:13px;
+  margin-bottom:3px;
+}
+.compare-card li::before {
+  content:"";
+  position:absolute; left:0; top:9px;
+  width:6px; height:6px;
+  border-radius:50%;
+}
+.compare-card.before li::before { background:var(--rose-500); }
+.compare-card.after li::before { background:var(--moss-500, #5a7048); }
+.compare-arrow {
+  align-self:center;
+  font-family:var(--font-en);
+  font-size:24px;
+  color:var(--color-text-rose);
+}
+
+/* ASCII 框图 */
+.ascii {
+  background:var(--cream-200);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-md);
+  padding:24px;
+  font-family:var(--font-mono);
+  font-size:13px;
+  line-height:1.7;
+  color:var(--stone-700);
+  overflow-x:auto;
+  white-space:pre;
+  margin:18px 0;
+}
+
+/* 调色板 */
+.swatch-row {
+  display:flex; gap:8px; margin:16px 0;
+  flex-wrap:wrap;
+}
+.swatch {
+  display:flex; flex-direction:column;
+  flex:1; min-width:120px;
+}
+.swatch .chip {
+  height:60px;
+  border-radius:8px 8px 0 0;
+  border:1px solid var(--color-border-subtle);
+}
+.swatch .info {
+  background:var(--cream-50);
+  border:1px solid var(--color-border-subtle);
+  border-top:none;
+  border-radius:0 0 8px 8px;
+  padding:8px 10px;
+}
+.swatch .info .lbl {
+  font-family:var(--font-en);
+  font-size:11px;
+  font-weight:600;
+  color:var(--color-text);
+  letter-spacing:0.04em;
+}
+.swatch .info .hex {
+  font-family:var(--font-mono);
+  font-size:10px;
+  color:var(--color-text-subtle);
+  margin-top:2px;
+}
+
+/* Callout */
+.callout {
+  margin:18px 0;
+  padding:18px 22px;
+  background:linear-gradient(135deg, var(--rose-50), var(--cream-50));
+  border:1px solid var(--rose-200);
+  border-radius:var(--radius-md);
+  font-family:var(--font-cn);
+  font-size:14px;
+  color:var(--color-text);
+  line-height:1.7;
+  position:relative;
+}
+.callout::before {
+  content:"「";
+  position:absolute;
+  top:-8px; left:14px;
+  font-family:var(--font-cn);
+  font-size:36px;
+  color:var(--rose-300);
+  background:var(--color-bg);
+  padding:0 6px;
+}
+.callout::after {
+  content:"」";
+  position:absolute;
+  bottom:-22px; right:14px;
+  font-family:var(--font-cn);
+  font-size:36px;
+  color:var(--rose-300);
+  background:var(--color-bg);
+  padding:0 6px;
+}
+
+/* Decision Grid */
+.decisions {
+  display:grid;
+  grid-template-columns:repeat(2, 1fr);
+  gap:16px;
+  margin:20px 0;
+}
+.decision {
+  background:var(--cream-50);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-md);
+  padding:18px 20px;
+}
+.decision .label {
+  font-family:var(--font-en);
+  font-size:10px; font-weight:700;
+  letter-spacing:0.18em; text-transform:uppercase;
+  color:var(--color-text-rose);
+  margin-bottom:6px;
+}
+.decision .q {
+  font-family:var(--font-cn);
+  font-size:15px;
+  font-weight:600;
+  color:var(--color-text);
+  margin-bottom:8px;
+}
+.decision .a {
+  font-family:var(--font-cn);
+  font-size:13px;
+  color:var(--color-text-muted);
+  line-height:1.7;
+}
+.decision .a b {
+  color:var(--color-text-rose);
+  font-weight:600;
+}
+
+/* Phase Timeline */
+.phases {
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:20px;
+  margin:24px 0;
+}
+.phase {
+  background:var(--cream-50);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-lg);
+  padding:20px 22px;
+  position:relative;
+}
+.phase .badge {
+  display:inline-block;
+  font-family:var(--font-en);
+  font-size:10px; font-weight:700;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+  padding:3px 8px;
+  border-radius:3px;
+  background:var(--rose-100);
+  color:var(--rose-700);
+  margin-bottom:12px;
+}
+.phase h5 {
+  font-family:var(--font-cn);
+  font-size:18px;
+  font-weight:600;
+  margin-bottom:8px;
+}
+.phase .timeline {
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--color-text-subtle);
+  letter-spacing:0.04em;
+  margin-bottom:14px;
+}
+.phase ul {
+  list-style:none;
+  margin:0;
+  font-family:var(--font-cn);
+  font-size:13px;
+  color:var(--color-text-muted);
+  line-height:1.7;
+}
+.phase ul li {
+  padding-left:14px;
+  position:relative;
+  margin-bottom:4px;
+}
+.phase ul li::before {
+  content:"→";
+  position:absolute; left:0;
+  color:var(--rose-500);
+}
+
+/* Motion Catalog */
+.motion-grid {
+  display:grid;
+  grid-template-columns:repeat(5, 1fr);
+  gap:12px;
+  margin:20px 0;
+}
+.motion {
+  background:var(--cream-50);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-md);
+  padding:14px;
+  text-align:center;
+}
+.motion .num {
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--color-text-rose);
+  margin-bottom:6px;
+}
+.motion h6 {
+  font-family:var(--font-en);
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:0.06em;
+  color:var(--color-text);
+  margin-bottom:6px;
+}
+.motion .vis {
+  width:40px; height:40px;
+  margin:0 auto 10px;
+  position:relative;
+}
+.motion p {
+  font-family:var(--font-cn);
+  font-size:11px;
+  color:var(--color-text-muted);
+  line-height:1.5;
+}
+
+/* Table */
+table {
+  width:100%;
+  border-collapse:collapse;
+  margin:16px 0;
+  font-family:var(--font-cn);
+  font-size:13px;
+}
+th, td {
+  text-align:left;
+  padding:10px 14px;
+  border-bottom:1px solid var(--color-border-subtle);
+}
+th {
+  background:var(--cream-200);
+  font-weight:600;
+  color:var(--color-text);
+  font-size:12px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+}
+tr:last-child td { border-bottom:none; }
+
+@media (max-width:900px) {
+  .layout { grid-template-columns:1fr; }
+  .sidebar { position:relative; height:auto; }
+  .content { padding:32px 24px; }
+  .compare, .decisions, .phases, .motion-grid { grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body data-page-node-id="cMtH3hBPazpMqok2w0iALc">
+
+<div class="layout" data-page-node-id="1kOH9gc0B2HP1ABhEkW5Ls">
+
+<aside class="sidebar" data-page-node-id="I6H7dv7d93NW8EmR6OAGUr">
+  <div class="title" data-page-node-id="uVy3B8zcfwTL3gqMzrrSPh">「有爱」改版</div>
+  <div class="ver" data-page-node-id="uzeR8LGbtrzwLCFOEGts4e">v1 · 2026·01</div>
+  <nav data-page-node-id="HTjfKKS8zSgWCenlEWCEdz">
+    <ul data-page-node-id="6Ik3jPJ7iBBXMFH7hoeGs7">
+      <li data-page-node-id="N0Hu07Vao4oOPXZRd8DpP7"><a href="#cover" data-page-node-id="14k83qS3WRASL60DILD0vq"><span class="num" data-page-node-id="AWRxIfcsjz2gsuT18fm7dC">00</span>封面</a></li>
+      <li data-page-node-id="GoO5Au8WRhojha513BDJOI"><a href="#compare" data-page-node-id="zq9jD9qg7gFHd8I6LQnwtm"><span class="num" data-page-node-id="EX0h8rXXRHvvOABMV7tEkX">01</span>前后对比</a></li>
+      <li data-page-node-id="D8HKVYDw8YIDIosFmpcgoA"><a href="#goals" data-page-node-id="yL1q2JSa2pN4ZaMJQgLjEf"><span class="num" data-page-node-id="guzdlbvNpvEJqU09o2qUeG">02</span>目标 × 策略</a></li>
+      <li data-page-node-id="TnbYPSnjvj3NHJioBtIZ9h"><a href="#brand" data-page-node-id="zXcvZVpPx2eCQ7eHNefreE"><span class="num" data-page-node-id="FsMWYJhsW85F8HcIFusnKM">03</span>品牌焕新</a></li>
+      <li data-page-node-id="RhAVVfICNRd7bEyVqmBCjd"><a href="#ia" data-page-node-id="ia0wP0lAbI4vs50m6lE11N"><span class="num" data-page-node-id="UELCekVI3vCxwY44OuuQwB">04</span>信息架构</a></li>
+      <li data-page-node-id="UojyF0ydGNlDcXtFMF1yGc"><a href="#pages" data-page-node-id="U17NqMuh2a9VdJwDCxFGW2"><span class="num" data-page-node-id="JywoHNHpQ18cSuoXM6wbNg">05</span>关键页面改版</a></li>
+      <li data-page-node-id="CRLx7dnKbDIJfnPhvlRCFU"><a href="#motion" data-page-node-id="5TEdPjtbEedYrTO0lCCio8"><span class="num" data-page-node-id="OwpRgFOwnyc8Lmi4bA8b9Z">06</span>微动效</a></li>
+      <li data-page-node-id="xJK8qBaR9GGl4yDKEViMHl"><a href="#a11y" data-page-node-id="KB0HVO7kNgrKRcWUmhQBU6"><span class="num" data-page-node-id="61HpicEOd4jckleCZ3UFni">07</span>可访问性</a></li>
+      <li data-page-node-id="vrPUHOjAzFTFBaX4d2q96G"><a href="#phase" data-page-node-id="r0FRokIlIyaxTbDP1hxf4s"><span class="num" data-page-node-id="Wbn2EopNTFK9DW7KvcZAAJ">08</span>实施路径</a></li>
+      <li data-page-node-id="AaTE789X5lCQMydS0UE5iH"><a href="#decisions" data-page-node-id="kygxKE5bHjkS9ia76qaOiE"><span class="num" data-page-node-id="sHmxjjmQxUkQfvYplHBmZE">09</span>决策记录</a></li>
+    </ul>
+  </nav>
+</aside>
+
+<main class="content" data-page-node-id="TJPpY4kBmniFQOa9azAoZV">
+
+<!-- ============ 00 · Cover ============ -->
+<section id="cover" data-page-node-id="a9FS89zDwhVp97iZfGAcEV">
+  <div class="cover" data-page-node-id="P6qZdbTvLTGFDlCmlRFxiL">
+    <div class="stamp" data-page-node-id="nzAf827406wvy7x8CVdonF">PROPOSAL · v1 · 概念稿</div>
+    <h1 data-page-node-id="WLvRERiTzvvBwpn417aEcu">把粉红色的 emoji 雨，<br data-page-node-id="KNuVL6TKovkxAyEoOIiGmv">换成<em data-page-node-id="mEI2vst10v0JUxJWxSsRCb">一封能收藏一辈子的信</em></h1>
+    <div class="lede" data-page-node-id="aGAP60QNBXc5xQrTn7cL6N">
+      「有爱」App 视觉重构设计改版说明——克制浪漫、暖奢呼吸、双主角对称。
+    </div>
+  </div>
+</section>
+
+<!-- ============ 01 · 前后对比 ============ -->
+<section id="compare" data-page-node-id="xn97YOVIYuKFCPMmgs1bG2">
+  <div class="overline" data-page-node-id="CbfZZpqbLBqH2ajBL8rdpI">01 · BEFORE / AFTER</div>
+  <h1 data-page-node-id="5mf0JIWbXoKmH2w5w0r7di">改版前后对比</h1>
+  <p data-page-node-id="vpT998Z767HyEOKhrQ4jGg">
+    上一版「有爱」走的是大众化的「情头+emoji+渐变光斑」路线，在 2024 年的同类情侣 App 中辨识度趋零。
+    新版把它收回到「信纸 + 火漆 + 印章 + 烫金」的编辑美学里——所有视觉都从「设计令牌」出发，避免再走视觉拼贴的老路。
+  </p>
+
+  <div class="compare" data-page-node-id="N5FENCMg98LUSsv1mgVx0m">
+    <div class="compare-card before" data-page-node-id="7QtI6AiSUEaGc1L49CgV5s">
+      <div class="label" data-page-node-id="YYsXwzcS5ivxOmXvvqfDas">BEFORE · v2.7</div>
+      <h5 data-page-node-id="QuX7Aol4LL8kJnbz3v84hQ">「少女粉 + emoji 雨」</h5>
+      <ul data-page-node-id="DlKhSPSDEq3dzSboeTEoF8">
+        <li data-page-node-id="6lXYWFPD3e01BAUTLF7Yj3">主色 #e11d48 高饱和玫瑰</li>
+        <li data-page-node-id="5EHnMjUpFv6tq7GHQczv4N">底色 #fff3f4 偏冷白</li>
+        <li data-page-node-id="BSHYFzpZysfOhXFoRDR2yi">大量 emoji ❤💕🌹</li>
+        <li data-page-node-id="p9P5bxRhW0MUgjGM3HrpA3">渐变光斑背景</li>
+        <li data-page-node-id="FVxaB1RrMv3mYoXx0sKqFT">圆角 pill 全圆按钮</li>
+        <li data-page-node-id="c0wgYOe6nf6VIO1z4CyuRD">快节奏 180ms 动效</li>
+        <li data-page-node-id="0FB844Ra1pyJiwXctGSH9X">冷灰阴影</li>
+      </ul>
+    </div>
+
+    <div class="compare-arrow" data-page-node-id="QSYs84f4TxIeT3pPO33O3G">→</div>
+
+    <div class="compare-card after" data-page-node-id="QBuWRaVnNdfXS2PSGcfI46">
+      <div class="label" data-page-node-id="Z5axuPHLGMLSpQBL2J7GLi">AFTER · v2.8+</div>
+      <h5 data-page-node-id="fsgZlEn7wAeQOWQEYyDmBL">「焦糖玫瑰 + 信纸感」</h5>
+      <ul data-page-node-id="AUo8Z8WmMi5OUrcgPO2jmj">
+        <li data-page-node-id="T9w06qJnb86wQ6WHB6PRtC">主色 #c2410c 焦糖玫瑰（降饱和）</li>
+        <li data-page-node-id="YECTZjuujQBJKEGaIt3MFG">底色 #faf6f1 米杏白</li>
+        <li data-page-node-id="dOa6jHXfedZR1dxYDqQhMM">SVG 双心交错品牌符号</li>
+        <li data-page-node-id="f8C05eh28Txgyd8q2AGdLJ">纸纹 + 烫金印章装饰</li>
+        <li data-page-node-id="fc0JtASMW8nfVXfRQmgu1o">12px 圆角「信纸卷角」</li>
+        <li data-page-node-id="lNe5VWfiZOWMIPBN19cLMk">慢半拍 280–1200ms 动效</li>
+        <li data-page-node-id="BIAVqvVM3dBZt9xWsWe7uC">暖玫瑰色阴影</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 02 · 目标 × 策略 ============ -->
+<section id="goals" data-page-node-id="ZU4sKnwDSALVcaFx2u8Kcd">
+  <div class="overline" data-page-node-id="9ENj6Ns6wW2i8aoiulAOmJ">02 · GOALS × STRATEGIES</div>
+  <h1 data-page-node-id="eykJAv7pTO9fryoiaxEAex">设计目标 × 核心策略</h1>
+
+  <h3 data-page-node-id="MOz8acIQt6KmL27KPH2gya">3 个设计目标</h3>
+  <ul data-page-node-id="CI6YQMsBwiNxJslbx75Qti">
+    <li data-page-node-id="y458ehWfp4f20MOQvO2NoL"><strong data-page-node-id="o1MvUkXsjOt9EQp4T53GXe">现代化</strong>：走出 2018 风格的「emoji 雨」，进入 2026 的「编辑暖意」调性。</li>
+    <li data-page-node-id="LHGmCse1apbSPiYO8eog8K"><strong data-page-node-id="AvcKFXFOlV0OPQ8O5hyMRZ">简洁</strong>：用米杏底 + 留白呼吸，让每一行字都有被珍视的感觉。</li>
+    <li data-page-node-id="0q2KnsHaAJ45GIKDRHCbTf"><strong data-page-node-id="hDR7WLYaLhyFo7udVkQbyC">品牌一致</strong>：从 logo 到阴影，所有元素都从同一套设计令牌派生，杜绝视觉拼贴。</li>
+  </ul>
+
+  <h3 data-page-node-id="DysG5YaVnNqo4zm4BNT2YA">5 个核心策略</h3>
+
+  <table data-page-node-id="iyht4GtKytO3tfKrWZrTJW">
+    <thead data-page-node-id="bKMomTWra9xEAInm4fWz6Z"><tr data-page-node-id="MaEYbwPxRCTXbc5pw8q7I1"><th data-page-node-id="2DT23zYJLJw0fw2C9yHIDQ">#</th><th data-page-node-id="5IriDabq7WWCtRzn4fDx4C">策略</th><th data-page-node-id="j564BXiLYQSr4X3w643pWZ">做法</th></tr></thead>
+    <tbody data-page-node-id="dgha77nNMYpZhRhHHTzuHI">
+      <tr data-page-node-id="FADyxnM8wK6vXo8CXSe2dr"><td data-page-node-id="edcksJV938OjHFAoHnBai9">01</td><td data-page-node-id="3jV3VqPvjsFhLORDNmIyfS">焦糖玫瑰 · 降饱和</td><td data-page-node-id="X0xRKR5KmMlQSPZtQipRE1">#e11d48 → #c2410c，主色仅作 5% 点缀</td></tr>
+      <tr data-page-node-id="XBJEnaqCQVIOs7JFGnoJtq"><td data-page-node-id="8MFj948CU1l8iSBOJIRhTR">02</td><td data-page-node-id="bVp4slYuoz8ltjw1lZGVn7">米杏白底 · 取代粉底</td><td data-page-node-id="dMTvXMfAHIxNL7qndzGHOJ">#faf6f1 主底，cream-50 / 200 阶梯</td></tr>
+      <tr data-page-node-id="KEYAM3mwU2Cd2DOqNmv4Rm"><td data-page-node-id="2pMwwD6uXenGDoszLC9Mlc">03</td><td data-page-node-id="4m3gCXbcybQPhZYV2zC3TW">双心交错 · 品牌符号</td><td data-page-node-id="SYrpmanvF28VRh4NDvOfIs">两桃心 8% 偏移 + 火漆钉 · 处处可见</td></tr>
+      <tr data-page-node-id="TulwuXMBuBkvIltc4LAEXk"><td data-page-node-id="uROis30LjPZMJalIwwcsXz">04</td><td data-page-node-id="3RgE3JnCn9SJvVYXKzgmYG">三轨字体 · 排版</td><td data-page-node-id="BJCmZpI0pLUfGauqrdgkEE">霞鹜文楷 + Inter + Berkeley Mono</td></tr>
+      <tr data-page-node-id="IP2VzC9nCn7ZZXBAlvxUC8"><td data-page-node-id="JRlbIeMa43cIUFHGBFgf2f">05</td><td data-page-node-id="yLspFO7u5EV78J313ZAEgb">慢半拍 · 仪式动效</td><td data-page-node-id="8zI1rN893ycXlOfVIxKEkZ">heart-beat / smoke / petal / stamp / breath</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ 03 · 品牌焕新 ============ -->
+<section id="brand" data-page-node-id="zJlc8eFQS50xP5TGAQLCrH">
+  <div class="overline" data-page-node-id="dXPda3aPIgS4K8aiq8LMXW">03 · BRAND REFRESH</div>
+  <h1 data-page-node-id="rQO8VYXXW1abf0oVGKKYOr">品牌焕新</h1>
+
+  <h3 data-page-node-id="wtiCLonbQ03VnQhaU5pnby">主色升级路径</h3>
+  <p data-page-node-id="Bs9gtJ35ivIA5l4qd3I8CK">从高饱和的「网红粉」到温润的「焦糖玫瑰」——降低饱和度的同时提高明度，让主色在不同光照下都稳定可读。</p>
+
+  <div class="swatch-row" data-page-node-id="rWCSpDL12iUzAV65F57Wcq">
+    <div class="swatch" data-page-node-id="M6HrEughzaiLYFn3hyaqKR"><div class="chip" style="background:#e11d48;" data-page-node-id="91lmiAE5t8UomnvjqvNwav"></div><div class="info" data-page-node-id="VJ7huW7i7tGIEbdZtIXb86"><div class="lbl" data-page-node-id="iu9uJcW13DUWJqcQUjSk5d">#E11D48</div><div class="hex" data-page-node-id="6NS2GlFv0dFFQnyYOMEsYS">旧 · 高饱和粉红</div></div></div>
+    <div class="swatch" data-page-node-id="zWfxugBFsHKTycdc7BTnFU"><div class="chip" style="background:#c2410c;" data-page-node-id="DNjQRYWpmBXHhSlyA7h3bi"></div><div class="info" data-page-node-id="4Y8DRh0ZlhRFfiCpBSqksY"><div class="lbl" data-page-node-id="0Ol0rZ8xe65XbcayYK9sut">#C2410C</div><div class="hex" data-page-node-id="mIJm1Zsjehp1GVK2UTCbCF">新 · 焦糖玫瑰</div></div></div>
+    <div class="swatch" data-page-node-id="B1p4hD05lEMLvcog59nFDz"><div class="chip" style="background:#a8340a;" data-page-node-id="Xs6IJPJC8pzm7wuPP2ncKh"></div><div class="info" data-page-node-id="R9FS0XC3OCcuSCaEiQHMhw"><div class="lbl" data-page-node-id="a8cAXl1dGUmIxLOa3dG9yN">#A8340A</div><div class="hex" data-page-node-id="6oJwGlECQh8LlEheUyNpu2">hover · 加深态</div></div></div>
+    <div class="swatch" data-page-node-id="bcWED8JwrYEXZ12ZO25LTb"><div class="chip" style="background:#fdf5f0;" data-page-node-id="j3tbgnubT63RwWagOkKTGL"></div><div class="info" data-page-node-id="hJ4CiRRWdpbn545sYrHmEJ"><div class="lbl" data-page-node-id="O31r2fFFuEZMW39w4koFRj">#FDF5F0</div><div class="hex" data-page-node-id="U0UcdoEDbZ78nTWajkfjqy">rose-50 · 柔底</div></div></div>
+  </div>
+
+  <h3 data-page-node-id="6csDAgnYxYZj6aSawSQjT8">双心交错 · Two Hearts Interlocked</h3>
+  <p data-page-node-id="CjXUaMFQsSj3M7Ah6VjHzo">
+    取代单 ❤ emoji 的全新品牌符号：左侧心形 <code data-page-node-id="nXF4V6w8ppuebPpcnYSR2p">rose-500</code> 描边 + 右侧 <code data-page-node-id="ZkA7mEO9O7H2hqSyErrZbC">stone-700</code> 描边偏移 (0.55, 0.18) + scale 0.92，
+    交叠处留作「共有地带」空白；可选中央 <code data-page-node-id="LE4GkFyih3uyuPbRZ9BU5X">legendary-500</code> 火漆钉 2px。Line / Filled / Mini 三档变体覆盖 6 种使用场景。
+  </p>
+
+  <h3 data-page-node-id="LMuBpyXXCYAK8i3NQgIZ1b">字体三轨制</h3>
+  <table data-page-node-id="5KDBu6MelgxAqO72vI4HRz">
+    <thead data-page-node-id="Gl6FQlc6V8hJVC7gHaANsg"><tr data-page-node-id="Qv7JHC1Kan4hxU9j0vtTod"><th data-page-node-id="rbz79ClNzxWaM7F7E02pEv">字体</th><th data-page-node-id="qhZsHE5ynqL2qzdyAwFdDl">用途</th><th data-page-node-id="frRXzKbCa5B5DmbekXutEI">字重</th></tr></thead>
+    <tbody data-page-node-id="UI6wQvFosyCfIFUGFddErm">
+      <tr data-page-node-id="NsKJzTsJHmcQKjAaCW7vwQ"><td data-page-node-id="B0cup9OQqy02fOmmb1Twdm">LXGW WenKai 霞鹜文楷</td><td data-page-node-id="7K2PsI26JTlSoDlwCEtjit">中文诗意正文 / 心里话 / 签名</td><td data-page-node-id="EtwJDTMN3Poee8rtTxbuAM">400 / 600</td></tr>
+      <tr data-page-node-id="TyqSNzHRzl7RyRkJCD5Wha"><td data-page-node-id="BAUSWglvDpxRQHcxVTRe6l">Inter</td><td data-page-node-id="BEb5ksPczh2JehfHecMrnL">英文 / 按钮 / 标签 / 元信息</td><td data-page-node-id="yt7JQhudoNk2JNmkuck35l">300 / 500 / 600 / 700</td></tr>
+      <tr data-page-node-id="YtzlYwYD1dywpGbEQMA6PF"><td data-page-node-id="oE6H1IDuBzYsq8pWOCFFXI">Berkeley Mono</td><td data-page-node-id="kVuYhFTaX2pcT7cvo1KPHz">计时器 / 纪念日 / 日期戳</td><td data-page-node-id="4fXtKquHfKl0CPhzBZrMzZ">400 / 500</td></tr>
+    </tbody>
+  </table>
+
+  <h3 data-page-node-id="9HLo7GWVTfVptfMMx2sFLM">视觉语汇（克制清单）</h3>
+  <ul data-page-node-id="anFBoPcGyuLAG47bhswaoa">
+    <li data-page-node-id="AgaxwI4vdkQtCVO7y7nUHl">✗ 任何 emoji 当图标</li>
+    <li data-page-node-id="dp5tuido6KiBlAxoUTVpZp">✗ 任何「全圆 pill」按钮（圆角上限 12px）</li>
+    <li data-page-node-id="1x4STIz0X3XFldVU6AcSfr">✗ 任何冷蓝色调（最多 ink-500 藏蓝辅助）</li>
+    <li data-page-node-id="TROr8ygDBWZg7HBtHC86LB">✗ 任何冷灰阴影（必须 <code data-page-node-id="NmgqdJxiIdznotfokNdeeU">rgba(194,65,12, ...)</code> 染色）</li>
+    <li data-page-node-id="90AtaKVM99x5Fu40DZ8g1O">✓ 双心交错符号、单心 SVG、信纸横线、火漆蜡纹、烫金粒子、月相、印章字符</li>
+  </ul>
+</section>
+
+<!-- ============ 04 · 信息架构 ============ -->
+<section id="ia" data-page-node-id="FG7u9cTpF64HuGhC9DeCVo">
+  <div class="overline" data-page-node-id="pvTPgDvt6bhxQHJWWmfIUU">04 · INFORMATION ARCHITECTURE</div>
+  <h1 data-page-node-id="m9EjGi9igLPpfAsA8Vq5BH">信息架构对比</h1>
+
+  <h3 data-page-node-id="eMyXmAc9v2q55S6l4jvt3e">旧版 · 平面堆叠</h3>
+  <div class="ascii" data-page-node-id="C8gBimczWkrkCBYpuUlGfG">
+┌─────────────────────────────────────┐
+│  顶栏：3 图标 + 用户名              │
+├─────────────────────────────────────┤
+│                                     │
+│  [空状态插画 + 大字 + CTA]          │
+│                                     │
+│  待办列表（统一卡片 · 视觉单调）    │
+│                                     │
+│  ──────── ↓ 无限滚动 ↓ ────────    │
+│                                     │
+└─────────────────────────────────────┘
+  </div>
+
+  <h3 data-page-node-id="9CojigawU3xlFE6nh1W16u">新版 · 编辑感纵深</h3>
+  <div class="ascii" data-page-node-id="8hed9sGEXB7FeEa1648SXB">
+┌─────────────────────────────────────┐
+│  TopBar 毛玻璃（4 操作 + 用户名）   │  ← 56px 安全区
+├─────────────────────────────────────┤
+│  [离线提示条 · 仅出现时]            │
+├─────────────────────────────────────┤
+│  ┌─ Hero · 今日 ────────────────┐  │
+│  │  日期 · 标题 · 在一起 N 天    │  │
+│  │  倒计时 · 双主角徽章          │  │
+│  └───────────────────────────────┘  │
+│                                     │
+│  ── 进行中（3/5） ──────────────    │
+│  [待办卡片 · 角色条 + 配图 + 反应]  │
+│  [待办卡片 · 普通]                  │
+│  [待办卡片 · 隐藏款 legendary]      │
+│                                     │
+│  ── 已完成 ──────────────           │
+│  [完成卡片 · 备注]                  │
+│                                     │
+│                  [FAB · 长按展开]   │  ← 56×56
+├─────────────────────────────────────┤
+│  顶部状态栏 · 底部 Home Indicator   │
+└─────────────────────────────────────┘
+  </div>
+</section>
+
+<!-- ============ 05 · 关键页面改版 ============ -->
+<section id="pages" data-page-node-id="tLSHnaA8lL2FVtUMVJ13os">
+  <div class="overline" data-page-node-id="ZC8F7CFpWAVt8acHPWHHGy">05 · KEY SCREENS</div>
+  <h1 data-page-node-id="KpQvhKJcFEwFMTNgkJFkeu">关键界面视觉改版方案</h1>
+
+  <h3 data-page-node-id="Fvt2Mg41gO8ZXl0CxZimUH">01 · 登录页</h3>
+  <div class="callout" data-page-node-id="WDFCWMlhox6muaCc1DdJQd">
+    旧：纯白底 + 大 ❤️ 心形 + 单调表单。新：米杏底 + 双心交错呼吸 + 配对码 / 手机号双入口 + Touch ID。
+  </div>
+
+  <h3 data-page-node-id="5PWOtJyx9rmJHTyzlAtlqz">02 · 主界面</h3>
+  <ul data-page-node-id="gLvWaggf82kJgBP9CbWlwl">
+    <li data-page-node-id="FG6uv1JRXeUcDibJplSxbX"><strong data-page-node-id="T5kUe5yQZalmDGZTu02miW">Hero 区块</strong>：从硬编码数字改为「在一起 N 天」+ 倒计时，蒙德里安式卡片而非「横幅广告」。</li>
+    <li data-page-node-id="LMmdwKlNCCuCosm6GV2eh0"><strong data-page-node-id="k7h7DKSXlaweb5VrSgZW9v">角色条</strong>：每张待办卡顶部 4px 圆角色条 — 小宝宝 rose-500 / 大宝贝 ink-500 / 隐藏款 legendary。</li>
+    <li data-page-node-id="yyhTsppYI5MaxZCUDNt3tW"><strong data-page-node-id="YO4y0EhLxugtFZJhF077KJ">FAB</strong>：从「点击弹面板」改为「长按 400ms 展开 4 个花瓣方向的心意菜单」。</li>
+  </ul>
+
+  <h3 data-page-node-id="khC9Y06v6oNttEqRQGyTgJ">03 · 纪念日面板</h3>
+  <div class="callout" data-page-node-id="YSIYzEkdF04aPw23gT3TeU">
+    从「日期宫格」改为「在一起 N 天烫金打戳 + 3 个倒计时行 + 留一句心里话入口」。整体奶油色卡片 + 顶部跳动双心。
+  </div>
+
+  <h3 data-page-node-id="QhhjL1q0Yov6wyycnPgwV2">04 · 心里话写信 / 阅读</h3>
+  <ul data-page-node-id="hxGsEUpA06XY9Cv4wQAY2v">
+    <li data-page-node-id="XCUZ8Wy0Rg9niy8fJ9F23H">米杏信纸 + 28px 间距横线纹理（仿纸）。</li>
+    <li data-page-node-id="tsw7Nd9jajIVaMrZPITFyH">顶部双心交错 logo + 「亲爱的，___」开头 + 「永远爱你的，___」结尾 + 「小 宝 贝」印章。</li>
+    <li data-page-node-id="JIYb3rzkYJ0bSlxm26O8QE">阅读页带反应 pill（心动 / 收藏 / 已读）和「往昔 12 封」下拉。</li>
+  </ul>
+
+  <h3 data-page-node-id="Dl7CaR78RjCzHK78EpCYu7">05 · 贴纸图鉴</h3>
+  <ul data-page-node-id="kB91hZpRLx96fywDJcVAh0">
+    <li data-page-node-id="Q4hfhaDzLKsmXgmDKUq1IZ">12 格分 3 档（rare 粉 / epic 紫 / legendary 金）。</li>
+    <li data-page-node-id="0oDBKFEbmCKUNIJYZoS52T">已解锁：彩色 + 名称 + 解锁日期 +「NEW」角标。</li>
+    <li data-page-node-id="4XFkp6hpW1888iT2NyGQfa">未解锁：灰色剪影 + 「???」+ 提示语（"还没遇见"/"那天还没到"）。</li>
+    <li data-page-node-id="XD9bt9QU9evdDOz2yMJjOj">顶部三色拼接进度条 + shimmer 动效。</li>
+  </ul>
+
+  <h3 data-page-node-id="vYm9zSOSXWi8JIr4oGsSrP">06 · 浮层合集（长按 / 添加 / 看图 / 更新）</h3>
+  <table data-page-node-id="Cy2YwqCfvRkQeoSydUUkqR">
+    <thead data-page-node-id="gotJmAveI3R6tCEB6acPsh"><tr data-page-node-id="pctSboHwr9fT6jUhKS5PT5"><th data-page-node-id="m6PhRyFuHYHLEK0LW8FNjS">浮层</th><th data-page-node-id="nfB9DNbMJrFJXdTNCGVPy9">关键改动</th></tr></thead>
+    <tbody data-page-node-id="FdyTc2WjAWCseSYwr0eXuz">
+      <tr data-page-node-id="fRFGCsK8SEX6HJcra3dtdd"><td data-page-node-id="LiojdPeB6jdILSooRzEdWr">长按菜单</td><td data-page-node-id="U2TLI1vBV7YuMc4gVWEIPB">从「浮窗」改为底部 Sheet 6 行（含删除 rose-700 警示色 + 滑块确认）</td></tr>
+      <tr data-page-node-id="nRUGDA6OFDPMvrMLXXHdlU"><td data-page-node-id="Zv1GG74mtkCG18FUaq32g7">添加面板</td><td data-page-node-id="ELyxtPiCNrwcGpoA9hto8l">从「单一文本框」改为「标题 + 备注 + 提醒 + 稀有度 + 谁来做」5 段</td></tr>
+      <tr data-page-node-id="4lN6M643jR8EeHNTcRLeRD"><td data-page-node-id="2ydUmxnOgOlEQekmNgK0au">图片 Lightbox</td><td data-page-node-id="hEwYtQQvREEfVwhfSbTois">黑色底全屏 + 配图说明 + 三动作（心动 / 保存 / 设为壁纸）</td></tr>
+      <tr data-page-node-id="qC1cpozFeuGOxPvvGAlXcE"><td data-page-node-id="HvFFR1NJSzNTGinKcUvGEr">APK 更新</td><td data-page-node-id="RuauQIFNhOcZ84aEm4pknI">底部 Sheet + 强制更新红色顶部条 + 进度条 + 双按钮</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ 06 · 微动效 ============ -->
+<section id="motion" data-page-node-id="WvI0eu9wGgxOFL6e2op0f7">
+  <div class="overline" data-page-node-id="qjA0kTYEPoF6E44RYBLDle">06 · MOTION LIBRARY</div>
+  <h1 data-page-node-id="MB6OuhoPY0CI433nayFYcF">5 套仪式动效</h1>
+  <p data-page-node-id="7Cc6LmRqGAW5AMim5fS3Rg">所有动效「慢半拍」，基准 280ms，仪式 720–1200ms。监听 <code data-page-node-id="2wATPcZs0oP5Gtg3qKqBzr">prefers-reduced-motion</code> 自动降级为 120ms 过渡。</p>
+
+  <div class="motion-grid" data-page-node-id="6yVpD4mcMPdN8XCIAN0iRl">
+    <div class="motion" data-page-node-id="Exd8eu0AtWHDFeRDAudjUe">
+      <div class="vis" data-page-node-id="v166OayTOwMfEWT1ED5vUC">
+        <path d="M20 36 C 6 26, 4 14, 10 10 C 14 8, 20 12, 20 14 C 20 12, 26 8, 30 10 C 36 14, 34 26, 20 36 Z" fill="#c2410c" data-page-node-id="0h6YbFlH6dRx1P5E2fHejj"/>
+      </div>
+      <div class="num" data-page-node-id="FHzl7iSjDFo1UBpEmF1clf">2.4s LOOP</div>
+      <h6 data-page-node-id="CzrNWgldNXULl3hGBMzf24">heart-beat</h6>
+      <p data-page-node-id="HGj4JorB7gNNmPGKw8AMo2">FAB idle 心跳 · scale 1↔1.06 · spring 缓动</p>
+    </div>
+    <div class="motion" data-page-node-id="WDkR2d8uwCJ74eMxV5LvTi">
+      <div class="vis" data-page-node-id="BiZVWtvLSFUyVwMWsJyJ2v">
+        <text x="20" y="26" text-anchor="middle" font-family="serif" font-size="14" fill="#2f2820" opacity="0.3" data-page-node-id="EWFuHjlR7ecC7kk8ga76jw">字</text>
+      </div>
+      <div class="num" data-page-node-id="FNLetesHBE3YlDO2eaHHKP">1.2s EASE-IN</div>
+      <h6 data-page-node-id="ZMGny4McFQf25idjEGRS2F">smoke · 烟化</h6>
+      <p data-page-node-id="3BsQA3MTkmxCKnJcK5EDQK">心里话长按删除 · 字符上升 + blur(8px)</p>
+    </div>
+    <div class="motion" data-page-node-id="5LprnFeNkCxIHRoKU3ZNYr">
+      <div class="vis" data-page-node-id="eoX4p2HHOMZ8kClDsrQpsA">
+        <g transform="translate(20 20)" data-page-node-id="4gtymwqq7Pm4FX9vW4wgaF">
+          <ellipse cx="0" cy="-8" rx="3" ry="6" fill="#f9c9d6" data-page-node-id="C7vFgVNVPv0UdyuUJXEu80"/>
+          <ellipse cx="8" cy="0" rx="3" ry="6" fill="#f9c9d6" transform="rotate(90)" data-page-node-id="IzyqyJim2YX7NjHwSaosQV"/>
+          <ellipse cx="0" cy="8" rx="3" ry="6" fill="#f9c9d6" transform="rotate(180)" data-page-node-id="u0EWD4VsvwHQr6oItiE6BJ"/>
+          <ellipse cx="-8" cy="0" rx="3" ry="6" fill="#f9c9d6" transform="rotate(270)" data-page-node-id="Xi2CrfCSQStWogUld2tTyL"/>
+        </g>
+      </div>
+      <div class="num" data-page-node-id="QuBCRB1UCOfr4xC9I7gmUN">1.6s SPRING</div>
+      <h6 data-page-node-id="0OQgJeX5tN42Y958fTP64v">petal · 花瓣</h6>
+      <p data-page-node-id="mdxApo7PRetDjTjPa8Qfb8">FAB 长按展开 · 4 片围绕旋转</p>
+    </div>
+    <div class="motion" data-page-node-id="IdKnbtg7j11sSMvdj36mtu">
+      <div class="vis" data-page-node-id="RVqvo2aJUZfy5qQFGVHlWd">
+        <circle cx="20" cy="20" r="14" fill="#c1932e" stroke="#8a6618" stroke-width="1.4" data-page-node-id="wvHxRr8RzQQgTz0krbF2bd"/>
+        <text x="20" y="24" text-anchor="middle" font-family="serif" font-size="11" fill="#faf6f1" data-page-node-id="SFBmqwkVeQEDkkzH0xdWo3">★</text>
+      </div>
+      <div class="num" data-page-node-id="H5SxK6638NQDPpgNoHFcBw">720ms</div>
+      <h6 data-page-node-id="rs2ZsFfhzit1aD2xzAA5J4">stamp · 烫金</h6>
+      <p data-page-node-id="3ThnZcr6hEX9ppJauJ9Zpb">隐藏款揭晓 · 金环 + 0.5px 抖动</p>
+    </div>
+    <div class="motion" data-page-node-id="GavojNRYdqV9S2JZGvvSLS">
+      <div class="vis" data-page-node-id="lRlZXvaYHiTMOIOdxQnouz">
+        <path d="M20 36 C 6 26, 4 14, 10 10 C 14 8, 20 12, 20 14 C 20 12, 26 8, 30 10 C 36 14, 34 26, 20 36 Z" fill="none" stroke="#2f2820" stroke-width="1.4" data-page-node-id="zhuKKniYyLLpifqv0Kj4kD"/>
+      </div>
+      <div class="num" data-page-node-id="RjUpqDqAm04VRH7B4UcVpC">4.8s LOOP</div>
+      <h6 data-page-node-id="6F8RCsmPbDvlba0g6XCyOv">breath · 呼吸</h6>
+      <p data-page-node-id="0eGI8oXRbXrgp3feg9JfG2">主桃心 idle · scale 1↔1.04 · 双心错开 240ms</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 07 · 可访问性 ============ -->
+<section id="a11y" data-page-node-id="FSOvPkJNHSm1yF6214tCPd">
+  <div class="overline" data-page-node-id="xKcZDl60u1N0RE3WlGeDFW">07 · A11Y & RESPONSIVE</div>
+  <h1 data-page-node-id="IW6NiHXEf6wfPzGkYxcyni">可访问性与响应式</h1>
+
+  <h3 data-page-node-id="NWIxi4l9ODCFNrE4YKXXqe">WCAG AA 通过情况</h3>
+  <table data-page-node-id="hc4b46OeDdQ3WR80dN2Chf">
+    <thead data-page-node-id="T1OMhiCxk0losCMHx22fug"><tr data-page-node-id="R8TuCKEyWwR2LeA3xe8VdS"><th data-page-node-id="PZ7nSXSJFftzxmiO8YGO60">组合</th><th data-page-node-id="CxtJ0ouFjyQ1ac2nDq3bMN">对比度</th><th data-page-node-id="HGEWk85lRwCNPRFMcb6Ats">等级</th></tr></thead>
+    <tbody data-page-node-id="26qn3NqqtCrHl6vDSIpzjS">
+      <tr data-page-node-id="Xni5TC5LQ1qxg9gGQd1Rm5"><td data-page-node-id="c4IYyx9aSp6ifCoWZrfCFQ">stone-700 on cream-100（正文）</td><td data-page-node-id="3B4IuQCIv7eKeyTnjGHVJD">11.8 : 1</td><td data-page-node-id="llf6CNzeyOjci1Hc0FNWjQ">AAA</td></tr>
+      <tr data-page-node-id="dWL9jS6U3CENz4IK7lA5Yf"><td data-page-node-id="PECGAbPE7xtByhKSr1hVGs">stone-500 on cream-100（副文）</td><td data-page-node-id="vYaFEhFfl7DmyQdZ8sbqna">5.4 : 1</td><td data-page-node-id="i9AZnwFRRxZTBezpjbDKj5">AA</td></tr>
+      <tr data-page-node-id="N7Kzq3gHwDCEOcA1oizUpB"><td data-page-node-id="wxKpIvN4zW1BlZ7njClWEA">rose-500 on cream-100（强调）</td><td data-page-node-id="ygOREwidwHmUAiCNmVneyH">5.7 : 1</td><td data-page-node-id="6yF3jRhRmCuyHtauGc4jFG">AA</td></tr>
+      <tr data-page-node-id="koRMzmZXkUXKWvM7PeLzfG"><td data-page-node-id="4AxDH9SW3GqhIcpxLed8WC">cream-50 on rose-500（按钮反白）</td><td data-page-node-id="4VMNOSfFf0ZVfyFoZKobTX">5.7 : 1</td><td data-page-node-id="XuPROCE8q3ce72xRj0dLUu">AA</td></tr>
+      <tr data-page-node-id="IioXVvhHiRXi7rkDH9XNA3"><td data-page-node-id="JGLI0IRudPsVieRw43m8JA">legendary-700 on cream-100</td><td data-page-node-id="4W6OI1t78bNXNmaodjaHRE">4.9 : 1</td><td data-page-node-id="tpOcqdQ2OvWDCwSzJG6CQL">AA 正文</td></tr>
+    </tbody>
+  </table>
+
+  <h3 data-page-node-id="xfx7POByQcFPhOyMHmigiN">移动端铁律</h3>
+  <ul data-page-node-id="4JdIRzCwyYNNHTLFYL5Zu4">
+    <li data-page-node-id="t1CbKw6PBtCXRoEE7JSnfP">字号底线 <strong data-page-node-id="ZMvI5dTnoWgqXIolKCUGjY">14px</strong>（body-sm），任何情况不允许低于 11px</li>
+    <li data-page-node-id="3E7aP0SRCoomlx5DYbz5HT">最小点击区 <strong data-page-node-id="zCsYVOIYkUOuCzSTVguEaf">44×44pt</strong>（Apple HIG + Material 双标准）</li>
+    <li data-page-node-id="Phb3nQc3xPG2F9OS01JAad">FAB 56×56 / 主按钮 48 / 列表项 ≥ 56</li>
+    <li data-page-node-id="fdtWYr8Fm4TThDxhLG8t1n"><code data-page-node-id="6APbntMSxo8pPn69OwcWjK">prefers-reduced-motion: reduce</code> 全局降级</li>
+  </ul>
+
+  <h3 data-page-node-id="dgi4f4SOFGJMwppRtVNE6c">断点策略</h3>
+  <table data-page-node-id="5pEXRVCCCtcSEEMkTQC8B2">
+    <thead data-page-node-id="DqZGwitzeVGqR0cXCWaDf1"><tr data-page-node-id="gTeC2UCjQ5H6wUxHGus7w0"><th data-page-node-id="VCkofSvMLX5S88egBER8sg">断点</th><th data-page-node-id="slJW8htcA88xMtoZ9FlQSY">宽度</th><th data-page-node-id="f8Idfs1jiIXwBMN7FVKUI8">布局</th></tr></thead>
+    <tbody data-page-node-id="uiLY3EVD0h2tJDnL8dUC03">
+      <tr data-page-node-id="39auwyeBe9r5TA1MurquUU"><td data-page-node-id="zGITwFiVwEoq3G7GB69Gtc">xs-mobile</td><td data-page-node-id="33y1CN2tbCoruxvlcoOsFt">320–374px</td><td data-page-node-id="UWrgZxSCnuJaFAKlQAwTAc">单列 · 时间线 · FAB 居中</td></tr>
+      <tr data-page-node-id="wLVUFe7Kq8kGUMTixHpdkj"><td data-page-node-id="bpPyTpFeB24BVh7gMQMY4D">sm-mobile</td><td data-page-node-id="faYRC7D7g4db69LyDVdw1e">375–413px</td><td data-page-node-id="dQH4Y0zMDxVt0x2mbpkAlT">单列 · 标准</td></tr>
+      <tr data-page-node-id="tg91yOSJnDk78nmQqy0uhj"><td data-page-node-id="NyGD2bpUhpurjXTrREMfns">md-mobile</td><td data-page-node-id="xV3O6wg5BWDLuoHrNFrfSS">414–767px</td><td data-page-node-id="dXyZb6mX3tZcPoC9VgQevb">单列 · 更宽松</td></tr>
+      <tr data-page-node-id="98yD7fAGKDTS7ZpXkg4KDx"><td data-page-node-id="qalimKRfY09sWdlCoaToS3">tablet-portrait</td><td data-page-node-id="PJHVpyamnUzlbwvvpk9W1z">768–1023px</td><td data-page-node-id="q7Nxmc9y4aZq6ve4IvATNq"><strong data-page-node-id="KATVg42SaV4KcwLi0QIuJ3">真双栏对称激活</strong></td></tr>
+      <tr data-page-node-id="rUdVPi3vPPa7JSdGAbNo3e"><td data-page-node-id="64FSTLg6alFefxRfbqkzAl">tablet-landscape</td><td data-page-node-id="gkYoQoZJSxHvzwZkqmoAff">1024–1439px</td><td data-page-node-id="ZsylfNutNIsdIwF1PJatKy">双栏 + 顶部导航</td></tr>
+      <tr data-page-node-id="MuNnHmGL0AUVLfuQCF3kIf"><td data-page-node-id="001rGORLFiodbubeYtqWqR">desktop</td><td data-page-node-id="mlHyQQB2kCVSRmfXeRZfkj">≥ 1440px</td><td data-page-node-id="Ryx4FGM6HvGH1bmWa0DouF">完整 35/30/35 三栏</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ 08 · 实施路径 ============ -->
+<section id="phase" data-page-node-id="L0FyBUbtAw1u6FJLUtcMs0">
+  <div class="overline" data-page-node-id="mSNlClxxgjtOOTf2LlnbmG">08 · ROLLOUT PLAN</div>
+  <h1 data-page-node-id="xsKMluWbNopjlFvBQxvHzb">3 阶段渐进上线</h1>
+
+  <div class="phases" data-page-node-id="jpxABpndudO2CRwmQSiWjq">
+    <div class="phase" data-page-node-id="c59EE4GLTsHvXIrg0Uz0rl">
+      <div class="badge" data-page-node-id="2sZPwInVAB823VDzBpVuK0">PHASE 1 · 2 周</div>
+      <h5 data-page-node-id="yTqmUHITAaL65WgFhFFMdf">令牌切换</h5>
+      <div class="timeline" data-page-node-id="i1h2DUnsxPcWXifKJa3wvk">Week 1–2 · 设计 / 前端联调</div>
+      <ul data-page-node-id="5mQlM5nexRxBPKv8g8iAnd">
+        <li data-page-node-id="bMjZEQtuYM3B7H0iuEOGAd">CSS 变量基线落地</li>
+        <li data-page-node-id="EfOjhWpmDR6nABpG8JKcPx">主色 #c2410c 替换</li>
+        <li data-page-node-id="s5EsRH2terSOBjx5S1XsCk">米杏底替换粉底</li>
+        <li data-page-node-id="DHTIovUtwkZaz20vkKbIy2">霞鹜文楷字体加载</li>
+        <li data-page-node-id="BLmWPvuKzNPC2HEoyHDUA0">原有页面不动结构</li>
+      </ul>
+    </div>
+    <div class="phase" data-page-node-id="3n2y1F4X47ebz6VUmTJCVk">
+      <div class="badge" data-page-node-id="aS1v6PTZlwBA0JxAapXQ6G">PHASE 2 · 4 周</div>
+      <h5 data-page-node-id="NfPqn5WSH1dBQtxjcSFDda">关键页面重构</h5>
+      <div class="timeline" data-page-node-id="YDpVvMXmSHVH4ilhdNovVF">Week 3–6 · 体验翻新</div>
+      <ul data-page-node-id="RCFDARJCvAa7pDFnVwDYXR">
+        <li data-page-node-id="SdUecY8uTVLTSCJPOjPntK">登录页开屏爱心动画</li>
+        <li data-page-node-id="nISUt7VfM80v8NmgfBKG01">主页 Hero 改造</li>
+        <li data-page-node-id="zlw5ieobnSE8foQ35kBCS8">FAB 长按展开花瓣菜单</li>
+        <li data-page-node-id="QWJA0Sy4N3lZQnj2i8CycW">纪念日面板</li>
+        <li data-page-node-id="uyxZXDOcg2wPW9UlBDDwGc">心里话写信 / 阅读</li>
+        <li data-page-node-id="3qdzxVgVV130j5BaCfLOYh">贴纸图鉴改造</li>
+      </ul>
+    </div>
+    <div class="phase" data-page-node-id="au83EA4C1XhGpSUQwhKeyP">
+      <div class="badge" data-page-node-id="G8C9CN5fptnf1P5DEY90cb">PHASE 3 · 3 周</div>
+      <h5 data-page-node-id="mPOoF6ztvRiEfKGcuDQr2S">仪式动效补齐</h5>
+      <div class="timeline" data-page-node-id="QUoAHSU7cU7osW7sdbZQRn">Week 7–9 · 仪式感</div>
+      <ul data-page-node-id="1KoqSJdZxveG17H3nWC8Ys">
+        <li data-page-node-id="JvG1Ub4iHFAgPCJMkQCUKO">heart-beat / breath 入 idle</li>
+        <li data-page-node-id="4qLyIARGHgAUPCX88kAWJu">petal 长按展开</li>
+        <li data-page-node-id="1cTmwxbDu8eg9NONr650nl">stamp 隐藏款揭晓</li>
+        <li data-page-node-id="qOLckV1ahGftj2eoNl1Pef">smoke 删除长按</li>
+        <li data-page-node-id="g65d6gZ9EdQOeAj9egmjte">纸纹 + 烫金粒子</li>
+        <li data-page-node-id="SZshDYD6BBAVHPDqQ1Z7F6">prefers-reduced-motion 兜底</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 09 · 决策记录 ============ -->
+<section id="decisions" data-page-node-id="FgEFkh5PNRkhetGezMN7Zi">
+  <div class="overline" data-page-node-id="92kTXk1tDzNlP71zbMIcAU">09 · DESIGN DECISIONS</div>
+  <h1 data-page-node-id="WaSLt4Gf6Mu8Dto31mHz2L">设计决策记录</h1>
+
+  <div class="decisions" data-page-node-id="P9TFwsVcIbpQoJ9y9KvD5m">
+
+    <div class="decision" data-page-node-id="mBRh5ULL0NrOUzUn3rV5bF">
+      <div class="label" data-page-node-id="Dh94L95uVHBcZqQSG9pesZ">DECISION #1 · 双栏布局</div>
+      <div class="q" data-page-node-id="P8OmRkfXyFYbwQDVCnS6kW">如何处理「双主角对称」？</div>
+      <div class="a" data-page-node-id="rZuJBNSSqNpQ2pegcJYCgJ">
+        <b data-page-node-id="tU1g4wcIIhFWeEuO0V2C4L">移动端坚持单列纵深 + 双主角镜像</b>，而非死板的 35/30/35 三栏。
+        iPhone SE 单栏仅剩 ~85pt，无法承载「头像 + 心里话」单元；
+        拇指热区模型下中间 30% 共享待办会被拇指根部遮挡。
+        双主角对称改为<b data-page-node-id="ipYxXgmHGaLR6Ihs4np4hA">身份徽章 + 卡片角色条</b>：小宝宝 = rose-500 桃形 16×16；大宝贝 = ink-500 方印 16×16。
+      </div>
+    </div>
+
+    <div class="decision" data-page-node-id="v3sr8CCnMjtjgHTRcP8RJU">
+      <div class="label" data-page-node-id="VMP9WvDau1DHnQnsGAjPTZ">DECISION #2 · 暗色模式</div>
+      <div class="q" data-page-node-id="01KtGDuAyQeTH6CUqfGYzh">首期是否做暗色模式？</div>
+      <div class="a" data-page-node-id="SNbjV0g82wu1SQxDUBzEYm">
+        <b data-page-node-id="zak6qYDImSamHP4TNDROzo">不做实现，只备命名</b>。<code data-page-node-id="d9glx2MIXh1gGRvosKD4hs">--color-bg-dark</code> / <code data-page-node-id="mahyHsMoj7frePzcyuqzeq">--color-text-dark</code> 已预留，
+        方便未来扩展。首期聚焦在「暖奢呼吸感」的日间体验。
+      </div>
+    </div>
+
+    <div class="decision" data-page-node-id="lKMof9IDbr1hAgCRHGwCfT">
+      <div class="label" data-page-node-id="SvKAD4rrHyzYLTPwoizBEA">DECISION #3 · FAB 交互</div>
+      <div class="q" data-page-node-id="64CCU3WdyfdqS4hW0PJ7Wa">FAB 是「点击」还是「长按」？</div>
+      <div class="a" data-page-node-id="cdDTrCS6dTL74hCQ0H0oEG">
+        <b data-page-node-id="BBAepy608qgzcYJCGqvjCq">长按 400ms 展开 4 片花瓣菜单</b>（写信 / 留语音 / 拍照 / 共享此刻）。
+        短按保留为「添加一条新待办」的快速路径。
+        让 FAB 同时承担「添加」与「心意菜单」双重语义。
+      </div>
+    </div>
+
+    <div class="decision" data-page-node-id="ZaSwt9fbU0ZRXDEBXlrSpp">
+      <div class="label" data-page-node-id="Fa6Ycq2DRgnVNDiDEhX8tQ">DECISION #4 · 主色降饱和</div>
+      <div class="q" data-page-node-id="Tc8fa837Z8j3Zz8z0iiEUX">为什么从 #e11d48 降到 #c2410c？</div>
+      <div class="a" data-page-node-id="14WIaZGfXdcDthn5nIB2aJ">
+        高饱和 #e11d48 在小尺寸 UI（tag / 边框 / 角色条）下会「震」眼睛，
+        <b data-page-node-id="CNNF13l2YmSYpxvtu7Cw9c">降到 #c2410c 后保留玫瑰色相但让 5% 点缀的克制哲学成立</b>。
+        主色仅在 CTA / FAB / 强调文本 / 关键图标四处出现，其余走 stone 中性色。
+      </div>
+    </div>
+
+    <div class="decision" data-page-node-id="uvM02PKiEZlYlwaXevrAqz">
+      <div class="label" data-page-node-id="HI4d0RsOtaCheD30HCBaiN">DECISION #5 · 字体策略</div>
+      <div class="q" data-page-node-id="D9AtAQP0X2ywzTMJk0Bonm">为什么用霞鹜文楷？</div>
+      <div class="a" data-page-node-id="T90KYiMEDxAOHkJn9Z23uI">
+        <b data-page-node-id="kozyGPyYjkEGKV9CjtzcZC">手写感 × 宋体骨架</b>，最契合「克制浪漫」调性。
+        衬线字体让心里话、信件、签名这类长文场景获得「书写感」；
+        Inter 兜底英文与 UI，Berkeley Mono 用于倒计时数字。
+        三个字体不混写在一个 font-family 里，永远先中文后英文。
+      </div>
+    </div>
+
+    <div class="decision" data-page-node-id="NhLltYEHOdRfLVwR8zZTMD">
+      <div class="label" data-page-node-id="4uttoki95D6RTnIlW5XHn4">DECISION #6 · 圆角上限</div>
+      <div class="q" data-page-node-id="wVeBftPivnk76O9Qf7Hdoh">按钮为什么不做 pill 全圆？</div>
+      <div class="a" data-page-node-id="ia83x9LeHd21VRGA1dsf9u">
+        <b data-page-node-id="ZXDYi6kuO4W1f2YID6y23i">圆角上限 12px</b>（信纸卷角感），不做 pill。
+        全圆按钮虽然「亲切」，但丧失了「卡片 / 信封 / 印章」的语义。
+        只有 <code data-page-node-id="zcJrdTNJoSorkrltIZmgon">--radius-full</code> 留给圆形 Avatar 与心形徽章。
+      </div>
+    </div>
+
+    <div class="decision" data-page-node-id="6WQbCpRfroOunsZvv8ySP3">
+      <div class="label" data-page-node-id="y8vd0jjXyphyXcIq1mKiL3">DECISION #7 · 动效慢半拍</div>
+      <div class="q" data-page-node-id="lHviblSMyTDvoId4GvRld0">为什么 280ms 而非 180ms？</div>
+      <div class="a" data-page-node-id="lPeIJEEnbpueCmBZih6Xnc">
+        <b data-page-node-id="RX6uT3rzJq0xHvLrRdoJYq">符合「从容、被珍视」的调性</b>。
+        Material 默认 200–300ms、Apple HIG 200–500ms，
+        我们取中位 280ms 基准 + 480ms 慢节奏 + 720–1200ms 仪式。
+        速度变慢 = 用户感知到「我们为你留出时间」。
+      </div>
+    </div>
+
+    <div class="decision" data-page-node-id="vK31Md71VfLHIuKBgDB2ah">
+      <div class="label" data-page-node-id="kDpDfroBPMV4IuVHLtCJk8">DECISION #8 · 阴影暖色染色</div>
+      <div class="q" data-page-node-id="GUKF5fsd5MCHaqcnQpvswX">为什么阴影用 rgba(194,65,12)？</div>
+      <div class="a" data-page-node-id="d3ctmCn7DRC8YEdt8s6BJi">
+        <b data-page-node-id="RniyGAapcUXICwCG2doGDV">阴影统一用玫瑰色染色</b>，禁止冷灰阴影。
+        冷灰阴影在暖色基底上「脏」且突兀；
+        暖玫瑰染色阴影与米杏底色融合，让悬浮更有「纸片轻盈」感。
+        所有阴影色都从 <code data-page-node-id="sjsSVZExivoaExFN7dhtI9">--color-primary-rgb: 194, 65, 12</code> 派生。
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<footer style="text-align:center; padding:48px 0; border-top:1px solid var(--color-border-subtle); color:var(--color-text-subtle); font-family:var(--font-en); font-size:11px; letter-spacing:0.18em; text-transform:uppercase;" data-page-node-id="lJjEanDM3aclFSSNYN5ZZz">
+  「有爱」App · 设计改版方案 · v1 · 概念稿
+</footer>
+
+</main>
+
+</div>
+
+</body>
+</html>

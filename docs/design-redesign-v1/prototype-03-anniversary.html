@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="dJzCR4LYRmBnSBVjHnl1lI">
+<head data-page-node-id="95OtLSFaN8V5GK7g7RvMNQ">
+<meta charset="UTF-8" data-page-node-id="0gdT1iAQBAkrUJLFg5bJvD">
+<meta name="viewport" content="width=390, initial-scale=1.0" data-page-node-id="1hECnIOErs6WdkKirDoTd6">
+<title>原型 #03 · 纪念日面板 · 「有爱」v2 改版</title>
+<!--
+  纪念日面板：顶栏桃心按钮展开
+  Hero：在一起 N 天 + 3 个倒计时 + 「留一句心里话」入口
+  视觉：奶油色卡片 + 顶部跳动双心
+-->
+<style>
+:root {
+  --rose-50:#fdf5f0; --rose-100:#f9e3d4; --rose-200:#f1c4a8;
+  --rose-300:#e89e76; --rose-400:#d9774b; --rose-500:#c2410c;
+  --rose-600:#a8340a; --rose-700:#872a08; --rose-800:#6a1f06; --rose-900:#4a1605;
+  --cream-50:#fdfbf7; --cream-100:#faf6f1; --cream-200:#f3ebde;
+  --cream-300:#e8dcc6; --cream-400:#d6c4a3; --cream-500:#b8a17e;
+  --cream-600:#8e7752; --cream-700:#66553b; --cream-800:#3f3322; --cream-900:#231b10;
+  --stone-50:#f8f6f3; --stone-100:#ede8e0; --stone-200:#d9d2c5;
+  --stone-300:#b8aea0; --stone-400:#928676; --stone-500:#6b6051;
+  --stone-600:#4a4135; --stone-700:#2f2820; --stone-800:#1a1610;
+  --legendary-300:#e8d49b; --legendary-500:#c1932e; --legendary-700:#8a6618;
+  --ink-500:#2f456a; --ink-700:#1a2942;
+  --moss-500:#5a7048; --moss-700:#37492c;
+
+  --color-primary:var(--rose-500);
+  --color-primary-rgb:194,65,12;
+  --color-text:var(--stone-700);
+  --color-text-muted:var(--stone-500);
+  --color-text-subtle:var(--stone-400);
+  --color-text-rose:var(--rose-500);
+  --color-border:var(--cream-300);
+  --color-border-subtle:var(--cream-200);
+  --color-bg:var(--cream-100);
+  --color-bg-elevated:var(--cream-50);
+
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:20px; --space-6:24px; --space-7:32px; --space-8:40px;
+  --radius-sm:8px; --radius-md:12px; --radius-lg:16px; --radius-xl:20px; --radius-2xl:28px; --radius-full:9999px;
+
+  --font-cn:"LXGW WenKai","Source Han Serif SC","Songti SC",serif;
+  --font-en:"Inter","SF Pro Text",system-ui,sans-serif;
+  --font-mono:"Berkeley Mono","JetBrains Mono",monospace;
+
+  --dur-fast:180ms; --dur-base:280ms; --dur-slow:480ms;
+  --dur-deliberate:720ms; --dur-ceremony:1200ms;
+  --ease-out:cubic-bezier(0.22,1,0.36,1);
+  --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
+  --ease-breath:cubic-bezier(0.45,0,0.55,1);
+
+  --shadow-sm:0 2px 6px rgba(194,65,12,0.06);
+  --shadow-md:0 6px 18px rgba(194,65,12,0.10);
+  --shadow-lg:0 12px 32px rgba(194,65,12,0.14);
+  --shadow-xl:0 24px 48px rgba(194,65,12,0.18);
+  --shadow-glow-rose:0 0 24px rgba(194,65,12,0.25);
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html, body { background:#3f3322; }
+body { font-family:var(--font-cn); color:var(--color-text); line-height:1.6; -webkit-font-smoothing:antialiased; }
+
+.stage {
+  min-height:100vh;
+  display:flex; align-items:center; justify-content:center;
+  padding:32px;
+  background:radial-gradient(ellipse at center, #4a1605 0%, #231b10 100%);
+}
+.stage-label {
+  position:fixed; top:16px; left:24px;
+  color:var(--cream-300); font-family:var(--font-en);
+  font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+}
+.stage-tag {
+  position:fixed; top:16px; right:24px;
+  color:var(--rose-300); font-family:var(--font-en);
+  font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+}
+.phone {
+  width:390px; height:844px;
+  background:var(--color-bg);
+  border-radius:48px;
+  box-shadow:
+    0 0 0 10px #1a1610,
+    0 0 0 11px #3f3322,
+    0 60px 120px rgba(0,0,0,0.45);
+  overflow:hidden;
+  position:relative;
+}
+
+/* Status Bar */
+.status-bar {
+  height:44px;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 28px;
+  font-family:var(--font-en); font-size:15px; font-weight:600;
+  color:var(--stone-800);
+}
+.status-bar .icons { display:flex; gap:6px; align-items:center; }
+
+/* Scrim */
+.scrim {
+  position:absolute; inset:0;
+  background:rgba(35,27,16,0.45);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  z-index:50;
+}
+
+/* ======= Panel (Sheet) ======= */
+.panel {
+  position:absolute;
+  left:0; right:0; bottom:0;
+  background:var(--color-bg-elevated);
+  border-radius:28px 28px 0 0;
+  z-index:51;
+  box-shadow:0 -24px 48px rgba(194,65,12,0.18);
+  animation:slide-up 480ms cubic-bezier(0.34,1.56,0.64,1);
+  max-height:90vh;
+  overflow-y:auto;
+  padding-bottom:48px;
+}
+@keyframes slide-up {
+  from { transform:translateY(100%); }
+  to { transform:translateY(0); }
+}
+
+.panel-handle {
+  width:48px; height:4px;
+  background:var(--cream-300);
+  border-radius:2px;
+  margin:12px auto 0;
+}
+
+/* 顶部跳动双心 */
+.panel-heart-row {
+  display:flex; justify-content:center;
+  margin-top:18px;
+  position:relative;
+}
+.heart-l, .heart-r {
+  width:48px; height:48px;
+  position:relative;
+}
+.heart-r {
+  margin-left:-12px;
+  animation-delay:240ms;
+}
+@keyframes breath {
+  0%,100% { transform:scale(1); }
+  50% { transform:scale(1.06); }
+}
+.heart-l {
+  animation:breath 2400ms cubic-bezier(0.34,1.56,0.64,1) infinite;
+}
+.heart-r {
+  animation:breath 2400ms cubic-bezier(0.34,1.56,0.64,1) infinite;
+  animation-delay:240ms;
+}
+
+/* Hero */
+.hero {
+  text-align:center;
+  margin:14px 24px 0;
+  padding:24px 16px;
+  background:linear-gradient(180deg, var(--cream-100) 0%, transparent 100%);
+  border-radius:var(--radius-lg);
+  position:relative;
+}
+.hero .overline {
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  letter-spacing:0.24em; text-transform:uppercase;
+  color:var(--color-text-subtle);
+}
+
+/* Utility · 英文小标签 / 分节头 */
+.overline-en {
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  letter-spacing:0.18em; text-transform:uppercase;
+  color:var(--color-text-muted);
+}
+.timeline-section {
+  margin:24px 16px 0;
+}
+.timeline-section .overline-en {
+  padding-left:4px;
+  margin-bottom:12px;
+  display:block;
+}
+.hero .together {
+  margin-top:8px;
+  font-family:var(--font-cn);
+  font-size:18px; font-weight:400;
+  color:var(--color-text-muted);
+}
+.hero .days {
+  margin:8px 0 4px;
+  display:flex; align-items:baseline; justify-content:center; gap:6px;
+}
+.hero .days .n {
+  font-family:var(--font-mono);
+  font-size:64px; font-weight:500;
+  color:var(--color-text-rose);
+  letter-spacing:-0.02em;
+  line-height:1;
+}
+.hero .days .l {
+  font-family:var(--font-cn);
+  font-size:16px;
+  color:var(--color-text-muted);
+}
+.hero .stamp {
+  margin-top:10px;
+  display:inline-block;
+  font-family:var(--font-en);
+  font-size:10px; font-weight:700;
+  letter-spacing:0.2em;
+  color:var(--legendary-700);
+  border:1.5px solid var(--legendary-700);
+  padding:3px 10px;
+  border-radius:3px;
+  transform:rotate(-2deg);
+  background:rgba(193,147,46,0.08);
+}
+
+/* ======= 倒计时行 ======= */
+.countdowns {
+  margin:20px 16px 0;
+  display:flex; flex-direction:column; gap:10px;
+}
+.countdown {
+  background:var(--cream-50);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-md);
+  padding:14px 16px;
+  display:flex; align-items:center; gap:14px;
+  box-shadow:var(--shadow-sm);
+  position:relative;
+  overflow:hidden;
+}
+.countdown.upcoming::before {
+  content:"";
+  position:absolute; left:0; top:0; bottom:0; width:3px;
+  background:var(--rose-500);
+}
+.countdown.soon::before { background:var(--legendary-500); }
+.countdown.distant::before { background:var(--moss-500); }
+.countdown .glyph {
+  width:44px; height:44px;
+  background:var(--rose-50);
+  border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--rose-500);
+  flex-shrink:0;
+}
+.countdown.soon .glyph { background:rgba(193,147,46,0.10); color:var(--legendary-700); }
+.countdown.distant .glyph { background:rgba(90,112,72,0.10); color:var(--moss-700); }
+.countdown .body { flex:1; min-width:0; }
+.countdown .name {
+  font-family:var(--font-cn);
+  font-size:15px; font-weight:600;
+  color:var(--color-text);
+}
+.countdown .date {
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--color-text-subtle);
+  letter-spacing:0.04em;
+  margin-top:2px;
+}
+.countdown .num {
+  font-family:var(--font-mono);
+  font-size:24px; font-weight:500;
+  color:var(--color-text-rose);
+  letter-spacing:-0.01em;
+}
+.countdown.soon .num { color:var(--legendary-700); }
+.countdown.distant .num { color:var(--moss-700); }
+.countdown .num small {
+  font-family:var(--font-cn);
+  font-size:11px; font-weight:400;
+  color:var(--color-text-subtle);
+  margin-left:2px;
+}
+
+/* 添加新纪念日 */
+.add-countdown {
+  margin:0 16px;
+  padding:14px 16px;
+  border:1.5px dashed var(--cream-400);
+  border-radius:var(--radius-md);
+  text-align:center;
+  background:transparent;
+  color:var(--color-text-muted);
+  font-family:var(--font-cn);
+  font-size:14px;
+  display:flex; align-items:center; justify-content:center; gap:6px;
+}
+
+/* ======= 心里话入口 ======= */
+.quote-cta {
+  margin:24px 16px 0;
+  padding:18px 20px;
+  background:linear-gradient(135deg, var(--rose-50) 0%, var(--cream-100) 100%);
+  border:1px solid var(--rose-200);
+  border-radius:var(--radius-lg);
+  display:flex; align-items:center; gap:14px;
+  box-shadow:var(--shadow-sm);
+}
+.quote-cta .paper-icon {
+  width:44px; height:44px;
+  background:var(--cream-50);
+  border:1px solid var(--rose-200);
+  border-radius:var(--radius-sm);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--rose-500);
+  flex-shrink:0;
+}
+.quote-cta .text { flex:1; }
+.quote-cta .text .title {
+  font-family:var(--font-cn);
+  font-size:15px; font-weight:600;
+  color:var(--color-text);
+}
+.quote-cta .text .sub {
+  font-family:var(--font-cn);
+  font-size:12px;
+  color:var(--color-text-muted);
+  margin-top:2px;
+}
+.quote-cta .arrow {
+  color:var(--rose-500);
+  font-family:var(--font-en);
+  font-size:18px;
+}
+
+/* ======= 里程碑列表 ======= */
+.milestones {
+  margin:24px 16px 0;
+  display:flex; flex-direction:column; gap:8px;
+}
+.milestone {
+  display:flex; align-items:center; gap:12px;
+  padding:10px 14px;
+  background:var(--cream-100);
+  border-radius:var(--radius-md);
+  font-family:var(--font-cn);
+  font-size:14px;
+  color:var(--color-text-muted);
+}
+.milestone .glyph {
+  width:28px; height:28px;
+  border-radius:50%;
+  background:var(--rose-100);
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  color:var(--rose-700);
+  flex-shrink:0;
+}
+.milestone .when {
+  margin-left:auto;
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--color-text-subtle);
+  letter-spacing:0.04em;
+}
+
+/* Home Indicator */
+.home-indicator {
+  position:absolute;
+  left:50%; bottom:8px;
+  transform:translateX(-50%);
+  width:134px; height:5px;
+  background:var(--stone-700);
+  border-radius:3px;
+  opacity:0.4;
+  z-index:60;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:120ms !important;
+    transition-duration:120ms !important;
+  }
+}
+</style>
+</head>
+<body data-page-node-id="jYo2rqaGUfFl2gC0Xn4ZSH">
+
+<div class="stage-label" data-page-node-id="HtjDpxhBWThFSnSj8ofcbA">PROTOTYPE · 03 · ANNIVERSARY</div>
+<div class="stage-tag" data-page-node-id="ek6HJyUyNaINq9aSZGyMQP">v1 · 改版稿</div>
+
+<div class="stage" data-page-node-id="ZMI4L4pyJqjCWBUBo9A8CJ">
+  <div class="phone" data-page-node-id="7HZmNhNx0hZzp5lY9yzLvy">
+
+    <!-- Status Bar -->
+    <div class="status-bar" data-page-node-id="XlRvUZjypF8pM6OBYoilIf">
+      <span data-page-node-id="pC9kzGkpeECBuLHFADYtl2">9:41</span>
+      <div class="icons" data-page-node-id="pMAEbdjwjG8cQ6sgvWo5ev">
+        <span data-page-node-id="F1PmpVG9xkBFKZkvz1uSjs">●●●</span>
+        <svg width="16" height="11" viewBox="0 0 16 11" data-page-node-id="4B9hshrm91eBPfOgwBpKM0"><path d="M1 8 Q8 0 15 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="Xdq4OtdfGVPXg8QwGRybOV"/><path d="M3.5 8 Q8 3 12.5 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="B0oGalkdAvHzjwc8KNfUfW"/><circle cx="8" cy="8" r="1.4" fill="#2f2820" data-page-node-id="cjzF23hX4l8Jyev5SubClc"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11" data-page-node-id="2yZwMfX5uuHFoCycrjgstS"><rect x="0.5" y="0.5" width="20" height="10" rx="2" stroke="#2f2820" fill="none" data-page-node-id="cqyKaVXqJGlhNEt53ZEBBL"/><rect x="2" y="2" width="16" height="7" rx="1" fill="#2f2820" data-page-node-id="ysGqt7TN7PV4nPw4ON5UUV"/><rect x="21" y="3" width="2" height="5" rx="1" fill="#2f2820" data-page-node-id="K7oRpaIqilcPULEnDahNK0"/></svg>
+      </div>
+    </div>
+
+    <!-- 背后朦胧背景（主页） -->
+    <div style="position:absolute; inset:0; padding-top:44px; background:var(--color-bg);" data-page-node-id="KAwdOAZecUaUICZgWy2nTr">
+      <div style="height:48px; background:rgba(250,246,241,0.7); border-bottom:1px solid var(--cream-300);" data-page-node-id="jlLia3y9eWqyHyLjaalh1D"></div>
+      <div style="margin:24px 16px; height:120px; background:var(--cream-50); border:1px solid var(--color-border-subtle); border-radius:var(--radius-lg); opacity:0.4;" data-page-node-id="f0nM4UMwgw16EHiRbX297y"></div>
+      <div style="margin:24px 16px; height:64px; background:var(--cream-50); border:1px solid var(--color-border-subtle); border-radius:var(--radius-md); opacity:0.4;" data-page-node-id="CI4NetpU7Z3Eyoq2LkJGQV"></div>
+      <div style="margin:8px 16px; height:64px; background:var(--cream-50); border:1px solid var(--color-border-subtle); border-radius:var(--radius-md); opacity:0.4;" data-page-node-id="1Pg58n73ES5QFqxCHzIN9I"></div>
+    </div>
+
+    <!-- Scrim -->
+    <div class="scrim" data-page-node-id="Dgak9CmvNg2gTOoQADfD2i"></div>
+
+    <!-- 面板 -->
+    <div class="panel" data-page-node-id="5m7Y8IwOlCglmnoOHa22xA">
+
+      <div class="panel-handle" data-page-node-id="MZLJzcB73bcYDyovxzN1CK"></div>
+
+      <!-- 双心交错 -->
+      <div class="panel-heart-row" data-page-node-id="s0H1xSsejSB3jBZYnrfYVE">
+        <div class="heart-l" data-page-node-id="ouILf9wqHmkRSUuMrZgV3Z">
+          <svg viewBox="0 0 48 48" data-page-node-id="6jPWi2l2PyjHwrWAXKgAAF">
+            <path d="M24 42 C 10 32, 6 18, 14 12 C 20 8, 24 14, 24 18 C 24 14, 28 8, 34 12 C 42 18, 38 32, 24 42 Z"
+                  fill="#c2410c" data-page-node-id="gTaHbJW8XIsF96vyQfepTf"/>
+          </svg>
+        </div>
+        <div class="heart-r" data-page-node-id="OSoWRI0G0ZoWrcIClRjDnc">
+          <svg viewBox="0 0 48 48" data-page-node-id="LbBoR9rTIz9dTSIbcoDFnA">
+            <path d="M24 42 C 10 32, 6 18, 14 12 C 20 8, 24 14, 24 18 C 24 14, 28 8, 34 12 C 42 18, 38 32, 24 42 Z"
+                  fill="none" stroke="#2f2820" stroke-width="1.6" data-page-node-id="hJCCC7CQLryfawdjF3ouCf"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Hero -->
+      <div class="hero" data-page-node-id="qYPdMSzzG8Pgsg3e4MarQo">
+        <div class="overline" data-page-node-id="d1T2OVE4fjRlKHe4OrttTF">TOGETHER · 我们在一起</div>
+        <div class="days" data-page-node-id="QRDtVby1l8l5VoWRXAZr0k">
+          <span class="n" data-page-node-id="aJYYk59ng2NmtBHCt1lJUE">1284</span>
+          <span class="l" data-page-node-id="IE62Q2UrM3I9lafrXHgpee">天</span>
+        </div>
+        <div class="together" data-page-node-id="QOdn7qTHbqS1FETcADDCuH">自 2022 年 7 月 16 日 · 春末的雨后</div>
+        <div class="stamp" data-page-node-id="TtPx9SdDbPHB31EQD6wzA5">EST · 2022.07.16</div>
+      </div>
+
+      <!-- 倒计时 -->
+      <div class="countdowns" data-page-node-id="txp2iGc8BFvmIAeMXoHfFd">
+
+        <div class="countdown upcoming" data-page-node-id="ygGRCmEVH2kzfEKr4mJIlN">
+          <div class="glyph" data-page-node-id="By6Oo4pADzyR2FvbT0ojIv">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" data-page-node-id="6lCgKys8XUpqCjK5ixGvQG">
+              <path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" data-page-node-id="kE2rOrkrpbQyvDKILAnQBY"/>
+            </svg>
+          </div>
+          <div class="body" data-page-node-id="8aHMLuEsppyE4MStxHL87r">
+            <div class="name" data-page-node-id="oyBUsug3DsAN4EjrTTN22o">她的生日</div>
+            <div class="date" data-page-node-id="7xecorExlSNQmphGhcXWNm">2026 · 03 · 14 · 周六</div>
+          </div>
+          <div class="num" data-page-node-id="5TN5FNV2c6fBeFDzv09kky">82<small data-page-node-id="PHiEVFs5DRWZ3uzPZQrcdz">天</small></div>
+        </div>
+
+        <div class="countdown soon" data-page-node-id="dvBprTsFIiePVbeFKXDdyQ">
+          <div class="glyph" data-page-node-id="IlAru3TF4MzHDdVz8NbH4u">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" data-page-node-id="QyERuABdbZJ8A4dApt0cve">
+              <path d="M3 9 L12 14 L21 9 M3 9 V18 H21 V9 M3 9 L12 3 L21 9" data-page-node-id="SnXlMGAF2Xsj9CBo0DrdVu"/>
+            </svg>
+          </div>
+          <div class="body" data-page-node-id="5YUDGIXQRVtPqa26CZb97I">
+            <div class="name" data-page-node-id="FRExZJLrlj74z96OARvAWH">下次见面</div>
+            <div class="date" data-page-node-id="Ki3PqS5xFeAZwdEtueHs67">2026 · 01 · 24 · 周六</div>
+          </div>
+          <div class="num" data-page-node-id="IF4F1nwqGyXyV9tktDNokA">33<small data-page-node-id="6130z92J7I5JUSM77kM862">天</small></div>
+        </div>
+
+        <div class="countdown distant" data-page-node-id="9e1OGm2qvdUVjsAGL4pZle">
+          <div class="glyph" data-page-node-id="wIGOzcqWWDkvZRnK9t1c0x">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" data-page-node-id="z7KPFFyaWLOgc3VNliMapy">
+              <circle cx="12" cy="12" r="9" data-page-node-id="EM35EFLor03aK2tCne0xiY"/>
+              <path d="M12 7 V12 L15 14" data-page-node-id="CxJtGGitlGBRqNqJArmmFm"/>
+              <path d="M19 5 L21 3 M5 19 L3 21" stroke-linecap="round" data-page-node-id="AEfHvDnPGdtzD5J9sWM3Mr"/>
+            </svg>
+          </div>
+          <div class="body" data-page-node-id="hxahDWFQT8KKqO2CcLM8dB">
+            <div class="name" data-page-node-id="sfs9zfZmR4TuE1sTnYAVPR">在一起五周年</div>
+            <div class="date" data-page-node-id="qA12E7R6qZWEVX1ACQJVi7">2027 · 07 · 16 · 周五</div>
+          </div>
+          <div class="num" data-page-node-id="nSHEQq9wsDcKSKZ0DGyHlK">601<small data-page-node-id="Ep6t2D6O4H7HXyfPFghOx5">天</small></div>
+        </div>
+
+        <div class="add-countdown" data-page-node-id="JEMaXpBZxjm6y9fxDhTDKq">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" data-page-node-id="wZRcwUldBKllLfMPcO3TAS">
+            <path d="M12 5 V19 M5 12 H19" data-page-node-id="zlpebPkiRD1aBjhWsVHcVV"/>
+          </svg>
+          添加一个值得纪念的日子
+        </div>
+      </div>
+
+      <!-- 心里话入口 -->
+      <div class="quote-cta" data-page-node-id="HwoJABUxWHOP5CzxuK9mdp">
+        <div class="paper-icon" data-page-node-id="O6nS1ZM2JoJc0XHWSeRRCK">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" data-page-node-id="muEzjXgoyZisXz8TBBaISh">
+            <path d="M3 8 L12 14 L21 8 M3 8 V18 H21 V8 M3 8 L12 3 L21 8" data-page-node-id="am2YiUiybMHLbiPMRwGLPD"/>
+            <path d="M8 12 H16 M8 15 H13" stroke-linecap="round" data-page-node-id="X4smqZ4GUXxwpgsHJcAANm"/>
+          </svg>
+        </div>
+        <div class="text" data-page-node-id="ExRvRjrgdspnFbOGTUTMC4">
+          <div class="title" data-page-node-id="pja7cBHhi1Uraol5Sebizi">留一句心里话</div>
+          <div class="sub" data-page-node-id="dwgPM6EwL33Ax22EZYxrHu">写给下一个 1000 天 · 她会收到</div>
+        </div>
+        <div class="arrow" data-page-node-id="6p0MFzFCOauGEwhPAXgBD1">›</div>
+      </div>
+
+      <!-- 里程碑时间线 -->
+      <div class="timeline-section" data-page-node-id="LnuCjA3ybjvmuJd6hYdzO6">
+        <div class="overline-en" data-page-node-id="pnGRfOlqacpokxPgVwTaU2">OUR TIMELINE</div>
+      </div>
+      <div class="milestones" data-page-node-id="yVTOvALUEeaTEJ5muqGQAL">
+        <div class="milestone" data-page-node-id="6vcWX58ENrELHf1Eeqrfgz">
+          <div class="glyph" data-page-node-id="ejt52IT1Ke1HhBD7D3SWsZ">1</div>
+          <span data-page-node-id="RmP9pqQowNuBbbXklWMvYB">第一次见面</span>
+          <span class="when" data-page-node-id="14FeHBnxof2l4A3St0kydV">2022 · 03</span>
+        </div>
+        <div class="milestone" data-page-node-id="LzmArtvGPndKSOSWsXMrs1">
+          <div class="glyph" data-page-node-id="8xLjNXtDMGfpgcpZ1ReQfd">2</div>
+          <span data-page-node-id="hwYsLPH2LtDZ2D54tsFXGr">在一起 · 春末</span>
+          <span class="when" data-page-node-id="RsiirIBpUw7B5JVEFyNzGR">2022 · 07</span>
+        </div>
+        <div class="milestone" data-page-node-id="BQqviILabeOCCffbhCQiBZ">
+          <div class="glyph" data-page-node-id="d53q5mMmAB4OulfKYLYMck">3</div>
+          <span data-page-node-id="Lz2jK2tMJs8OucdOIkcbhp">第一次远行</span>
+          <span class="when" data-page-node-id="iBtXCoSbn8A8xKvzuU5uvT">2023 · 08</span>
+        </div>
+        <div class="milestone" data-page-node-id="R1Jfijw7ZUcmi5TdB1x1OY">
+          <div class="glyph" data-page-node-id="4VRwlgC9rFwhbbmCuC2tNK">4</div>
+          <span data-page-node-id="URPYHgDEP4zTNM4VpwMj93">同住了 · 一年</span>
+          <span class="when" data-page-node-id="h13uIP80AGUNIixrZNKuc5">2024 · 09</span>
+        </div>
+      </div>
+
+      <!-- 收尾诗句 -->
+      <div style="margin:24px 24px 0; text-align:center; font-family:var(--font-cn); font-style:italic; font-size:12px; color:var(--color-text-subtle); line-height:1.7;" data-page-node-id="RH3QSNUesQLxjVFVLXAnz5">
+        「每一段爱情都有一个起点<br data-page-node-id="HpLnEZrSG65vzoQwr0lnes">但和你的故事，每天都是新的开始」
+      </div>
+
+    </div>
+
+    <div class="home-indicator" data-page-node-id="QzSt5EVRxGqg6Kj5JYDqBM"></div>
+  </div>
+</div>
+
+</body>
+</html>

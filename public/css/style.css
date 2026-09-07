@@ -74,6 +74,33 @@ input, textarea, [contenteditable] {
   --stone-500: #6b6051;
   --stone-900: #2f2820;
 
+  /* 米杏白（cream）：纸质卡片底色 / 选中态填充 / 暖白顶栏背景。
+     与 stone 系组合形成「暖白 + 暖灰」双层，避免出现冷白。
+     v2.7.51 P3.2 补全定义（v2.7.49 引入但漏了 :root 定义，导致 var(--cream-50) 失效）。 */
+  --cream-50: #faf6f1;
+  --cream-100: #f5efe4;
+  --cream-200: #e8dcc6;
+  --cream-300: #d9c8a8;
+
+  /* v2.7.51 P3.2 隐藏款稀有度语义色（Semantic · 二级 token）
+     引用 primitive（rose/violet/gold），但语义上明确表达「稀有度」概念，
+     让 todo--rare/epic/legendary 等组件不再直接耦合 primitive，便于将来调色。
+     rare：暖蜜桃（rose 系，最克制稀有度）
+     epic：雾紫（violet 系，浪漫但不浮夸）
+     legendary：香槟金（gold 系，最具仪式感的高稀有度） */
+  --rare-50: var(--rose-50);
+  --rare-100: var(--rose-100);
+  --rare-300: #fda4af;        /* 蜜桃粉（warm peach）*/
+  --rare-500: var(--rose-500);
+  --epic-50: var(--violet-50);
+  --epic-100: var(--violet-100);
+  --epic-300: var(--violet-300);
+  --epic-500: var(--violet-500);
+  --legendary-50: var(--gold-50);
+  --legendary-100: var(--gold-100);
+  --legendary-300: var(--gold-300);
+  --legendary-500: var(--gold-500);
+
   /* 隐藏款盲盒稀有度色系（克制精致，低饱和渐变背景用）
      rare=淡粉（最浅 rose）、epic=浅紫（violet）、legendary=香槟金。
      稀有度由浅到深递进：粉→紫→金，视觉层次感。 */
@@ -1657,6 +1684,20 @@ input {
 .note-read--dawn .note-read__seal {
   box-shadow: 0 0 0 6px rgba(251, 191, 36, 0.12);
 }
+/* 午间（10-14点）：v2.7.51 P3.3 阳光奶油调，更明亮 */
+.note-read--noon {
+  background: linear-gradient(165deg, #fef9f0 0%, #fffaf3 50%, #fef6e8 100%);
+}
+.note-read--noon .note-read__seal {
+  box-shadow: 0 0 0 6px rgba(217, 119, 6, 0.08);
+}
+/* 黄昏（18-22点）：v2.7.51 P3.3 暮色蜜桃调，更温柔 */
+.note-read--dusk {
+  background: linear-gradient(165deg, #fef2e6 0%, #fde6cf 50%, #f9d9b8 100%);
+}
+.note-read--dusk .note-read__seal {
+  box-shadow: 0 0 0 6px rgba(168, 52, 10, 0.10);
+}
 /* 星空（22-5点）：深蓝夜幕 + 微光粒子，文字转浅 */
 .note-read--night {
   background: linear-gradient(165deg, #1e1b4b 0%, #312e81 50%, #3730a3 100%);
@@ -2420,23 +2461,24 @@ input {
 
 /* 稀有款（rare）：淡粉渐变 + 淡粉四边细边框 */
 .todo--rare {
-  background: linear-gradient(155deg, var(--rose-50) 0%, var(--rose-100) 100%);
-  border: 1.5px solid rgba(254, 205, 211, 0.7);
-  box-shadow: 0 1px 2px rgba(194, 65, 12, 0.05), 0 2px 10px rgba(194, 65, 12, 0.05);
+  background: linear-gradient(155deg, var(--rare-50) 0%, var(--rare-100) 100%);
+  border: 1.5px solid var(--rare-300);
+  box-shadow: 0 1px 2px rgba(253, 164, 175, 0.18), 0 2px 10px rgba(253, 164, 175, 0.14);
 }
 
-/* 史诗款（epic）：浅紫渐变 + 浅紫四边细边框 */
+/* 史诗款（epic）：雾紫渐变 + 浅紫四边细边框（v2.7.51 P3.2 引入 --epic-* 语义 token） */
 .todo--epic {
-  background: linear-gradient(155deg, var(--violet-50) 0%, var(--violet-100) 100%);
-  border: 1.5px solid rgba(196, 181, 253, 0.7);
-  box-shadow: 0 1px 2px rgba(139, 92, 246, 0.06), 0 2px 10px rgba(139, 92, 246, 0.08);
+  background: linear-gradient(155deg, var(--epic-50) 0%, var(--epic-100) 100%);
+  border: 1.5px solid var(--epic-300);
+  box-shadow: 0 1px 2px rgba(139, 92, 246, 0.08), 0 2px 10px rgba(139, 92, 246, 0.10);
 }
 
-/* 传说款（legendary）：香槟金渐变 + 金色四边细边框 + 呼吸光晕 */
+/* 传说款（legendary）：香槟金渐变 + 金色四边细边框 + 呼吸光晕
+   （v2.7.51 P3.2 引入 --legendary-* 语义 token） */
 .todo--legendary {
-  background: linear-gradient(155deg, var(--gold-50) 0%, var(--gold-100) 100%);
-  border: 1.5px solid rgba(252, 211, 77, 0.7);
-  box-shadow: 0 1px 2px rgba(245, 158, 11, 0.08), 0 2px 14px rgba(245, 158, 11, 0.12);
+  background: linear-gradient(155deg, var(--legendary-50) 0%, var(--legendary-100) 100%);
+  border: 1.5px solid var(--legendary-300);
+  box-shadow: 0 1px 2px rgba(245, 158, 11, 0.10), 0 2px 14px rgba(245, 158, 11, 0.14);
   animation: legendary-glow 3.5s var(--ease) infinite;
 }
 @keyframes legendary-glow {

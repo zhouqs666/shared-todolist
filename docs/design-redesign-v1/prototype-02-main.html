@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="7FyMncCP0oBNDeGzjCtO3s">
+<head data-page-node-id="bQOtUPtPoqHfOL2LDfmxYS">
+<meta charset="UTF-8" data-page-node-id="4HPwAcPzLdNn1F9Ut3CwzG">
+<meta name="viewport" content="width=390, initial-scale=1.0" data-page-node-id="eYyhpRAnx33D38jULssybp">
+<title>原型 #02 · 主界面 · 待办列表 · 「有爱」v2 改版</title>
+<!--
+  设计系统：Warm Editorial
+  移动端单列纵深 + 双主角镜像呈现（不强制双栏）
+  FAB 长按展开花瓣菜单 → 4 个方向的心意菜单
+-->
+<style>
+:root {
+  --rose-50:#fdf5f0; --rose-100:#f9e3d4; --rose-200:#f1c4a8;
+  --rose-300:#e89e76; --rose-400:#d9774b; --rose-500:#c2410c;
+  --rose-600:#a8340a; --rose-700:#872a08; --rose-800:#6a1f06; --rose-900:#4a1605;
+  --cream-50:#fdfbf7; --cream-100:#faf6f1; --cream-200:#f3ebde;
+  --cream-300:#e8dcc6; --cream-400:#d6c4a3; --cream-500:#b8a17e;
+  --cream-600:#8e7752; --cream-700:#66553b; --cream-800:#3f3322; --cream-900:#231b10;
+  --stone-50:#f8f6f3; --stone-100:#ede8e0; --stone-200:#d9d2c5;
+  --stone-300:#b8aea0; --stone-400:#928676; --stone-500:#6b6051;
+  --stone-600:#4a4135; --stone-700:#2f2820; --stone-800:#1a1610;
+  --legendary-300:#e8d49b; --legendary-500:#c1932e; --legendary-700:#8a6618;
+  --ink-500:#2f456a; --ink-700:#1a2942;
+  --rare-300:#f9c9d6; --rare-500:#ec6680; --rare-700:#b9324d;
+  --epic-300:#cdb8e0; --epic-500:#8b6db8; --epic-700:#5e4280;
+  --moss-500:#5a7048; --moss-700:#37492c;
+
+  --color-primary:var(--rose-500);
+  --color-primary-dark:var(--rose-600);
+  --color-primary-rgb:194,65,12;
+  --color-text:var(--stone-700);
+  --color-text-muted:var(--stone-500);
+  --color-text-subtle:var(--stone-400);
+  --color-text-rose:var(--rose-500);
+  --color-border:var(--cream-300);
+  --color-border-subtle:var(--cream-200);
+  --color-bg:var(--cream-100);
+  --color-bg-elevated:var(--cream-50);
+
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:20px; --space-6:24px; --space-7:32px; --space-8:40px;
+  --space-9:48px; --space-10:56px; --space-11:64px;
+  --radius-sm:8px; --radius-md:12px; --radius-lg:16px; --radius-xl:20px; --radius-2xl:28px; --radius-full:9999px;
+
+  --font-cn:"LXGW WenKai","Source Han Serif SC","Songti SC","Noto Serif CJK SC",serif;
+  --font-en:"Inter","SF Pro Text",system-ui,sans-serif;
+  --font-mono:"Berkeley Mono","JetBrains Mono","SF Mono",monospace;
+
+  --dur-fast:180ms; --dur-base:280ms; --dur-slow:480ms;
+  --dur-deliberate:720ms; --dur-ceremony:1200ms;
+  --ease-out:cubic-bezier(0.22,1,0.36,1);
+  --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
+  --ease-breath:cubic-bezier(0.45,0,0.55,1);
+
+  --shadow-sm:0 2px 6px rgba(194,65,12,0.06);
+  --shadow-md:0 6px 18px rgba(194,65,12,0.10);
+  --shadow-lg:0 12px 32px rgba(194,65,12,0.14);
+  --shadow-xl:0 24px 48px rgba(194,65,12,0.18);
+  --shadow-glow-rose:0 0 24px rgba(194,65,12,0.25);
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html, body { background:#3f3322; }
+body { font-family:var(--font-cn); color:var(--color-text); line-height:1.6; -webkit-font-smoothing:antialiased; }
+
+.stage {
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:32px;
+  background:radial-gradient(ellipse at center, #4a1605 0%, #231b10 100%);
+}
+.stage-label {
+  position:fixed; top:16px; left:24px;
+  color:var(--cream-300); font-family:var(--font-en);
+  font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+}
+.stage-tag {
+  position:fixed; top:16px; right:24px;
+  color:var(--rose-300); font-family:var(--font-en);
+  font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+}
+.phone {
+  width:390px; height:844px;
+  background:var(--color-bg);
+  border-radius:48px;
+  box-shadow:
+    0 0 0 10px #1a1610,
+    0 0 0 11px #3f3322,
+    0 60px 120px rgba(0,0,0,0.45);
+  overflow:hidden;
+  position:relative;
+}
+
+/* Status Bar */
+.status-bar {
+  height:44px;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 28px;
+  font-family:var(--font-en); font-size:15px; font-weight:600;
+  color:var(--stone-800);
+}
+.status-bar .icons { display:flex; gap:6px; align-items:center; }
+
+/* ======= TopBar (毛玻璃) ======= */
+.topbar {
+  position:sticky; top:0;
+  height:48px;
+  padding:0 16px;
+  display:flex; align-items:center; justify-content:space-between;
+  background:rgba(250,246,241,0.78);
+  backdrop-filter:blur(20px) saturate(180%);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  border-bottom:1px solid var(--cream-300);
+  z-index:20;
+}
+.topbar .cluster { display:flex; gap:6px; align-items:center; }
+.topbar-icon {
+  width:36px; height:36px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:var(--radius-sm);
+  background:transparent;
+  border:1px solid transparent;
+  transition:all var(--dur-fast) var(--ease-out);
+  position:relative;
+}
+.topbar-icon:hover { background:var(--cream-200); }
+.topbar-icon .badge {
+  position:absolute; top:4px; right:4px;
+  width:6px; height:6px; border-radius:50%;
+  background:var(--rose-500);
+}
+.topbar .avatar {
+  display:flex; align-items:center; gap:8px;
+  padding-left:8px;
+}
+.topbar .avatar-text {
+  font-family:var(--font-cn);
+  font-size:13px;
+  color:var(--color-text-muted);
+}
+.topbar .avatar-text b {
+  font-weight:600;
+  color:var(--color-text);
+}
+.avatar-circle {
+  width:28px; height:28px;
+  border-radius:50%;
+  background:linear-gradient(135deg, var(--rose-200), var(--rose-400));
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-cn);
+  font-size:12px; font-weight:600;
+  color:var(--rose-700);
+  border:1.5px solid var(--cream-50);
+  box-shadow:0 0 0 1px var(--color-border);
+}
+
+/* ======= Offline 提示条 ======= */
+.offline {
+  margin:8px 16px 0;
+  padding:10px 14px;
+  background:var(--warning-100, #faf2dc);
+  border:1px solid rgba(193,147,46,0.25);
+  border-radius:var(--radius-sm);
+  display:flex; align-items:center; gap:10px;
+  font-family:var(--font-cn);
+  font-size:13px;
+  color:var(--legendary-700);
+}
+.offline svg { flex-shrink:0; }
+.offline .retry {
+  margin-left:auto;
+  font-family:var(--font-en);
+  font-size:11px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--color-text-rose);
+  text-decoration:underline;
+  text-underline-offset:2px;
+}
+
+/* ======= Hero · 今日 ======= */
+.hero {
+  margin:24px 16px 16px;
+  padding:24px 20px;
+  background:linear-gradient(180deg, var(--cream-50) 0%, var(--cream-100) 100%);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-sm);
+  position:relative;
+  overflow:hidden;
+}
+.hero::before {
+  content:"";
+  position:absolute;
+  top:-60px; right:-40px;
+  width:200px; height:200px;
+  background:radial-gradient(circle, rgba(249,227,212,0.6), transparent 70%);
+  pointer-events:none;
+}
+.hero .overline {
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  letter-spacing:0.18em; text-transform:uppercase;
+  color:var(--color-text-subtle);
+}
+.hero h2 {
+  margin-top:6px;
+  font-family:var(--font-cn);
+  font-size:24px; font-weight:600;
+  color:var(--color-text);
+  line-height:1.35;
+}
+.hero .days {
+  margin-top:14px;
+  display:flex; align-items:baseline; gap:8px;
+}
+.hero .days .n {
+  font-family:var(--font-mono);
+  font-size:48px; font-weight:500;
+  color:var(--color-text-rose);
+  letter-spacing:-0.01em;
+  line-height:1;
+}
+.hero .days .label {
+  font-family:var(--font-cn);
+  font-size:14px;
+  color:var(--color-text-muted);
+}
+.hero .meta {
+  margin-top:12px;
+  display:flex; gap:16px;
+  font-family:var(--font-mono);
+  font-size:12px;
+  color:var(--color-text-subtle);
+  letter-spacing:0.04em;
+}
+.hero .meta b {
+  color:var(--color-text);
+  font-weight:500;
+}
+
+/* ======= 列表分组标签 ======= */
+.section-label {
+  margin:24px 16px 12px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.section-label .left {
+  display:flex; align-items:center; gap:8px;
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  letter-spacing:0.18em; text-transform:uppercase;
+  color:var(--color-text-muted);
+}
+.section-label .count {
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--color-text-subtle);
+  letter-spacing:0.04em;
+}
+.section-label .divider-line {
+  flex:1;
+  height:1px;
+  background:var(--color-border-subtle);
+  margin-left:12px;
+}
+
+/* ======= 待办卡片 · 未完成 ======= */
+.todo-list {
+  padding:0 16px;
+  display:flex; flex-direction:column; gap:10px;
+}
+.todo {
+  background:var(--color-bg-elevated);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-md);
+  padding:14px 16px;
+  box-shadow:var(--shadow-sm);
+  position:relative;
+  display:flex; flex-direction:column; gap:8px;
+  transition:all var(--dur-fast) var(--ease-out);
+}
+.todo::before {
+  content:"";
+  position:absolute;
+  left:0; top:12px; bottom:12px;
+  width:4px;
+  border-radius:0 4px 4px 0;
+  background:var(--rose-500);
+}
+.todo.big-baby::before { background:var(--ink-500); }
+.todo.legendary::before { background:var(--legendary-500); }
+.todo.epic::before { background:var(--epic-500); }
+.todo.rare::before { background:var(--rare-500); }
+
+.todo-row { display:flex; align-items:flex-start; gap:12px; }
+.todo-check {
+  width:22px; height:22px;
+  border:1.5px solid var(--stone-300);
+  border-radius:6px;
+  flex-shrink:0;
+  margin-top:2px;
+  display:flex; align-items:center; justify-content:center;
+}
+.todo-check.checked {
+  background:var(--rose-500);
+  border-color:var(--rose-500);
+}
+.todo-check.half {
+  background:var(--legendary-100, #fdf5f0);
+  border-color:var(--legendary-500);
+}
+.todo-body { flex:1; min-width:0; }
+.todo-tags {
+  display:flex; gap:6px; align-items:center; margin-bottom:4px;
+}
+.tag {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:2px 8px;
+  border-radius:var(--radius-xs);
+  font-family:var(--font-en);
+  font-size:10px; font-weight:600;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+}
+.tag.baby { background:var(--rose-50); color:var(--rose-700); }
+.tag.darling { background:rgba(47,69,106,0.08); color:var(--ink-700); }
+.tag.baby::before {
+  content:"";
+  width:8px; height:8px;
+  background:var(--rose-500);
+  -webkit-mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z'/></svg>") center/contain no-repeat;
+          mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z'/></svg>") center/contain no-repeat;
+}
+.tag.darling::before {
+  content:"";
+  width:8px; height:8px;
+  background:var(--ink-500);
+  border-radius:1.5px;
+}
+.tag.due {
+  background:transparent;
+  color:var(--legendary-700);
+  font-family:var(--font-mono);
+  text-transform:none;
+  letter-spacing:0.02em;
+}
+
+.todo-title {
+  font-family:var(--font-cn);
+  font-size:16px;
+  color:var(--color-text);
+  line-height:1.4;
+}
+.todo-meta {
+  display:flex; align-items:center; gap:10px;
+  font-family:var(--font-en);
+  font-size:12px;
+  color:var(--color-text-subtle);
+  margin-top:2px;
+}
+.todo-meta .hearts {
+  display:inline-flex; gap:2px;
+}
+.todo-meta .hearts .h {
+  width:10px; height:10px;
+  background:var(--rose-500);
+  -webkit-mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z'/></svg>") center/contain no-repeat;
+          mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z'/></svg>") center/contain no-repeat;
+}
+.todo-meta .hearts .h.gray { background:var(--stone-300); }
+.todo-meta .who {
+  margin-left:auto;
+  font-family:var(--font-cn);
+  font-size:11px;
+  letter-spacing:0.04em;
+  color:var(--color-text-subtle);
+}
+
+/* 已完成样式 */
+.todo.done .todo-title {
+  color:var(--color-text-subtle);
+  text-decoration:line-through;
+  text-decoration-color:var(--stone-300);
+  text-decoration-thickness:1px;
+}
+.todo.done::before { background:var(--stone-300); }
+
+/* 已完成 + 备注 */
+.todo.done .note {
+  margin-top:6px;
+  padding:8px 10px;
+  background:var(--stone-100);
+  border-left:2px solid var(--stone-300);
+  border-radius:4px;
+  font-family:var(--font-cn);
+  font-size:12px;
+  color:var(--color-text-muted);
+  font-style:italic;
+  line-height:1.5;
+}
+
+/* 隐藏款卡片 */
+.todo.hidden-rare {
+  border-color:var(--rare-300);
+  background:linear-gradient(180deg, var(--cream-50), #fdf2f5);
+}
+.todo.hidden-epic {
+  border-color:var(--epic-300);
+  background:linear-gradient(180deg, var(--cream-50), #f5effa);
+}
+.todo.hidden-legendary {
+  border-color:var(--legendary-300);
+  background:linear-gradient(180deg, #fdfbf7, #fdf5e0);
+  box-shadow:0 2px 6px rgba(193,147,46,0.10);
+}
+.rare-badge {
+  display:inline-flex; align-items:center; gap:4px;
+  font-family:var(--font-en);
+  font-size:10px; font-weight:700;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+  padding:2px 6px;
+  border-radius:var(--radius-xs);
+}
+.rare-badge.rare { background:var(--rare-300); color:var(--rare-700); }
+.rare-badge.epic { background:var(--epic-300); color:var(--epic-700); }
+.rare-badge.legendary {
+  background:var(--legendary-500);
+  color:var(--cream-50);
+  box-shadow:0 1px 2px rgba(138,102,24,0.3);
+}
+
+/* 配图缩略 */
+.todo-thumb {
+  margin-top:6px;
+  width:100%;
+  height:96px;
+  background:linear-gradient(135deg, var(--rose-100), var(--cream-200));
+  border-radius:var(--radius-sm);
+  position:relative;
+  overflow:hidden;
+}
+.todo-thumb::after {
+  content:"photo · 配图";
+  position:absolute; bottom:8px; right:10px;
+  font-family:var(--font-en); font-size:10px;
+  color:var(--stone-400);
+}
+
+/* ======= 配图缩略 · 隐藏款 ======= */
+.todo-thumb.rare-bg {
+  background:linear-gradient(135deg, #f9c9d6 0%, #f3ebde 100%);
+}
+.todo-thumb.epic-bg {
+  background:linear-gradient(135deg, #cdb8e0 0%, #f3ebde 100%);
+}
+.todo-thumb.legendary-bg {
+  background:linear-gradient(135deg, #e8d49b 0%, #fdf5f0 100%);
+}
+
+/* ======= 反应堆 (chip) ======= */
+.reactions {
+  display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;
+}
+.reaction {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:4px 8px;
+  background:var(--cream-200);
+  border-radius:var(--radius-full);
+  font-family:var(--font-cn);
+  font-size:11px;
+  color:var(--color-text-muted);
+}
+.reaction .ic {
+  width:12px; height:12px;
+  display:inline-block;
+}
+
+/* ======= FAB · 长按花瓣菜单 ======= */
+.fab-zone {
+  position:absolute;
+  right:20px;
+  bottom:36px;
+  width:160px; height:160px;
+  pointer-events:none;
+}
+.fab-zone .fab-hint {
+  position:absolute;
+  right:64px; bottom:80px;
+  font-family:var(--font-en);
+  font-size:10px; letter-spacing:0.18em;
+  color:var(--rose-500);
+  text-transform:uppercase;
+  white-space:nowrap;
+  opacity:0.8;
+  display:inline-flex; align-items:center; gap:4px;
+}
+.fab-zone .fab-hint .ic { width:12px; height:12px; }
+.fab {
+  position:absolute;
+  right:0; bottom:0;
+  width:56px; height:56px;
+  background:var(--rose-500);
+  border:1px solid var(--rose-600);
+  border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer;
+  box-shadow:var(--shadow-xl), var(--shadow-glow-rose);
+  animation:heart-beat 2400ms var(--ease-spring) infinite;
+  pointer-events:auto;
+  z-index:60;
+}
+.fab:active { animation:none; transform:scale(0.95); }
+.fab svg { width:32px; height:32px; }
+
+@keyframes heart-beat {
+  0%,100% { transform:scale(1); box-shadow:var(--shadow-xl), 0 0 0 0 rgba(194,65,12,0.5); }
+  50% { transform:scale(1.06); box-shadow:var(--shadow-xl), 0 0 0 12px rgba(194,65,12,0); }
+}
+
+/* 花瓣菜单 */
+.petal-menu {
+  position:absolute;
+  right:0; bottom:0;
+  width:160px; height:160px;
+  pointer-events:none;
+}
+.petal {
+  position:absolute;
+  width:48px; height:48px;
+  background:var(--cream-50);
+  border:1px solid var(--color-border-subtle);
+  border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:var(--shadow-md);
+  color:var(--rose-500);
+  transform:translate(56px,56px) scale(0);
+  animation:petal-in 1200ms cubic-bezier(0.5,-0.2,0.7,1) infinite alternate;
+}
+.petal:nth-child(1) { animation-delay:0ms; transform-origin:0 0; }
+.petal:nth-child(2) { animation-delay:200ms; }
+.petal:nth-child(3) { animation-delay:400ms; }
+.petal:nth-child(4) { animation-delay:600ms; }
+
+@keyframes petal-in {
+  0% { transform:translate(56px,56px) scale(0); opacity:0; }
+  100% { transform:translate(var(--tx, 56px),var(--ty, 56px)) scale(1); opacity:1; }
+}
+/* 4 个花瓣方向（每个 48×48，中心 56） */
+.petal:nth-child(1) { --tx: 28px; --ty: -8px; }   /* 上 */
+.petal:nth-child(2) { --tx: 110px; --ty: 28px; }  /* 右 */
+.petal:nth-child(3) { --tx: 28px; --ty: 110px; }  /* 下 */
+.petal:nth-child(4) { --tx: -54px; --ty: 28px; }  /* 左 */
+
+@keyframes long-press-hint {
+  0%, 60%, 100% { transform:scale(1); }
+  70% { transform:scale(1.1); }
+  80% { transform:scale(1); }
+}
+.fab-zone::after {
+  content:"长按 400ms 展开";
+  position:absolute;
+  right:64px; bottom:18px;
+  font-family:var(--font-en);
+  font-size:10px;
+  letter-spacing:0.12em;
+  color:var(--color-text-subtle);
+  white-space:nowrap;
+}
+
+/* ======= 骨架屏 ======= */
+.skeleton {
+  background:var(--color-bg-elevated);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-md);
+  padding:16px;
+  display:flex; flex-direction:column; gap:10px;
+}
+.skeleton-bar {
+  height:12px;
+  background:linear-gradient(90deg, var(--cream-200) 25%, var(--stone-100) 50%, var(--cream-200) 75%);
+  background-size:200% 100%;
+  border-radius:6px;
+  animation:shimmer 1.6s infinite;
+}
+.skeleton-bar.w60 { width:60%; }
+.skeleton-bar.w40 { width:40%; }
+.skeleton-bar.w90 { width:90%; }
+@keyframes shimmer {
+  0% { background-position:200% 0; }
+  100% { background-position:-200% 0; }
+}
+
+/* ======= 底部 Tab 提示 ======= */
+.tabbar-hint {
+  position:absolute;
+  left:0; right:0; bottom:0;
+  height:34px;
+  display:flex; justify-content:center; align-items:center;
+  background:var(--cream-50);
+  border-top:1px solid var(--color-border-subtle);
+}
+.home-indicator {
+  width:134px; height:5px;
+  background:var(--stone-700);
+  border-radius:3px;
+  opacity:0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:120ms !important;
+    transition-duration:120ms !important;
+  }
+}
+</style>
+</head>
+<body data-page-node-id="EMwOdhNhq5YxQisVlb1NTY">
+
+<div class="stage-label" data-page-node-id="z7o2PLHSTgZWLUrGfxcQR1">PROTOTYPE · 02 · MAIN</div>
+<div class="stage-tag" data-page-node-id="Di7NLwuMI8y2eDPXZ3RGGJ">v1 · 改版稿</div>
+
+<div class="stage" data-page-node-id="OEWIhziJYEAWFrO3ou9dNu">
+  <div class="phone" data-page-node-id="uGNbaal2r9neCNH8eL6hdF">
+
+    <!-- Status Bar -->
+    <div class="status-bar" data-page-node-id="595EIql6wasveINJYaRgTa">
+      <span data-page-node-id="ALKemjtcNNc0iNs1c2gJz2">9:41</span>
+      <div class="icons" data-page-node-id="DWo8X3tkNVUPrD9i7oRwB0">
+        <span data-page-node-id="XxeqtaDFStJT7csz5kiUvS">●●●</span>
+        <svg width="16" height="11" viewBox="0 0 16 11" data-page-node-id="VrZmZjWYwmkLjeKDMJn9oO"><path d="M1 8 Q8 0 15 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="XQBgRQ4SkpA7i6W9bU07d7"/><path d="M3.5 8 Q8 3 12.5 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="oaUqBXYRni0k5EeyUGaiDf"/><circle cx="8" cy="8" r="1.4" fill="#2f2820" data-page-node-id="PP6Rr1ecEYs9YMEJyzkpQl"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11" data-page-node-id="cXZFLtMd0g3s7w0pdY2e0D"><rect x="0.5" y="0.5" width="20" height="10" rx="2" stroke="#2f2820" fill="none" data-page-node-id="VaQ2jC5xOqrusfwl8w41XY"/><rect x="2" y="2" width="16" height="7" rx="1" fill="#2f2820" data-page-node-id="mslQkCGsa7q1urGOfMVHVH"/><rect x="21" y="3" width="2" height="5" rx="1" fill="#2f2820" data-page-node-id="FgYtP6OfScgMycu9FZm5Eu"/></svg>
+      </div>
+    </div>
+
+    <!-- TopBar -->
+    <div class="topbar" data-page-node-id="5L9yxfZTFDEDBpBoASkIaE">
+      <div class="cluster" data-page-node-id="CqlogrDJKIWKiBuH122rKs">
+        <button class="topbar-icon" title="纪念日" data-page-node-id="Yr3MkPjG2Xa2Ul4yY0Yydt">
+          <svg width="20" height="20" viewBox="0 0 24 24" data-page-node-id="MXssjJaCPGXm8AJwKV7tij">
+            <path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z"
+                  fill="none" stroke="#c2410c" stroke-width="1.6" data-page-node-id="G2s7tAgPvQDcbMUMaEsLC0"/>
+          </svg>
+        </button>
+        <button class="topbar-icon" title="心里话" data-page-node-id="7ZSTes93l71VtAlW7uptX9">
+          <svg width="20" height="20" viewBox="0 0 24 24" data-page-node-id="GoL2XOY3tWBIyNrR7jXIRO">
+            <path d="M3 8 L12 14 L21 8 M3 8 V18 H21 V8 M3 8 L12 3 L21 8"
+                  fill="none" stroke="#2f2820" stroke-width="1.4" stroke-linejoin="round" data-page-node-id="mrRjhBunwVfscXWWOHLEqz"/>
+          </svg>
+          <span class="badge" data-page-node-id="pQSNXqbvSSBSnpd4pyhocQ"></span>
+        </button>
+        <button class="topbar-icon" title="图鉴" data-page-node-id="HbbVv6Mlq8FqLtcxWnYiz0">
+          <svg width="20" height="20" viewBox="0 0 24 24" data-page-node-id="t1GBPgCPh2WjAVsNGJdGCG">
+            <path d="M4 4 H20 V20 H4 Z M4 10 H20 M10 4 V20"
+                  fill="none" stroke="#2f2820" stroke-width="1.4" data-page-node-id="nANKwbll6s1uMbhNWkLsgg"/>
+          </svg>
+        </button>
+        <button class="topbar-icon" title="更新" data-page-node-id="O4dzCYDxIelco8Yc1tQeGr">
+          <svg width="20" height="20" viewBox="0 0 24 24" data-page-node-id="2RRL0wKfd9ULewiAFCxImZ">
+            <path d="M12 4 V16 M6 10 L12 16 L18 10 M5 20 H19"
+                  fill="none" stroke="#2f2820" stroke-width="1.4" stroke-linecap="round" data-page-node-id="52WHks8EbqV4h3Nsrl39J8"/>
+          </svg>
+        </button>
+      </div>
+      <div class="avatar" data-page-node-id="X80PA47FrIF2iESpXz8T5g">
+        <span class="avatar-text" data-page-node-id="CAykC1raKH5XCw4Nc9p3gU">小<b data-page-node-id="sdImkun1AZwR1XkimJtVal">宝</b>贝</span>
+        <div class="avatar-circle" data-page-node-id="8iIWhl4E2BoLPrqHhakzJM">小</div>
+      </div>
+    </div>
+
+    <!-- 滚动内容 -->
+    <div style="height:calc(844px - 44px - 48px - 34px); overflow:hidden; position:relative;" data-page-node-id="AAI6HWfgbNkPzz9ZH5uEeA">
+      <div style="padding-bottom:90px;" data-page-node-id="QkVOu8ioCFz7TuS8ZYrk6U">
+
+        <!-- Offline 提示 -->
+        <div class="offline" data-page-node-id="4TCJjKHyROwhxByU9K4b55">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a6618" stroke-width="1.6" data-page-node-id="U9bZno3iSCBt5MkVHgxDsH">
+            <path d="M12 4 L12 14 M12 18 L12 19" stroke-linecap="round" data-page-node-id="YEtHoEV1FHh3IeOgQtLA3z"/>
+            <circle cx="12" cy="12" r="10" data-page-node-id="yN4XOalMz4vQH6NhBW4BoT"/>
+          </svg>
+          <span data-page-node-id="cKj7EhCT2H1rbEbTHzJJ5g">离线模式 · 3 条改动将在联网后同步</span>
+          <span class="retry" data-page-node-id="tJjwq4nlv3LVUvjfioHDAW">RETRY ↻</span>
+        </div>
+
+        <!-- Hero · 今日 -->
+        <div class="hero" data-page-node-id="h7NDyFILj62jyZyU3XhvTK">
+          <div class="overline" data-page-node-id="snLxBM5VKEuHUNsYvwFIQh">TODAY · 十二月廿一 · 冬至将近</div>
+          <h2 data-page-node-id="DfhfqvTouAytjFZCIjqC1j">今日，<br data-page-node-id="sr5FwHHEXAK6osFZr1Yi9U">我们一起想做的 5 件事</h2>
+          <div class="days" data-page-node-id="1pgwvGfx369CxsDwMp5M4C">
+            <span class="n" data-page-node-id="807k9dpAq8kfDHH4WYROHE">1284</span>
+            <span class="label" data-page-node-id="D2glztdM178YFu7YIBRmAG">天</span>
+          </div>
+          <div class="meta" data-page-node-id="ez0HBu1C6OxKQfIZjUreZc">
+            <span data-page-node-id="9XuiEuvz2Sr55q1MVMKsX8">距离春节 <b data-page-node-id="3SdwQw7Dc7gMX04v9ct7BC">35 天</b></span>
+            <span style="opacity:.4" data-page-node-id="j8EJZaV08LXOA13rfGStRn">·</span>
+            <span data-page-node-id="07GXyf6WxYCZ14HRCaI4bN">下次见面 <b data-page-node-id="0JFuadjj8fRz0GwnYu91Hh">7 天</b></span>
+          </div>
+        </div>
+
+        <!-- 未完成列表 -->
+        <div class="section-label" data-page-node-id="bx4eVtGjHkUiT2XOeEofkU">
+          <div class="left" data-page-node-id="x4dnwe969A9ozuYUnNf21w">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c2410c" stroke-width="1.8" data-page-node-id="OBWlQPrD9pLCwKJ2T8zMUT">
+              <path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" data-page-node-id="nGptu6av4xP3CL9N6wkvyv"/>
+            </svg>
+            <span data-page-node-id="Stmk72wpdbGIAzDyd5wGS4">进行中</span>
+          </div>
+          <span class="count" data-page-node-id="HUZCKUp8k8skShpEimUwbm">3 / 5</span>
+          <span class="divider-line" data-page-node-id="yBGV2RjvEleXkpElBwr7jl"></span>
+        </div>
+
+        <div class="todo-list" data-page-node-id="AhZUmsZ7BiWFhPnkhN89fA">
+          <!-- TODO 1: 进行中 · 配图 · 反应 -->
+          <div class="todo" data-page-node-id="XBmt6QVcwur5AHh0iNRRp7">
+            <div class="todo-row" data-page-node-id="PmoxN5FToZsUbEfDO7Rc8Q">
+              <div class="todo-check half" data-page-node-id="RUmdNFgcCjeJlLaH1lMUBB">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="#c1932e" data-page-node-id="oqDxVDqQ4NZjiACicG9x7x">
+                  <path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" data-page-node-id="mv4cFbyXQmhx7D7cOOjQwQ"/>
+                </svg>
+              </div>
+              <div class="todo-body" data-page-node-id="RWqqUixDTJERmxTqjy2MSI">
+                <div class="todo-tags" data-page-node-id="HKoFcwH0VWAvDMLV7V3mBP">
+                  <span class="tag baby" data-page-node-id="smCm7uiSyv1AC0t7HulFlB">小宝</span>
+                  <span class="tag due" data-page-node-id="jzgoXa4KsBCBDZ4UD454FR">DUE · 12.24</span>
+                </div>
+                <div class="todo-title" data-page-node-id="fJ012sAo0bqABkGcABuKS1">陪她去挑圣诞礼物，要记得藏起来</div>
+                <div class="todo-meta" data-page-node-id="OmYykxU6OIJ3W4TIpa91wL">
+                  <span class="hearts" data-page-node-id="jZuNvh6N48JrCZAR4qBdZe"><span class="h" data-page-node-id="iDrTgVD8l0lfVJSAG1IftY"></span><span class="h" data-page-node-id="v9pshqKYzlBDin2ErIkXEc"></span><span class="h gray" data-page-node-id="bVtxT6iNAaRb6p9uB3CbYB"></span></span>
+                  <span data-page-node-id="wC8MmfG7Ca8TvcKDXQeUSJ">2 条留言</span>
+                  <span class="who" data-page-node-id="UOXyyW9Voz0pGkht0vtRN1">大宝贝 添加 · 2h</span>
+                </div>
+              </div>
+            </div>
+            <div class="todo-thumb" data-page-node-id="5elwjdecr8wLHi9WekpMgm">
+              <svg viewBox="0 0 200 96" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" data-page-node-id="AUrKlaUO5gSMeSijKuT8kq">
+                <rect width="200" height="96" fill="#f3ebde" data-page-node-id="EHgGqPEWqd7Lov6IVhnxcQ"/>
+                <circle cx="50" cy="50" r="22" fill="#f1c4a8" opacity="0.5" data-page-node-id="2DxM832bkCvZdINI9FBbel"/>
+                <path d="M120 30 L140 50 L100 80 Z" fill="#e89e76" opacity="0.4" data-page-node-id="OxGZaDkdduRihgzJTWI0Gp"/>
+                <rect x="140" y="40" width="40" height="30" fill="#d9774b" opacity="0.3" data-page-node-id="PgnAsXfcEb2EKUZDcw7ijH"/>
+              </svg>
+            </div>
+            <div class="reactions" data-page-node-id="VYfL7D8FrCgezIMigxuanc">
+              <span class="reaction" data-page-node-id="HDb2ErICCOJvtX5JLZRFWT"><svg class="ic" viewBox="0 0 24 24" fill="#c2410c" data-page-node-id="tsKP1Ty25jjbkVIszOmd4g"><path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" data-page-node-id="FQSlwpRgETLQZwLKUvpI3P"/></svg> 3</span>
+              <span class="reaction" data-page-node-id="Km9ASHyYWDCVaLHGJKLrS1"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c2410c" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="BiDdxCMMmr4EIHJqP3yKCB"><path d="M4 19 L20 19 M5 19 L12 4 L19 19 M12 4 L12 3" fill="#c2410c" fill-opacity="0.15" data-page-node-id="6H3wUDCqyDc2ulDDEQdgrJ"/><circle cx="12" cy="3.2" r="1.6" fill="#c2410c" data-page-node-id="B4NZr7VIa7blGlUwDdHMid"/></svg> 想要圣诞帽</span>
+              <span class="reaction" data-page-node-id="7SWAHV9GiNArPEmI71x1HP">记得买花</span>
+            </div>
+          </div>
+
+          <!-- TODO 2: 普通 · 未完成 -->
+          <div class="todo big-baby" data-page-node-id="fZUrHSXEZavGbNCrl2i6Aq">
+            <div class="todo-row" data-page-node-id="twvFTN6cS3aQA1ZFKTgNka">
+              <div class="todo-check" data-page-node-id="PSaeBxGto2qJmVFEnnP0Fn"></div>
+              <div class="todo-body" data-page-node-id="HkqFJ0dTnPQZ19wcI78N9O">
+                <div class="todo-tags" data-page-node-id="6LzUOyv3QhomTUHJlAvjhr">
+                  <span class="tag darling" data-page-node-id="LZpNdNatQBFM90twAHnSwv">大宝</span>
+                </div>
+                <div class="todo-title" data-page-node-id="qdo2FCYHrZ0DKf4MSBFrAO">每周日晚上 · 一起写日记</div>
+                <div class="todo-meta" data-page-node-id="ntSoqR87ygxqIMFa4u24Bu">
+                  <span data-page-node-id="mvoFY0LsdizHBJH4StgKTd">每周重复</span>
+                  <span class="who" data-page-node-id="tYzxDuEZrSTJC6NF6WB54q">小宝宝 添加 · 5h</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TODO 3: 隐藏款 legendary -->
+          <div class="todo hidden-legendary legendary" data-page-node-id="IGOj1qecDHuWHheAUD6Evk">
+            <div class="todo-row" data-page-node-id="dFADKBYnrdO7W0BI41ySSP">
+              <div class="todo-check" data-page-node-id="XTv4TIpbTISjWEyDHqkxKv"></div>
+              <div class="todo-body" data-page-node-id="ZGMeW6SrGLoaiQka0G0n1J">
+                <div class="todo-tags" data-page-node-id="gv0DFPmBo4L4A7euxMHjyy">
+                  <span class="rare-badge legendary" data-page-node-id="AbmPMFEPUZ71ZPr78uVuTv">★ LEGENDARY · 烫金</span>
+                  <span class="tag baby" data-page-node-id="9MHCoCwLG0G43nxKTTmGm5">小宝</span>
+                </div>
+                <div class="todo-title" data-page-node-id="1vFW2arIHJKYA22oBVc8dO">在她不知道的时候，去办那件大事</div>
+                <div class="todo-meta" data-page-node-id="EOFuZ9OkI6FMZ6Yfk8rKb9">
+                  <span data-page-node-id="iFC8k0Kr2L1QpDEWBFmxfn">仅 0.3% 概率触发</span>
+                  <span class="who" data-page-node-id="tV2Ifp2RphBs1elh7EcjJr">— · 大宝贝 触发</span>
+                </div>
+              </div>
+            </div>
+            <div class="todo-thumb legendary-bg" data-page-node-id="7dU01RtPzVuhu63BVvu5kx"></div>
+          </div>
+        </div>
+
+        <!-- 已完成列表 -->
+        <div class="section-label" data-page-node-id="xm7FHxTl6USp7ObaXnr8qD">
+          <div class="left" data-page-node-id="n9quzXKqCWhaJVlfyx7PJb">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#928676" stroke-width="1.8" data-page-node-id="48kLEXY3protYm51SHehyU">
+              <path d="M5 12 L10 17 L19 7" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="SVzJSZECkxRNJsPGA5D1JZ"/>
+            </svg>
+            <span data-page-node-id="rTekIhKI08pTjBx4FnrCkc">已完成 · 今日</span>
+          </div>
+          <span class="count" data-page-node-id="CAudLZGKeiVrMeHf1YQrIF">2</span>
+          <span class="divider-line" data-page-node-id="sA3JLxdkflqJ3ZLnCYCrJq"></span>
+        </div>
+
+        <div class="todo-list" data-page-node-id="FzMbHDX1abRWZwJj7yfuON">
+          <div class="todo done" data-page-node-id="6Svx6hxA62wN9PHIEEHQYz">
+            <div class="todo-row" data-page-node-id="W9DXAlg9PwByow1d2HKwMk">
+              <div class="todo-check checked" data-page-node-id="cZ4hEXIWohhsS907lJA7S4">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#faf6f1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="wuWAmHptUGk1iPAhZ6vA3Q">
+                  <path d="M5 12 L10 17 L19 7" data-page-node-id="1D9jq9oqCOUdYAH8dpuRkT"/>
+                </svg>
+              </div>
+              <div class="todo-body" data-page-node-id="IFhnGLgobWnBr2cQC0vFAP">
+                <div class="todo-tags" data-page-node-id="Eoq0Gf8vDeWXbTqQFGV4GY">
+                  <span class="tag baby" data-page-node-id="G6oDo9EcLR8isSJd2erc2I">小宝</span>
+                </div>
+                <div class="todo-title" data-page-node-id="ndzcwaQByQnJxEbJRnvSur">给阳台的花浇水 · 今天</div>
+                <div class="todo-meta" data-page-node-id="8xRAMdAu2rMw3G58Dpxe12">
+                  <span data-page-node-id="2y8kzzirNdXR5xIFZlM1gA">9:02 完成</span>
+                  <span class="who" data-page-node-id="IAzWrU1Ktzwaikr4qjDOud">小宝宝 · 盖戳 ✓</span>
+                </div>
+                <div class="note" data-page-node-id="x9IMfovxh5Eiv40IbsTSPb">她今天不在家，替她浇了；新长出的两片叶子很可爱。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 骨架屏（后续加载中） -->
+        <div class="section-label" data-page-node-id="nq4AKsNb3CbrFspDtmurCy">
+          <div class="left" data-page-node-id="UGCB5f5DuT5n5yBOi2WcWJ">
+            <span data-page-node-id="EQSu7KnGRU4DL6LiA5XWfr">即将同步</span>
+          </div>
+          <span class="count" data-page-node-id="WUwDGF5qlXFJHW7FmuEmsC">···</span>
+          <span class="divider-line" data-page-node-id="A4ZM2RElNBpsQdjqTcJkIB"></span>
+        </div>
+        <div class="todo-list" data-page-node-id="ZTcEsGTu2h9rpEpo5XuGdq">
+          <div class="skeleton" data-page-node-id="SfvrN4Fp1Klf7zHtk22iIm">
+            <div class="skeleton-bar w60" data-page-node-id="HijuPQGLPppg6lqlv1LrmT"></div>
+            <div class="skeleton-bar w90" data-page-node-id="9KCZ3N55SdnU9sOd54VKna"></div>
+            <div class="skeleton-bar w40" data-page-node-id="YeXWQn1ZWFy8qLEgS8fwxd"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FAB + 花瓣菜单预览 -->
+    <div class="fab-zone" data-page-node-id="J2rEwiTJsfFaBKpd5ADmeN">
+      <span class="fab-hint" data-page-node-id="jWXFb1Y4MlC9wlzWZpj9hf">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="47AJ6w3ID20uF82HzbJiLw"><circle cx="12" cy="12" r="2" data-page-node-id="1jAZ2RAXjRkoOExWmVSnuF"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1l2.1-2.1M17 7l2.1-2.1" data-page-node-id="louVQfaLFm9qfqIR33RFEX"/></svg> 长按展开
+      </span>
+      <div class="petal-menu" data-page-node-id="SvbcMvCqy5EyQua52UAZtI">
+        <div class="petal" title="写信" data-page-node-id="SqVXwwE8PEB2HJWVp26vd8">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c2410c" stroke-width="1.5" data-page-node-id="GhTxm182DHFiZnOlK3Rnmu">
+            <path d="M3 8 L12 14 L21 8 M3 8 V18 H21 V8 M3 8 L12 3 L21 8" data-page-node-id="G4B7uiwmhOwrgSEbwJ14Zy"/>
+          </svg>
+        </div>
+        <div class="petal" title="留语音" data-page-node-id="PclGmWzzalktLc4YzgDPZu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c2410c" stroke-width="1.5" data-page-node-id="IWjc2jhHfGtFbXoHLq2ghp">
+            <rect x="9" y="3" width="6" height="12" rx="3" data-page-node-id="D7Jpuky8MTVuixE0NkjamV"/>
+            <path d="M5 11 V12 C5 16, 8 19, 12 19 C16 19, 19 16, 19 12 V11 M12 19 V22 M8 22 H16" data-page-node-id="YS9PUwqbZcLjCzLjgx9Qzc"/>
+          </svg>
+        </div>
+        <div class="petal" title="拍照" data-page-node-id="J8dj1a4cGSgwZOcDPLVPHU">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c2410c" stroke-width="1.5" data-page-node-id="fbAsrMac1soAPUBIS7kgPP">
+            <rect x="3" y="6" width="18" height="14" rx="2" data-page-node-id="1yNDFmoN7JsKyseIYGhEOL"/>
+            <circle cx="12" cy="13" r="3.5" data-page-node-id="621CUHF9X9AMvsC2R7F3cv"/>
+            <rect x="8" y="3" width="6" height="3" rx="1" data-page-node-id="T4jZnhPCeJHwf6kAXn1pLu"/>
+          </svg>
+        </div>
+        <div class="petal" title="共享此刻" data-page-node-id="JpQ5z55FxiDT8zDoGaLIK6">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c2410c" stroke-width="1.5" data-page-node-id="bvbfO6U4GlSfMJIDKdzDGA">
+            <path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" data-page-node-id="oU3SUPHectn9XbXnJA9Ekq"/>
+          </svg>
+        </div>
+      </div>
+      <div class="fab" data-page-node-id="4lFfsYhKZlEwUXMDb74Pqs">
+        <svg viewBox="0 0 32 32" data-page-node-id="z4u4ovbEPp6GQMDI5BAE5c">
+          <path d="M16 26 C 4 18, 2 9, 8 6 C 12 4, 16 8, 16 10 C 16 8, 20 4, 24 6 C 30 9, 28 18, 16 26 Z"
+                fill="none" stroke="#faf6f1" stroke-width="1.6" data-page-node-id="Gp3YaC2sjbjCZzELZ8J6E3"/>
+          <circle cx="16" cy="14" r="1.8" fill="#c1932e" data-page-node-id="6LNc73XQxJwQgPBjHSbsTF"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Home Indicator -->
+    <div class="tabbar-hint" data-page-node-id="TOPCgfSZgM56KNjY8X88mn">
+      <div class="home-indicator" data-page-node-id="9LGCZpFEZ9BMc3YMLcr4hq"></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="coqfCWvHRsLyIEuV2fTiwV">
+<head data-page-node-id="FD1HdhYZNahs6DfXTdtzYy">
+<meta charset="UTF-8" data-page-node-id="EPHYieS7nYvswD9yDwOdg0">
+<meta name="viewport" content="width=390, initial-scale=1.0" data-page-node-id="MxTFB0IsQaGAg1gDiWJBLO">
+<title>原型 #04 · 心里话写信 + 阅读 · 「有爱」v2 改版</title>
+<!--
+  两屏合并：写信（左/左屏） + 阅读（右屏）
+  视觉：米杏信纸 + 横线纹理 + 顶部双心 logo + 计数 + 发送按钮
+  灵感：Dior 信纸 × Aesop 标签
+-->
+<style>
+:root {
+  --rose-50:#fdf5f0; --rose-100:#f9e3d4; --rose-200:#f1c4a8;
+  --rose-300:#e89e76; --rose-400:#d9774b; --rose-500:#c2410c;
+  --rose-600:#a8340a; --rose-700:#872a08; --rose-800:#6a1f06; --rose-900:#4a1605;
+  --cream-50:#fdfbf7; --cream-100:#faf6f1; --cream-200:#f3ebde;
+  --cream-300:#e8dcc6; --cream-400:#d6c4a3; --cream-500:#b8a17e;
+  --cream-600:#8e7752; --cream-700:#66553b; --cream-800:#3f3322; --cream-900:#231b10;
+  --stone-50:#f8f6f3; --stone-100:#ede8e0; --stone-200:#d9d2c5;
+  --stone-300:#b8aea0; --stone-400:#928676; --stone-500:#6b6051;
+  --stone-600:#4a4135; --stone-700:#2f2820; --stone-800:#1a1610;
+  --legendary-300:#e8d49b; --legendary-500:#c1932e; --legendary-700:#8a6618;
+  --ink-500:#2f456a; --ink-700:#1a2942;
+
+  --color-primary:var(--rose-500);
+  --color-primary-rgb:194,65,12;
+  --color-text:var(--stone-700);
+  --color-text-muted:var(--stone-500);
+  --color-text-subtle:var(--stone-400);
+  --color-text-rose:var(--rose-500);
+  --color-border:var(--cream-300);
+  --color-border-subtle:var(--cream-200);
+  --color-bg:var(--cream-100);
+  --color-bg-elevated:var(--cream-50);
+
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:20px; --space-6:24px; --space-7:32px; --space-8:40px;
+  --radius-sm:8px; --radius-md:12px; --radius-lg:16px; --radius-xl:20px; --radius-2xl:28px; --radius-full:9999px;
+
+  --font-cn:"LXGW WenKai","Source Han Serif SC","Songti SC",serif;
+  --font-en:"Inter","SF Pro Text",system-ui,sans-serif;
+  --font-mono:"Berkeley Mono","JetBrains Mono",monospace;
+
+  --shadow-sm:0 2px 6px rgba(194,65,12,0.06);
+  --shadow-md:0 6px 18px rgba(194,65,12,0.10);
+  --shadow-lg:0 12px 32px rgba(194,65,12,0.14);
+  --shadow-xl:0 24px 48px rgba(194,65,12,0.18);
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html, body { background:#3f3322; }
+body { font-family:var(--font-cn); color:var(--color-text); line-height:1.6; -webkit-font-smoothing:antialiased; }
+
+.stage {
+  min-height:100vh;
+  display:flex; gap:48px; align-items:center; justify-content:center;
+  padding:48px 32px;
+  background:radial-gradient(ellipse at center, #4a1605 0%, #231b10 100%);
+  flex-wrap:wrap;
+}
+.stage-label {
+  position:fixed; top:16px; left:24px;
+  color:var(--cream-300); font-family:var(--font-en);
+  font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+}
+.stage-tag {
+  position:fixed; top:16px; right:24px;
+  color:var(--rose-300); font-family:var(--font-en);
+  font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+}
+.stage-divider {
+  display:flex; flex-direction:column; align-items:center;
+  color:var(--cream-400);
+  font-family:var(--font-en);
+  font-size:11px;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+}
+.stage-divider .line { width:1px; height:60px; background:var(--cream-700); margin:8px 0; }
+
+.phone {
+  width:390px; height:844px;
+  background:var(--color-bg);
+  border-radius:48px;
+  box-shadow:
+    0 0 0 10px #1a1610,
+    0 0 0 11px #3f3322,
+    0 60px 120px rgba(0,0,0,0.45);
+  overflow:hidden;
+  position:relative;
+  flex-shrink:0;
+}
+
+/* Status Bar */
+.status-bar {
+  height:44px;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 28px;
+  font-family:var(--font-en); font-size:15px; font-weight:600;
+  color:var(--stone-800);
+}
+.status-bar .icons { display:flex; gap:6px; align-items:center; }
+
+/* Top Bar */
+.topbar {
+  position:relative;
+  height:48px;
+  padding:0 16px;
+  display:flex; align-items:center; justify-content:space-between;
+  background:rgba(250,246,241,0.78);
+  backdrop-filter:blur(20px) saturate(180%);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  border-bottom:1px solid var(--cream-300);
+}
+.topbar .back {
+  width:36px; height:36px;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--stone-600);
+}
+.topbar .title {
+  font-family:var(--font-cn);
+  font-size:16px; font-weight:600;
+  color:var(--color-text);
+}
+.topbar .save {
+  font-family:var(--font-cn);
+  font-size:14px;
+  color:var(--color-text-subtle);
+  padding:6px 12px;
+  border-radius:var(--radius-sm);
+}
+
+/* ============================ */
+/* SCREEN 1: 写信 */
+/* ============================ */
+.letter-screen {
+  position:relative;
+  height:752px;
+  padding:0 24px 24px;
+  background:var(--color-bg);
+}
+
+/* 顶部双心 logo */
+.letter-mark {
+  display:flex; align-items:center; justify-content:center;
+  margin:8px 0 16px;
+  position:relative;
+}
+.letter-mark .heart-l {
+  width:32px; height:32px;
+  animation:breath 2400ms cubic-bezier(0.34,1.56,0.64,1) infinite;
+}
+.letter-mark .heart-r {
+  width:32px; height:32px;
+  margin-left:-6px;
+  animation:breath 2400ms cubic-bezier(0.34,1.56,0.64,1) infinite;
+  animation-delay:240ms;
+}
+@keyframes breath {
+  0%,100% { transform:scale(1); }
+  50% { transform:scale(1.06); }
+}
+
+/* 信纸 */
+.letter-paper {
+  background:var(--cream-50);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-lg);
+  padding:24px 20px 16px;
+  box-shadow:var(--shadow-sm);
+  min-height:540px;
+  position:relative;
+  background-image:
+    linear-gradient(transparent 27px, rgba(217,210,197,0.5) 28px),
+    linear-gradient(180deg, transparent 0px, transparent 27px, var(--cream-50) 28px);
+  background-size:100% 28px, 100% 28px;
+  background-position:0 0, 0 0;
+  background-repeat:no-repeat;
+}
+.letter-paper::before {
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.04'/></svg>");
+  pointer-events:none;
+}
+
+/* 信封开场：「亲爱的，___」 */
+.salutation {
+  font-family:var(--font-cn);
+  font-style:italic;
+  font-size:18px;
+  color:var(--color-text);
+  margin-bottom:14px;
+  letter-spacing:0.02em;
+}
+.salutation .name {
+  color:var(--color-text-rose);
+  font-weight:600;
+  border-bottom:1.5px solid var(--rose-300);
+  padding:0 4px;
+  margin:0 2px;
+}
+
+/* 内容 */
+.letter-body {
+  font-family:var(--font-cn);
+  font-size:15px;
+  color:var(--color-text);
+  line-height:28px;
+  letter-spacing:0.01em;
+  min-height:280px;
+}
+.letter-body p { margin-bottom:14px; }
+.letter-body .caret {
+  display:inline-block;
+  width:2px; height:18px;
+  background:var(--rose-500);
+  margin-left:2px;
+  vertical-align:middle;
+  animation:blink 1.2s steps(2) infinite;
+}
+@keyframes blink {
+  50% { opacity:0; }
+}
+.letter-body .placeholder {
+  color:var(--color-text-subtle);
+}
+
+/* 签名留白 */
+.letter-sign {
+  margin-top:32px;
+  text-align:right;
+  padding-right:8px;
+}
+.letter-sign .prefix {
+  font-family:var(--font-cn);
+  font-style:italic;
+  font-size:14px;
+  color:var(--color-text-muted);
+}
+.letter-sign .from {
+  display:inline-block;
+  margin-top:8px;
+  padding:3px 10px;
+  border:1.5px solid var(--ink-500);
+  font-family:var(--font-en);
+  font-size:11px; font-weight:700;
+  letter-spacing:0.2em;
+  color:var(--ink-700);
+  transform:rotate(-2deg);
+  border-radius:2px;
+  background:rgba(47,69,106,0.05);
+}
+
+/* 工具条 */
+.letter-toolbar {
+  margin-top:18px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.letter-toolbar .left { display:flex; gap:8px; }
+.tool-btn {
+  width:36px; height:36px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:var(--radius-sm);
+  border:1px solid var(--color-border-subtle);
+  background:var(--cream-50);
+  color:var(--color-text-muted);
+}
+.counter {
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--color-text-subtle);
+  letter-spacing:0.06em;
+}
+
+/* 发送按钮 */
+.send-btn {
+  margin-top:20px;
+  width:100%;
+  height:56px;
+  background:var(--color-primary);
+  color:var(--cream-50);
+  border:none;
+  border-radius:var(--radius-md);
+  font-family:var(--font-cn);
+  font-size:16px; font-weight:600;
+  display:flex; align-items:center; justify-content:center;
+  gap:10px;
+  box-shadow:var(--shadow-md);
+  cursor:pointer;
+  position:relative;
+  overflow:hidden;
+}
+.send-btn::before {
+  content:"";
+  position:absolute; inset:0;
+  background:radial-gradient(circle at 30% 50%, rgba(255,255,255,0.18), transparent 60%);
+}
+.send-btn svg { width:18px; height:18px; }
+
+/* ============================ */
+/* SCREEN 2: 阅读 */
+/* ============================ */
+.read-screen {
+  height:752px;
+  background:var(--color-bg);
+  padding:0 20px 24px;
+  overflow-y:auto;
+  position:relative;
+}
+
+.read-header {
+  text-align:center;
+  padding:24px 0 18px;
+  border-bottom:1px solid var(--color-border-subtle);
+  margin-bottom:18px;
+}
+.read-header .from-row {
+  display:flex; align-items:center; justify-content:center;
+  gap:8px;
+  margin-bottom:8px;
+}
+.read-header .from-stamp {
+  display:inline-flex; align-items:center; gap:4px;
+  font-family:var(--font-en);
+  font-size:11px; font-weight:700;
+  letter-spacing:0.18em;
+  color:var(--rose-700);
+  background:var(--rose-50);
+  padding:4px 10px;
+  border-radius:var(--radius-sm);
+}
+.read-header .heart-mark {
+  width:14px; height:14px;
+  display:inline-block;
+  background:var(--rose-500);
+  -webkit-mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z'/></svg>") center/contain no-repeat;
+          mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z'/></svg>") center/contain no-repeat;
+}
+.read-header .date {
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--color-text-subtle);
+  letter-spacing:0.08em;
+}
+
+.read-letter {
+  background:var(--cream-50);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-lg);
+  padding:28px 24px;
+  box-shadow:var(--shadow-sm);
+  background-image:
+    linear-gradient(transparent 27px, rgba(217,210,197,0.5) 28px);
+  background-size:100% 28px;
+  background-position:0 0;
+  position:relative;
+}
+.read-letter .salutation {
+  font-family:var(--font-cn);
+  font-style:italic;
+  font-size:18px;
+  color:var(--color-text);
+  margin-bottom:20px;
+}
+.read-letter .salutation .name { color:var(--color-text-rose); font-weight:600; }
+.read-letter .body-text {
+  font-family:var(--font-cn);
+  font-size:15px;
+  color:var(--color-text);
+  line-height:28px;
+  letter-spacing:0.01em;
+}
+.read-letter .body-text p { margin-bottom:14px; }
+.read-letter .sign {
+  margin-top:28px;
+  text-align:right;
+}
+.read-letter .sign .lbl {
+  font-family:var(--font-cn); font-style:italic;
+  font-size:13px; color:var(--color-text-muted);
+}
+.read-letter .sign .val {
+  margin-top:8px;
+  font-family:var(--font-cn); font-weight:600;
+  font-size:18px; color:var(--color-text);
+  font-style:italic;
+}
+.read-letter .ps {
+  margin-top:18px;
+  padding-top:14px;
+  border-top:1px dashed var(--cream-300);
+  font-family:var(--font-cn); font-style:italic;
+  font-size:13px; color:var(--color-text-muted);
+}
+
+/* 反应行 */
+.read-reactions {
+  margin-top:18px;
+  display:flex; gap:8px;
+  justify-content:center;
+}
+.reaction-pill {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:6px 12px;
+  background:var(--cream-50);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-full);
+  font-family:var(--font-cn);
+  font-size:12px; color:var(--color-text-muted);
+}
+.reaction-pill .ic { width:14px; height:14px; }
+.reaction-pill .count {
+  font-family:var(--font-mono);
+  font-size:11px;
+  color:var(--color-text-subtle);
+  margin-left:2px;
+}
+
+/* 历史下拉 */
+.history-hint {
+  margin-top:24px;
+  text-align:center;
+  font-family:var(--font-en);
+  font-size:11px;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+  color:var(--color-text-subtle);
+}
+.history-hint .icon-line {
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  margin-top:8px;
+  color:var(--rose-500);
+}
+.history-hint .icon-line .ln { width:24px; height:1px; background:var(--rose-200); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:120ms !important;
+    transition-duration:120ms !important;
+  }
+}
+</style>
+</head>
+<body data-page-node-id="G431zK4wlGrZ2Ruc7A3qD5">
+
+<div class="stage-label" data-page-node-id="Ql79SfQPdJ1SdXDtsa8eyE">PROTOTYPE · 04 · NOTES</div>
+<div class="stage-tag" data-page-node-id="Zoq5l5vG75Is7unAE2XqGo">v1 · 改版稿</div>
+
+<div class="stage" data-page-node-id="4pAbIYDF0vpi84qQkN4tEi">
+
+  <!-- 写信 -->
+  <div class="phone" data-page-node-id="xCI8D5Y3R1mT6D9oqtrqzz">
+    <div class="status-bar" data-page-node-id="DQ12Ty0mWR73mH5cvAafpA">
+      <span data-page-node-id="bKlE1nsDNzsoVaP9QZidBu">9:41</span>
+      <div class="icons" data-page-node-id="cnGru7b5SjJcNiWtkUkife">
+        <span data-page-node-id="NNhs8xKni0AaBG9OhiQbWI">●●●</span>
+        <svg width="16" height="11" viewBox="0 0 16 11" data-page-node-id="r6acVHPdmrMacTzF50NjP1"><path d="M1 8 Q8 0 15 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="K01XNVm6iKBT6eYZZWVCRa"/><path d="M3.5 8 Q8 3 12.5 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="KOma210E8fTffyQePoOeN8"/><circle cx="8" cy="8" r="1.4" fill="#2f2820" data-page-node-id="oc49XL43SHDNgHCAccPvbC"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11" data-page-node-id="URuoxxtEt2Xx09eAJYz5zj"><rect x="0.5" y="0.5" width="20" height="10" rx="2" stroke="#2f2820" fill="none" data-page-node-id="DqHsAnaEOl1ZWs3PSoDwdL"/><rect x="2" y="2" width="16" height="7" rx="1" fill="#2f2820" data-page-node-id="xhewBPskSs7udlWvqcOGdR"/><rect x="21" y="3" width="2" height="5" rx="1" fill="#2f2820" data-page-node-id="wZE7EF6CEZTqVsc0A7LJ9x"/></svg>
+      </div>
+    </div>
+    <div class="topbar" data-page-node-id="FDUFifHBaiQjBal9Y5srUF">
+      <div class="back" data-page-node-id="MR3A5spMITpU5odut4EZzG">‹</div>
+      <div class="title" data-page-node-id="yvipuytKgPws5weNVKTsqu">写信 · 给大宝贝</div>
+      <div class="save" data-page-node-id="cXpGcI5aHDaoAJq88eTpcc">草稿</div>
+    </div>
+
+    <div class="letter-screen" data-page-node-id="gMOupe8f3aqcH46mEDSqiY">
+
+      <div class="letter-mark" data-page-node-id="5EByuPQsRf6Bfb8BYw9Yi6">
+        <svg class="heart-l" viewBox="0 0 32 32" data-page-node-id="3HvHP47YGlCzg79uIjpVky">
+          <path d="M16 28 C 4 20, 2 11, 8 8 C 12 6, 16 10, 16 12 C 16 10, 20 6, 24 8 C 30 11, 28 20, 16 28 Z"
+                fill="#c2410c" data-page-node-id="mXy8sFwNTi55BTR7Xou7bm"/>
+        </svg>
+        <svg class="heart-r" viewBox="0 0 32 32" data-page-node-id="syL4TW3zCdeKhPBTtbSBv6">
+          <path d="M16 28 C 4 20, 2 11, 8 8 C 12 6, 16 10, 16 12 C 16 10, 20 6, 24 8 C 30 11, 28 20, 16 28 Z"
+                fill="none" stroke="#2f2820" stroke-width="1.4" data-page-node-id="RioSlHzNmdeaGIwdDmV5Wk"/>
+        </svg>
+      </div>
+
+      <div class="letter-paper" data-page-node-id="sTkO8aPLK6UkUiulYaon5F">
+        <div class="salutation" data-page-node-id="JvyU0J20RIBZG5NDSNYwbZ">亲爱的，<span class="name" data-page-node-id="aZ2WkPzBeseba6VxTPZqxS">宝贝</span>，</div>
+        <div class="letter-body" data-page-node-id="GxL8qDmbrYN88sYdOg2Z2V">
+          <p data-page-node-id="eeC1E7PPkJyeX271QfjH9r">今天是冬至将近，窗外下着细细的雨，<br data-page-node-id="UaHdWzYHrckpGW71WEd5Vb">忽然很想给你写一封信。</p>
+          <p data-page-node-id="DRQ0lBVSd81QuDAyQZaXmy">不知不觉我们已经一起走过了 1284 天。<br data-page-node-id="KhEvFw8y8afQ1g2vGPUgi8">这期间吵过架、流过泪、也笑到肚子痛，<br data-page-node-id="On8nrAkbsZzkYUV3Rqjl6k">但最常出现的情绪，是「还好有你在身边」。</p>
+          <p data-page-node-id="IfpIRSJhWmmetvk0wPU9WH">谢谢你包容我所有的笨拙与不完美，<br data-page-node-id="pQFufSylJ1oxexkWkBbEzL">愿往后的日子，我们继续慢慢地、温柔地，<br data-page-node-id="n9Rbt49RjCm4BfHy8bkYjB">把每一个平凡的今天，过成我们最喜欢的样子。<span class="caret" data-page-node-id="ZkGojiyrSjxBkVE1kzo6H3"></span></p>
+        </div>
+
+        <div class="letter-sign" data-page-node-id="gV2iRA0mcqWVrm3hD82B7Y">
+          <div class="prefix" data-page-node-id="OJmAIChCXyUs8sByAzBc6k">永远爱你的，</div>
+          <div class="from" data-page-node-id="owmK9TvoTsF1EQpM2dF0Ww">小 宝 贝</div>
+        </div>
+      </div>
+
+      <div class="letter-toolbar" data-page-node-id="VtNQsvPpCkMLYy6svdXe8A">
+        <div class="left" data-page-node-id="CfMOxKuf1uuD3phPXx2rib">
+          <button class="tool-btn" title="模板" data-page-node-id="fqjNfsQzTlArIIrqend8yY">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" data-page-node-id="kQyibKlNQ8IodE12x78Ie1">
+              <rect x="3" y="3" width="7" height="7" data-page-node-id="LInD06iiJHXtLvWPpkVJZJ"/>
+              <rect x="14" y="3" width="7" height="7" data-page-node-id="qGgRrTEvgEHGQl58k7tnkF"/>
+              <rect x="3" y="14" width="7" height="7" data-page-node-id="AWdPai56dNCBbvaC0j5eNO"/>
+              <rect x="14" y="14" width="7" height="7" data-page-node-id="2GaqC2AUNiHzlCPIuRbrXh"/>
+            </svg>
+          </button>
+          <button class="tool-btn" title="表情" data-page-node-id="IrWHbVjF5c1iSwlYLouQNy">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" data-page-node-id="XoKgdmiLGTLglTDskpBIBx">
+              <circle cx="12" cy="12" r="9" data-page-node-id="snLfnuDDi5b8yLMQFabFTx"/>
+              <path d="M8 14 C 9 16, 11 17, 12 17 C 13 17, 15 16, 16 14" data-page-node-id="E9o5y6PbB2YlkphJjKEnU6"/>
+              <circle cx="9" cy="10" r="1" fill="currentColor" data-page-node-id="rFCEcftPvho6mkBdqo1iDS"/>
+              <circle cx="15" cy="10" r="1" fill="currentColor" data-page-node-id="zG9TxsmFtm19K1gFqVX2rg"/>
+            </svg>
+          </button>
+          <button class="tool-btn" title="图片" data-page-node-id="WhCHa2gMBDZXLekurSz6qZ">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" data-page-node-id="rR8JpfUYHygSMlpDJHVF86">
+              <rect x="3" y="6" width="18" height="14" rx="2" data-page-node-id="wBi5xPq6FncLzseovLEl5f"/>
+              <circle cx="12" cy="13" r="3.5" data-page-node-id="77L98tZO2UQJLpBvAu6REC"/>
+              <rect x="8" y="3" width="6" height="3" rx="1" data-page-node-id="ZjDFzPAM5HivXDLQqQGfQv"/>
+            </svg>
+          </button>
+          <button class="tool-btn" title="贴纸" data-page-node-id="ZciU19AI056AAVQbfugJnX">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" data-page-node-id="l1aTnKhKRyqX0OoUiFCIeC">
+              <path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" data-page-node-id="d2BFh0O7IpSIzID4cCbpbt"/>
+            </svg>
+          </button>
+        </div>
+        <div class="counter" data-page-node-id="0TjFNDMNl5x0cX63wJXbmc">214 / 1000</div>
+      </div>
+
+      <button class="send-btn" data-page-node-id="M9YZY8aXMW3M2wW2h3JXej">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#faf6f1" stroke-width="1.6" data-page-node-id="gReZcLiM50LQiU35xDm4hS">
+          <path d="M3 11 L21 3 L13 21 L11 13 L3 11 Z" stroke-linejoin="round" data-page-node-id="seXslGaCuyLZiImyTgEYxB"/>
+        </svg>
+        寄给她 · 大宝贝
+      </button>
+    </div>
+  </div>
+
+  <!-- 分隔 -->
+  <div class="stage-divider" data-page-node-id="MP2wFw90AolfNKuChSkgdg">
+    <span data-page-node-id="SkRGFa9ieQRc6w7RpEJ5YE">↔</span>
+    <span class="line" data-page-node-id="TlfL8xBFv8TPQcOaG4EIJ2"></span>
+    <span data-page-node-id="2Gp1ZfGQzmSG8rr8TcfAbz">READ</span>
+    <span class="line" data-page-node-id="Fpka8LIMy6x5Q5GF3F0Ax1"></span>
+    <span data-page-node-id="mGhh9ZxXP83wtNYuvvCH5U">↔</span>
+  </div>
+
+  <!-- 阅读 -->
+  <div class="phone" data-page-node-id="IBo06ObJykDf2w0NW1td3U">
+    <div class="status-bar" data-page-node-id="fXiLayLrmIMynZHWthCT4Q">
+      <span data-page-node-id="5GqFNdCnfk2zaymbSXuk5F">9:41</span>
+      <div class="icons" data-page-node-id="8n3UBh40zlhlJHgeWEuEJD">
+        <span data-page-node-id="OyOIznsGWXfcvpiQGTeNAr">●●●</span>
+        <svg width="16" height="11" viewBox="0 0 16 11" data-page-node-id="02mMSqzi21a9XV3eScBnNK"><path d="M1 8 Q8 0 15 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="iXNLU2rTYUmOSzjbv6LzOr"/><path d="M3.5 8 Q8 3 12.5 8" stroke="#2f2820" stroke-width="1.2" fill="none" data-page-node-id="Eq9NJY7YK07rjwG9vELgpn"/><circle cx="8" cy="8" r="1.4" fill="#2f2820" data-page-node-id="0MXYxYpItztXGC8J8JqXS2"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11" data-page-node-id="vktagJ0R3VEeAPEOxcl5wc"><rect x="0.5" y="0.5" width="20" height="10" rx="2" stroke="#2f2820" fill="none" data-page-node-id="AlyZn6EPg03M8G29BWw1uD"/><rect x="2" y="2" width="16" height="7" rx="1" fill="#2f2820" data-page-node-id="QIyqN2JPGhCvW2xHYvnLil"/><rect x="21" y="3" width="2" height="5" rx="1" fill="#2f2820" data-page-node-id="texJctgZnP0okFHHI8JHRi"/></svg>
+      </div>
+    </div>
+    <div class="topbar" data-page-node-id="nMYpxQC8pSt7VDx3AqFjXa">
+      <div class="back" data-page-node-id="ipT5r96tSVxvBEKLZ9g6mZ">‹</div>
+      <div class="title" data-page-node-id="KBS7L3qz6qsd8dv3VgpIwx">小宝宝 的来信</div>
+      <div class="save" data-page-node-id="lQ3JmeC54zHyyo4rSUzXNK"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="ihmiguugJg825Chtg9opOn"><path d="M12 21s-7-4.3-7-9.4c0-2.6 2-4.6 4.4-4.6 1.4 0 2.6.7 2.6 1.7 0-1 1.2-1.7 2.6-1.7 2.4 0 4.4 2 4.4 4.6 0 5.1-7 9.4-7 9.4z" data-page-node-id="ilBurIUMuYBcm4yozU7VDg"/></svg> 收藏</div>
+    </div>
+
+    <div class="read-screen" data-page-node-id="yPxANrFru5D7D4Fnq1xIdt">
+
+      <div class="read-header" data-page-node-id="LIyyCV8ri5JYLrmBfU7IVg">
+        <div class="from-row" data-page-node-id="qqsV4lbrufyWjem55okA4x">
+          <span class="from-stamp" data-page-node-id="EEJI3zD02ZbXYHqvQVXPeR"><span class="heart-mark" data-page-node-id="DKLcz4nFQ7vF23NMYjO2Fu"></span>FROM 小宝贝</span>
+        </div>
+        <div class="date" data-page-node-id="0UUUJVkKLCGPsJ5SB66unH">DEC 19 · 23:14 · WED</div>
+      </div>
+
+      <div class="read-letter" data-page-node-id="5iUBPe718LHGtoDMwmVEEi">
+        <div class="salutation" data-page-node-id="XzKFjHjTlFoHGi2RzJDgED">亲爱的<span class="name" data-page-node-id="TYLpHy1Ajc4ewsP6Y6AcWj">大宝贝</span>，</div>
+        <div class="body-text" data-page-node-id="vRA4OxPCIiijCSGOhm7qPZ">
+          <p data-page-node-id="qqEc4jdbnJEDPmydw7atof">今天是冬至将近，窗外下着细细的雨，<br data-page-node-id="Swxk4AhfkCsXjBe7tvNiDM">忽然很想给你写一封信。</p>
+          <p data-page-node-id="nkpFql3TnWscrpUp8wAgYn">不知不觉我们已经一起走过了 1284 天。<br data-page-node-id="8RUU5QXkWkjbDo99Gpniu1">这期间吵过架、流过泪、也笑到肚子痛，<br data-page-node-id="wGFTwCVohfHuej6Fjd8rqQ">但最常出现的情绪，是「还好有你在身边」。</p>
+          <p data-page-node-id="3OjVXHeN2JIpwsgbDW9nW9">谢谢你包容我所有的笨拙与不完美，<br data-page-node-id="ysTGnMCNFxVk74Bwybshok">愿往后的日子，我们继续慢慢地、温柔地，<br data-page-node-id="cxBmT34B9MokcDtGjaYIkW">把每一个平凡的今天，过成我们最喜欢的样子。</p>
+          <div class="sign" data-page-node-id="qRHN8LUyo9MDQweBWu3qt4">
+            <div class="lbl" data-page-node-id="3cBrZVzO10vKlPbMUUtAu6">永远爱你的，</div>
+            <div class="val" data-page-node-id="NEeaoFJj723WIy2e6dDACU">小 宝 贝</div>
+          </div>
+          <div class="ps" data-page-node-id="mthATun0vRr3B6ng8iMq6G">P.S. 周六见面的时候，记得带那本《长安的荔枝》给我～</div>
+        </div>
+      </div>
+
+      <div class="read-reactions" data-page-node-id="3TzLe2vhnuRc00s25DWSq2">
+        <span class="reaction-pill" data-page-node-id="QfSIP2TA22UofiQmTZIn8N">
+          <svg class="ic" viewBox="0 0 24 24" fill="#c2410c" data-page-node-id="GPEZ9U8pJWSgEixzV60fM9"><path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" data-page-node-id="ray2x29UfX2XkQnEohDz1Y"/></svg>
+          心动<span class="count" data-page-node-id="tbXYIFNtRl6wcJSMGLsC43">·3</span>
+        </span>
+        <span class="reaction-pill" data-page-node-id="YrID5nDmAHqGNVY5lPsSVV">
+          <svg class="ic" viewBox="0 0 24 24" fill="#5a7048" data-page-node-id="U3nIsDmlhPTDCuNV8mCGiu"><circle cx="12" cy="12" r="6" data-page-node-id="dZOCdsiR7vR9YsTmgh6kTS"/></svg>
+          收藏
+        </span>
+        <span class="reaction-pill" data-page-node-id="6iEBgUfRULUNrTzH0nSL9U">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#2f2820" stroke-width="1.6" data-page-node-id="cXCkW8lW5eEYK2SbqVroTV"><path d="M5 12 L10 17 L19 7" data-page-node-id="GxfjqAdPMQmGB0ZgfJISDN"/></svg>
+          已读
+        </span>
+      </div>
+
+      <div class="history-hint" data-page-node-id="CaAMqB1IjhwPNcoonzCTvI">
+        <span data-page-node-id="St9ffqFeE9R7MdgA6bdKoB">PREVIOUS LETTERS · 往昔</span>
+        <div class="icon-line" data-page-node-id="NZE9rQo0DcuJv053HsLgTu">
+          <span class="ln" data-page-node-id="xUNVjBKe1CMFpaDEI4zMIf"></span>
+          <span data-page-node-id="LaekRm7MAHM2WJFoeAlRDZ">↧ 12 封</span>
+          <span class="ln" data-page-node-id="jArJeDCychFODlFJCD8tZ8"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

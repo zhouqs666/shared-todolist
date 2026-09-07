@@ -1,16 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <!-- 背景：饱和玫红渐变（深→浅，有立体感，对比强烈） -->
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#e11d48"/>
-      <stop offset="55%" stop-color="#be123c"/>
-      <stop offset="100%" stop-color="#9f1239"/>
-    </linearGradient>
-    <!-- 爱心：纯白到极浅粉（在深红背景上醒目、干净） -->
-    <linearGradient id="heartGrad" x1="0%" y1="0%" x2="50%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#fff1f2"/>
-    </linearGradient>
+<!-- 背景：v2.7.51 P3.2 暖焦糖渐变（深→浅，与 brand rose token 对齐） -->
+  <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#c2410c"/>
+    <stop offset="55%" stop-color="#a8340a"/>
+    <stop offset="100%" stop-color="#872a08"/>
+  </linearGradient>
+  <!-- 爱心：纯白到米杏白（cream-50） -->
+  <linearGradient id="heartGrad" x1="0%" y1="0%" x2="50%" y2="100%">
+    <stop offset="0%" stop-color="#ffffff"/>
+    <stop offset="100%" stop-color="#faf6f1"/>
+  </linearGradient>
     <!-- 爱心投影（增强立体） -->
     <filter id="heartShadow" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur in="SourceAlpha" stdDeviation="9"/>

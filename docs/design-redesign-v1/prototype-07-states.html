@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>原型 #07 · 状态合集 · 「有爱」v2 改版</title>
+<!--
+  3 个状态合并：
+  A · 空状态（没有待办 · 邀请她写第一个）
+  B · 加载骨架屏（首次进入 · shimmer）
+  C · 错误态（同步失败 · 重试）
+-->
+<style>
+:root {
+  --rose-50:#fdf5f0; --rose-100:#f9e3d4; --rose-200:#f1c4a8;
+  --rose-300:#e89e76; --rose-400:#d9774b; --rose-500:#c2410c;
+  --rose-600:#a8340a; --rose-700:#872a08; --rose-800:#6a1f06;
+  --cream-50:#fdfbf7; --cream-100:#faf6f1; --cream-200:#f3ebde;
+  --cream-300:#e8dcc6; --cream-400:#d6c4a3; --cream-500:#b8a17e;
+  --cream-600:#8e7752; --cream-700:#66553b; --cream-800:#3f3322;
+  --stone-50:#f8f6f3; --stone-100:#ede8e0; --stone-200:#d9d2c5;
+  --stone-300:#b8aea0; --stone-400:#928676; --stone-500:#6b6051;
+  --stone-600:#4a4135; --stone-700:#2f2820; --stone-800:#1a1610;
+  --legendary-300:#e8d49b; --legendary-500:#c1932e; --legendary-700:#8a6618;
+  --danger-500:#a8340a;
+
+  --color-primary:var(--rose-500);
+  --color-primary-rgb:194,65,12;
+  --color-text:var(--stone-700);
+  --color-text-muted:var(--stone-500);
+  --color-text-subtle:var(--stone-400);
+  --color-text-rose:var(--rose-500);
+  --color-border:var(--cream-300);
+  --color-border-subtle:var(--cream-200);
+  --color-bg:var(--cream-100);
+  --color-bg-elevated:var(--cream-50);
+
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:20px; --space-6:24px; --space-7:32px; --space-8:40px; --space-9:48px;
+  --radius-sm:8px; --radius-md:12px; --radius-lg:16px; --radius-xl:20px; --radius-2xl:28px; --radius-full:9999px;
+
+  --font-cn:"LXGW WenKai","Source Han Serif SC","Songti SC",serif;
+  --font-en:"Inter","SF Pro Text",system-ui,sans-serif;
+  --font-mono:"Berkeley Mono","JetBrains Mono",monospace;
+
+  --shadow-sm:0 2px 6px rgba(194,65,12,0.06);
+  --shadow-md:0 6px 18px rgba(194,65,12,0.10);
+  --shadow-lg:0 12px 32px rgba(194,65,12,0.14);
+}
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html, body { background:#3f3322; }
+body { font-family:var(--font-cn); color:var(--color-text); line-height:1.6; -webkit-font-smoothing:antialiased; }
+
+body {
+  background:radial-gradient(ellipse at center, #4a1605 0%, #231b10 100%);
+  min-height:100vh;
+  padding:80px 32px 60px;
+}
+.stage-label {
+  position:fixed; top:16px; left:24px;
+  color:var(--cream-300); font-family:var(--font-en);
+  font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+}
+.stage-tag {
+  position:fixed; top:16px; right:24px;
+  color:var(--rose-300); font-family:var(--font-en);
+  font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+}
+.page-title {
+  text-align:center;
+  margin-bottom:32px;
+}
+.page-title .overline {
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  letter-spacing:0.24em; text-transform:uppercase;
+  color:var(--cream-400);
+}
+.page-title h1 {
+  margin-top:6px;
+  font-family:var(--font-cn);
+  font-size:24px;
+  color:var(--cream-100);
+  font-weight:600;
+}
+
+.grid {
+  display:grid;
+  grid-template-columns:repeat(3, 390px);
+  gap:48px 32px;
+  justify-content:center;
+  max-width:1300px;
+  margin:0 auto;
+}
+.cell {
+  display:flex; flex-direction:column;
+  align-items:center;
+}
+.cell-label {
+  margin-bottom:16px;
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  letter-spacing:0.18em; text-transform:uppercase;
+  color:var(--cream-300);
+}
+.cell-label .num {
+  font-family:var(--font-mono);
+  color:var(--rose-300);
+  margin-right:8px;
+}
+
+.phone {
+  width:390px; height:844px;
+  background:var(--color-bg);
+  border-radius:48px;
+  box-shadow:
+    0 0 0 10px #1a1610,
+    0 0 0 11px #3f3322,
+    0 60px 120px rgba(0,0,0,0.45);
+  overflow:hidden;
+  position:relative;
+}
+
+/* Status Bar */
+.status-bar {
+  height:44px;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 28px;
+  font-family:var(--font-en); font-size:15px; font-weight:600;
+  color:var(--stone-800);
+}
+.status-bar .icons { display:flex; gap:6px; align-items:center; }
+
+/* TopBar */
+.topbar {
+  height:48px;
+  padding:0 16px;
+  display:flex; align-items:center; justify-content:space-between;
+  background:rgba(250,246,241,0.78);
+  backdrop-filter:blur(20px) saturate(180%);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  border-bottom:1px solid var(--cream-300);
+}
+.topbar .cluster { display:flex; gap:6px; }
+.topbar-icon {
+  width:36px; height:36px;
+  display:flex; align-items:center; justify-content:center;
+}
+.topbar .avatar {
+  display:flex; align-items:center; gap:8px;
+  padding-left:8px;
+  font-family:var(--font-cn);
+  font-size:13px;
+  color:var(--color-text-muted);
+}
+.topbar .avatar b { font-weight:600; color:var(--color-text); }
+.avatar-circle {
+  width:28px; height:28px;
+  border-radius:50%;
+  background:linear-gradient(135deg, var(--rose-200), var(--rose-400));
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:600;
+  color:var(--rose-700);
+  border:1.5px solid var(--cream-50);
+}
+
+/* =================================== */
+/* A · 空状态 */
+/* =================================== */
+.empty-state {
+  position:relative;
+  height:752px;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  padding:0 32px;
+  text-align:center;
+}
+.empty-state::before {
+  content:"";
+  position:absolute;
+  inset:0;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.04'/></svg>");
+  pointer-events:none;
+}
+.empty-illustration {
+  position:relative;
+  width:140px; height:140px;
+  margin-bottom:24px;
+  animation:float 4.8s ease-in-out infinite;
+}
+@keyframes float {
+  0%,100% { transform:translateY(0); }
+  50% { transform:translateY(-8px); }
+}
+.empty-state .overline {
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  letter-spacing:0.24em; text-transform:uppercase;
+  color:var(--color-text-subtle);
+  margin-bottom:12px;
+}
+.empty-state h2 {
+  font-family:var(--font-cn);
+  font-size:22px; font-weight:600;
+  color:var(--color-text);
+  margin-bottom:14px;
+  line-height:1.4;
+}
+.empty-state h2 em {
+  font-style:normal;
+  color:var(--color-text-rose);
+}
+.empty-state .desc {
+  font-family:var(--font-cn);
+  font-size:14px;
+  color:var(--color-text-muted);
+  line-height:1.7;
+  margin-bottom:28px;
+}
+.empty-cta {
+  display:flex; gap:12px;
+}
+.empty-cta .btn {
+  height:48px;
+  padding:0 20px;
+  border-radius:var(--radius-sm);
+  font-family:var(--font-cn);
+  font-size:14px; font-weight:600;
+  display:flex; align-items:center; justify-content:center; gap:6px;
+}
+.btn-primary { background:var(--color-primary); color:var(--cream-50); border:none; box-shadow:var(--shadow-md); }
+.btn-ghost { background:transparent; color:var(--color-text); border:1px solid var(--color-border); }
+
+.empty-foot {
+  position:absolute;
+  bottom:40px;
+  left:0; right:0;
+  text-align:center;
+  font-family:var(--font-cn);
+  font-style:italic;
+  font-size:12px;
+  color:var(--color-text-subtle);
+  line-height:1.7;
+}
+
+/* =================================== */
+/* B · 骨架屏 */
+/* =================================== */
+.skeleton-page {
+  padding:24px 16px;
+}
+.skeleton-hero {
+  height:120px;
+  background:linear-gradient(180deg, var(--cream-50), var(--cream-100));
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-lg);
+  margin-bottom:24px;
+  padding:18px 20px;
+  display:flex; flex-direction:column; gap:10px;
+}
+.shimmer {
+  background:linear-gradient(90deg, var(--cream-200) 25%, var(--stone-100) 50%, var(--cream-200) 75%);
+  background-size:200% 100%;
+  animation:shimmer 1.6s infinite;
+  border-radius:6px;
+}
+@keyframes shimmer {
+  0% { background-position:200% 0; }
+  100% { background-position:-200% 0; }
+}
+.shimmer.h10 { height:10px; }
+.shimmer.h14 { height:14px; }
+.shimmer.h20 { height:20px; }
+.shimmer.h32 { height:32px; }
+.shimmer.w40 { width:40%; }
+.shimmer.w50 { width:50%; }
+.shimmer.w60 { width:60%; }
+.shimmer.w70 { width:70%; }
+.shimmer.w90 { width:90%; }
+
+.skeleton-list-title {
+  display:flex; align-items:center; justify-content:space-between;
+  margin:0 0 12px;
+}
+.skeleton-list-title .lbl {
+  width:80px; height:12px;
+}
+.skeleton-list-title .count {
+  width:30px; height:10px;
+}
+
+.skeleton-card {
+  background:var(--cream-50);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-md);
+  padding:16px;
+  display:flex; flex-direction:column; gap:10px;
+  margin-bottom:10px;
+}
+.skeleton-card .row { display:flex; align-items:center; gap:10px; }
+.skeleton-card .check {
+  width:22px; height:22px;
+  border-radius:6px;
+  background:var(--cream-200);
+}
+.skeleton-card .check-h {
+  width:22px; height:22px;
+  border-radius:6px;
+  background:linear-gradient(90deg, var(--cream-200) 25%, var(--stone-100) 50%, var(--cream-200) 75%);
+  background-size:200% 100%;
+  animation:shimmer 1.6s infinite;
+}
+.skeleton-card .body { flex:1; }
+
+/* 加载提示 */
+.loading-hint {
+  margin:24px 16px;
+  padding:14px 18px;
+  background:var(--cream-50);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-md);
+  display:flex; align-items:center; gap:12px;
+  font-family:var(--font-cn);
+  font-size:13px;
+  color:var(--color-text-muted);
+}
+.spinner {
+  width:16px; height:16px;
+  border:2px solid var(--rose-200);
+  border-top-color:var(--rose-500);
+  border-radius:50%;
+  animation:spin 800ms linear infinite;
+}
+@keyframes spin {
+  to { transform:rotate(360deg); }
+}
+
+/* =================================== */
+/* C · 错误态 */
+/* =================================== */
+.error-state {
+  height:752px;
+  position:relative;
+  display:flex; flex-direction:column;
+}
+.error-alert {
+  margin:12px 16px 0;
+  padding:14px 16px;
+  background:rgba(168,52,10,0.06);
+  border:1px solid rgba(168,52,10,0.2);
+  border-radius:var(--radius-md);
+  display:flex; align-items:center; gap:10px;
+  font-family:var(--font-cn);
+  font-size:13px;
+  color:var(--rose-700);
+}
+.error-alert .glyph {
+  width:24px; height:24px;
+  background:var(--rose-500);
+  border-radius:50%;
+  color:var(--cream-50);
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+
+.error-state .center {
+  flex:1;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  padding:0 32px;
+  text-align:center;
+}
+.error-state .il {
+  width:96px; height:96px;
+  background:rgba(168,52,10,0.06);
+  border:1px dashed rgba(168,52,10,0.3);
+  border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  margin-bottom:24px;
+  color:var(--rose-700);
+}
+.error-state .overline {
+  font-family:var(--font-en);
+  font-size:11px; font-weight:600;
+  letter-spacing:0.24em; text-transform:uppercase;
+  color:var(--rose-700);
+  margin-bottom:10px;
+}
+.error-state h2 {
+  font-family:var(--font-cn);
+  font-size:20px; font-weight:600;
+  color:var(--color-text);
+  margin-bottom:12px;
+}
+.error-state p {
+  font-family:var(--font-cn);
+  font-size:13px;
+  color:var(--color-text-muted);
+  line-height:1.7;
+  margin-bottom:24px;
+  max-width:280px;
+}
+.error-state .retry-btn {
+  height:48px;
+  padding:0 24px;
+  background:var(--color-primary);
+  color:var(--cream-50);
+  border:none;
+  border-radius:var(--radius-sm);
+  font-family:var(--font-cn);
+  font-size:14px; font-weight:600;
+  display:flex; align-items:center; gap:8px;
+  box-shadow:var(--shadow-md);
+}
+
+.error-state .diag {
+  position:absolute;
+  left:16px; right:16px; bottom:60px;
+  background:var(--cream-50);
+  border:1px solid var(--color-border-subtle);
+  border-radius:var(--radius-md);
+  padding:14px 16px;
+}
+.error-state .diag .label {
+  font-family:var(--font-en);
+  font-size:10px; font-weight:600;
+  letter-spacing:0.18em; text-transform:uppercase;
+  color:var(--color-text-subtle);
+  margin-bottom:8px;
+}
+.error-state .diag .item {
+  display:flex; justify-content:space-between;
+  font-family:var(--font-mono);
+  font-size:11px;
+  padding:3px 0;
+  color:var(--color-text-muted);
+}
+.error-state .diag .item b { font-weight:500; color:var(--color-text); }
+.error-state .diag .item b.bad { color:var(--rose-700); }
+.error-state .diag .item b.ok { color:var(--moss-700, #37492c); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:120ms !important;
+    transition-duration:120ms !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="stage-label">PROTOTYPE · 07 · STATES</div>
+<div class="stage-tag">v1 · 改版稿</div>
+
+<div class="page-title">
+  <div class="overline">3 STATES · 状态合集</div>
+  <h1>空 · 加载 · 出错</h1>
+</div>
+
+<div class="grid">
+
+  <!-- ============ A · 空状态 ============ -->
+  <div class="cell">
+    <div class="cell-label"><span class="num">A</span>EMPTY STATE · 空状态</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="icons">
+          <span>●●●</span>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M1 8 Q8 0 15 8" stroke="#2f2820" stroke-width="1.2" fill="none"/><path d="M3.5 8 Q8 3 12.5 8" stroke="#2f2820" stroke-width="1.2" fill="none"/><circle cx="8" cy="8" r="1.4" fill="#2f2820"/></svg>
+          <svg width="24" height="11" viewBox="0 0 24 11"><rect x="0.5" y="0.5" width="20" height="10" rx="2" stroke="#2f2820" fill="none"/><rect x="2" y="2" width="16" height="7" rx="1" fill="#2f2820"/><rect x="21" y="3" width="2" height="5" rx="1" fill="#2f2820"/></svg>
+        </div>
+      </div>
+      <div class="topbar">
+        <div class="cluster">
+          <span class="topbar-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24"><path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" fill="none" stroke="#c2410c" stroke-width="1.6"/></svg>
+          </span>
+        </div>
+        <div class="avatar">
+          <span>小<b>宝</b>贝</span>
+          <div class="avatar-circle">小</div>
+        </div>
+      </div>
+
+      <div class="empty-state">
+        <div class="empty-illustration">
+          <svg viewBox="0 0 140 140">
+            <!-- 信封 -->
+            <rect x="20" y="50" width="100" height="68" rx="6" fill="#fdfbf7" stroke="#d6c4a3" stroke-width="1.5"/>
+            <path d="M20 56 L70 88 L120 56" fill="none" stroke="#d6c4a3" stroke-width="1.5" stroke-linejoin="round"/>
+            <!-- 心 -->
+            <g transform="translate(50 25)">
+              <path d="M20 32 C 6 22, 4 12, 10 8 C 14 6, 20 10, 20 12 C 20 10, 26 6, 30 8 C 36 12, 34 22, 20 32 Z"
+                    fill="#c2410c" opacity="0.9"/>
+              <path d="M20 32 C 6 22, 4 12, 10 8 C 14 6, 20 10, 20 12 C 20 10, 26 6, 30 8 C 36 12, 34 22, 20 32 Z"
+                    fill="none" stroke="#2f2820" stroke-width="1.2" transform="translate(4 3) scale(0.85)" opacity="0.5"/>
+            </g>
+            <!-- 小花瓣装饰 -->
+            <ellipse cx="14" cy="36" rx="4" ry="8" fill="#f9c9d6" opacity="0.6" transform="rotate(-25 14 36)"/>
+            <ellipse cx="128" cy="120" rx="4" ry="8" fill="#f9c9d6" opacity="0.6" transform="rotate(60 128 120)"/>
+            <ellipse cx="118" cy="28" rx="3" ry="6" fill="#cdb8e0" opacity="0.5" transform="rotate(40 118 28)"/>
+          </svg>
+        </div>
+
+        <div class="overline">EMPTY · 等你们写下第一笔</div>
+        <h2>这里还没有<em>想做的事</em>，<br>但很快就会有的</h2>
+        <div class="desc">
+          和大宝贝一起写下第一件想做的事吧。<br>
+          它会是最平凡、也最珍贵的一条。
+        </div>
+
+        <div class="empty-cta">
+          <button class="btn btn-primary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#faf6f1" stroke-width="2" stroke-linecap="round"><path d="M12 5 V19 M5 12 H19"/></svg>
+            写下第一个
+          </button>
+          <button class="btn btn-ghost">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8 L12 14 L21 8 M3 8 V18 H21 V8 M3 8 L12 3 L21 8"/></svg>
+            邀请她一起
+          </button>
+        </div>
+
+        <div class="empty-foot">
+          「等一个清晨、一次散步、一句想念<br>
+          都是值得记录的小事」
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ B · 骨架屏 ============ -->
+  <div class="cell">
+    <div class="cell-label"><span class="num">B</span>LOADING · 加载骨架屏</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="icons">
+          <span>●●●</span>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M1 8 Q8 0 15 8" stroke="#2f2820" stroke-width="1.2" fill="none"/><path d="M3.5 8 Q8 3 12.5 8" stroke="#2f2820" stroke-width="1.2" fill="none"/><circle cx="8" cy="8" r="1.4" fill="#2f2820"/></svg>
+          <svg width="24" height="11" viewBox="0 0 24 11"><rect x="0.5" y="0.5" width="20" height="10" rx="2" stroke="#2f2820" fill="none"/><rect x="2" y="2" width="16" height="7" rx="1" fill="#2f2820"/><rect x="21" y="3" width="2" height="5" rx="1" fill="#2f2820"/></svg>
+        </div>
+      </div>
+      <div class="topbar">
+        <div class="cluster">
+          <span class="topbar-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24"><path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" fill="none" stroke="#c2410c" stroke-width="1.6"/></svg>
+          </span>
+        </div>
+        <div class="avatar">
+          <span>小<b>宝</b>贝</span>
+          <div class="avatar-circle">小</div>
+        </div>
+      </div>
+
+      <div class="skeleton-page">
+        <div class="skeleton-hero">
+          <div class="shimmer h10 w40"></div>
+          <div class="shimmer h20 w70"></div>
+          <div class="shimmer h14 w50"></div>
+        </div>
+
+        <div class="skeleton-list-title">
+          <div class="shimmer lbl"></div>
+          <div class="shimmer count"></div>
+        </div>
+
+        <div class="skeleton-card">
+          <div class="row">
+            <div class="check-h"></div>
+            <div class="body"><div class="shimmer h14 w60"></div></div>
+          </div>
+          <div class="shimmer h10 w90"></div>
+          <div class="shimmer h32 w60"></div>
+        </div>
+
+        <div class="skeleton-card">
+          <div class="row">
+            <div class="check"></div>
+            <div class="body"><div class="shimmer h14 w40"></div></div>
+          </div>
+          <div class="shimmer h10 w70"></div>
+        </div>
+
+        <div class="skeleton-card">
+          <div class="row">
+            <div class="check"></div>
+            <div class="body"><div class="shimmer h14 w70"></div></div>
+          </div>
+          <div class="shimmer h10 w50"></div>
+          <div class="shimmer h32 w90"></div>
+        </div>
+
+        <div class="loading-hint">
+          <div class="spinner"></div>
+          <span>正在慢慢打开我们的角落…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ C · 错误态 ============ -->
+  <div class="cell">
+    <div class="cell-label"><span class="num">C</span>ERROR · 错误态</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="icons">
+          <span style="color:var(--rose-700);">● ···</span>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M1 8 Q8 0 15 8" stroke="#a8340a" stroke-width="1.2" fill="none"/><path d="M3.5 8 Q8 3 12.5 8" stroke="#a8340a" stroke-width="1.2" fill="none"/><circle cx="8" cy="8" r="1.4" fill="#a8340a"/></svg>
+          <svg width="24" height="11" viewBox="0 0 24 11"><rect x="0.5" y="0.5" width="20" height="10" rx="2" stroke="#a8340a" fill="none"/><rect x="2" y="2" width="16" height="7" rx="1" fill="#a8340a"/><rect x="21" y="3" width="2" height="5" rx="1" fill="#a8340a"/></svg>
+        </div>
+      </div>
+      <div class="topbar">
+        <div class="cluster">
+          <span class="topbar-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24"><path d="M12 21 C 4 13, 2 8, 6 5 C 9 3, 12 6, 12 8 C 12 6, 15 3, 18 5 C 22 8, 20 13, 12 21 Z" fill="none" stroke="#c2410c" stroke-width="1.6"/></svg>
+          </span>
+        </div>
+        <div class="avatar">
+          <span>小<b>宝</b>贝</span>
+          <div class="avatar-circle">小</div>
+        </div>
+      </div>
+
+      <div class="error-state">
+        <div class="error-alert">
+          <span class="glyph">!</span>
+          <span>同步失败 · 3 条改动暂存本地</span>
+        </div>
+
+        <div class="center">
+          <div class="il">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 4 L2 20 H22 Z"/>
+              <path d="M12 10 V14"/>
+              <circle cx="12" cy="17" r="0.8" fill="currentColor"/>
+            </svg>
+          </div>
+
+          <div class="overline">CONNECTION LOST · 暂时联系不上</div>
+          <h2>消息还没飞到她那边</h2>
+          <p>不着急，我们已经把你的心意暂时保管着。<br>网络恢复后，会安静地、一次性送达。</p>
+
+          <button class="retry-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12 a 9 9 0 1 0 3 -6"/>
+              <path d="M3 4 V10 H9"/>
+            </svg>
+            重新尝试
+          </button>
+        </div>
+
+        <div class="diag">
+          <div class="label">DIAGNOSIS · 状况</div>
+          <div class="item">
+            <span>NETWORK</span>
+            <b class="bad">DISCONNECTED · 离线</b>
+          </div>
+          <div class="item">
+            <span>LOCAL CACHE</span>
+            <b class="ok">3 PENDING · 已暂存</b>
+          </div>
+          <div class="item">
+            <span>LAST SYNC</span>
+            <b>04 MIN AGO</b>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
