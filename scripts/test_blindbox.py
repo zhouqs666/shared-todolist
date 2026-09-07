@@ -97,7 +97,9 @@ with sync_playwright() as p:
         check("legendary 占比约10%", 0.05 < legendary_share < 0.16, f"实际 {legendary_share:.0%}")
         check("isHidden 识别", True)  # 已在概率分布间接验证
 
-        # applyRarity 测试：模拟一个 todo li，应用各稀有度，检查 class 和角标
+        # applyRarity 测试：模拟一个 todo li，应用各稀有度，检查 class
+        # 注意：稀有度的视觉区分已从「角标节点」改为 CSS 渐变+四边细边框（style.css .todo--rare 等），
+        # applyRarity 只负责打 class，不再创建 .todo__rarity-badge 节点。
         dom_result = page.evaluate("""async () => {
             const mod = await import('/js/blindbox.js');
             const results = {};
@@ -105,28 +107,23 @@ with sync_playwright() as p:
                 const li = document.createElement('li');
                 li.className = 'todo';
                 mod.applyRarity(li, { rarity });
-                const badge = li.querySelector('.todo__rarity-badge');
-                results[rarity] = {
-                    classes: li.className,
-                    hasBadge: !!badge,
-                };
+                results[rarity] = { classes: li.className };
             }
             return results;
         }""")
         check("common 无稀有度 class", "todo--rare" not in dom_result["common"]["classes"] and "todo--epic" not in dom_result["common"]["classes"])
-        check("common 无角标", dom_result["common"]["hasBadge"] is False)
         check("rare 有 todo--rare class", "todo--rare" in dom_result["rare"]["classes"])
-        check("rare 有角标", dom_result["rare"]["hasBadge"] is True)
         check("epic 有 todo--epic class", "todo--epic" in dom_result["epic"]["classes"])
-        check("epic 有角标", dom_result["epic"]["hasBadge"] is True)
         check("legendary 有 todo--legendary class", "todo--legendary" in dom_result["legendary"]["classes"])
-        check("legendary 有角标", dom_result["legendary"]["hasBadge"] is True)
 
         # 图鉴弹层测试
         print()
         print("=" * 60)
         print("5. 图鉴弹层")
         print("=" * 60)
+        # 等 init 就绪：主列表渲染完成（listTodos 在 initStickerBook 之后，主列表出来 = 图鉴入口已绑定）
+        # 用固定 sleep 会因 Supabase 冷启动波动（auth+profiles 2~10s）而时序脆弱，改等真实信号
+        page.wait_for_selector('#todoList .todo, #todoList .todo-list__empty', timeout=30000)
         page.locator('#stickerEntry').click()
         page.wait_for_timeout(800)
         modal_visible = page.locator('#stickerModal').is_visible()

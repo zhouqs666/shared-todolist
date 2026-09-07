@@ -175,6 +175,12 @@ function hideLoading() {
   // 核心交互尽早绑定（不依赖通知初始化，避免用户在通知加载期间点击无响应）
   bindEvents();
 
+  // 图鉴入口尽早绑定（只绑 DOM 事件，不依赖 auth/listTodos/通知/stickers 数据）。
+  // 修复（2026-09-07）：initStickerBook 原在 listStickers 之后，而 listStickers 冷启动慢（3~20s），
+  // 导致图鉴入口在冷启动头几秒点不开。提前到 bindEvents 后（auth+profiles 一完成即可点）。
+  // 红点/网格渲染不依赖此处时序：setStickers 异步到达后经 setStickersRenderFn 自动刷新。
+  initStickerBook({ onStickerUnlockedView: onStickerUnlockedView });
+
   // 初始化本地通知（APP 内弹系统通知；网页降级为 no-op）
   // 必须 await：initNotify 内部加载 Capacitor 脚本并确定 isNative，
   // 后续 SW 注册判断、requestPermission 都依赖它完成
@@ -204,15 +210,13 @@ function hideLoading() {
     render(getTodos());
   }
 
-  // 拉取图鉴全量（两人共享）+ 初始化图鉴模块（红点/弹层）
-  // 容错：stickers 表可能未建（迁移未执行），失败静默，不影响主流程
-  try {
-    const stickers = await db.listStickers();
-    setStickers(stickers);
-  } catch (err) {
-    console.warn('[app] 图鉴加载失败（已忽略）:', err.message);
-  }
-  initStickerBook({ onStickerUnlockedView: onStickerUnlockedView });
+  // 图鉴：预加载贴纸数据（异步 fire-and-forget，不阻塞 init 关键路径）。
+  // 数据到达后 setStickers 经 setStickersRenderFn 自动刷新红点；入口绑定已在 bindEvents 后完成。
+  // openStickerBook 打开时还会二次拉取兜底。
+  // 容错：stickers 表可能未建（迁移未执行），失败静默，不影响主流程。
+  db.listStickers()
+    .then((stickers) => setStickers(stickers))
+    .catch((err) => console.warn('[app] 图鉴加载失败（已忽略）:', err.message));
 
   // 初始化回收站（软删除 UI 层）：恢复后把 todo 加回主列表
   initTrash({
