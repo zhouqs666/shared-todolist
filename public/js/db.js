@@ -13,25 +13,10 @@
 import { supabase } from './supabase.js';
 import { avatarForUsername } from './avatars.js';
 import { toExternal, toNote, toSticker } from './transforms.js';
+import { storagePathFromUrl } from './storage-utils.js';
 
 // toExternal 已抽到 ./transforms.js（消除与 realtime.js 的双份维护，技术优化清单第6条）
-
-/**
- * 从 Supabase Storage 的 public URL 里解析出 object path（用于 remove）。
- * URL 形如：https://xxx.supabase.co/storage/v1/object/public/todo-attachments/<todoId>/<file>.jpg
- * 返回 <todoId>/<file>.jpg；解析失败返回 null。
- */
-function storagePathFromUrl(url) {
-  if (!url) return null;
-  try {
-    const marker = '/object/public/todo-attachments/';
-    const idx = url.indexOf(marker);
-    if (idx < 0) return null;
-    return url.slice(idx + marker.length);
-  } catch (e) {
-    return null;
-  }
-}
+// storagePathFromUrl 已抽到 ./storage-utils.js（消除与 image-utils.js 的双份维护，2026-09-07 基线审查）
 
 /**
  * 清理 Storage 中的对象文件（批量 remove，失败静默）。
@@ -200,7 +185,7 @@ export const db = {
         const urls = Array.isArray(row.image_paths) && row.image_paths.length
           ? row.image_paths
           : row.image_path ? [row.image_path] : [];
-        objectPaths = urls.map(storagePathFromUrl).filter(Boolean);
+        objectPaths = urls.map((u) => storagePathFromUrl(u, 'todo-attachments')).filter(Boolean);
       }
     } catch (e) {
       console.warn('[db] 读取待删除图片路径失败（继续物理删除）:', e.message);

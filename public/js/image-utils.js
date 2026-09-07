@@ -10,6 +10,7 @@
  */
 
 import { supabase } from './supabase.js';
+import { storagePathFromUrl } from './storage-utils.js';
 
 const BUCKET = 'todo-attachments';
 const SHORT_EDGE_MAX = 1280; // 短边阈值：超过才压缩
@@ -148,11 +149,9 @@ export async function uploadTodoImage(todoId, file) {
  * @param {string} url 图片 public URL
  */
 export async function removeTodoImage(url) {
+  const path = storagePathFromUrl(url, BUCKET);
+  if (!path) return;
   try {
-    const marker = `/object/public/${BUCKET}/`;
-    const idx = url.indexOf(marker);
-    if (idx < 0) return;
-    const path = url.slice(idx + marker.length);
     await supabase.storage.from(BUCKET).remove([path]);
   } catch (e) {
     console.warn('[image] 删除图片失败:', e.message);
