@@ -44,3 +44,12 @@ android/app/release/
 *.jks
 keystore.properties
 
+# 工作区记忆（本机，不提交）
+.workbuddy/
+
+# 发布临时产物
+.release-tmp/
+
+# 调试探针脚本（临时排查用）
+scripts/_debug-*.mjs
+

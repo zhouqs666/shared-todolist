@@ -26,10 +26,10 @@
 
 **所有功能开发完成、交付前，必须经过模拟器全面测试，不能凭想象宣布"完成"。**
 
-- ✅ 必须用 Playwright（或模拟器）跑真实业务流程验证
+- ✅ 核心流程 / 双端同步：用 Playwright 跑真实业务流程（Python 脚本 `scripts/test_*.py`，双账号 E2E，登录 `小宝宝`/`大宝贝`）
+- ✅ 局部回归：可用 Node 脚本 `scripts/test_*.mjs`（允许 mock Supabase，但**必须标注"未写生产"**）
 - ✅ 必须覆盖：核心功能、边界情况、错误处理、Realtime 双端同步
 - ✅ 测试要真实验证结果（截图、断言、状态检查），不能只看"没报错"就算过
-- ✅ 涉及多端的（如留言发送/接收），必须双账号 E2E 验证
 
 **如果有硬限制导致无法完整验证：**
 - 必须在交付时**明确列出未验证的功能点**
@@ -42,14 +42,14 @@
 
 **改完代码 ≠ 交付。用户手机上跑的是 APK 内置的 web 资源，不是你电脑上的源码。改完必须发布，否则用户永远看不到改动。**
 
-有两条交付通道，按改动类型选择：
+有两条交付通道 + 一条 App 内自更新机制：
 
 ### 通道 A：热更新（默认，纯前端改动走这条）
 
 **适用**：只改了 `public/` 下的文件（HTML/CSS/JS、图片等），没动 Android 原生层（Capacitor 插件、`capacitor.config.json`、`AndroidManifest.xml` 等）。
 
 - ✅ 改完代码 + 测试通过后，跑 `node scripts/release.mjs <版本号> --notes "<说明>"`
-- 脚本自动：注入版本号 → 打包 public/ 为 zip → 上传 Supabase Storage → 写 `app_versions` 表
+- 脚本自动：注入版本号 → 打包 public/ 为 zip → 上传 Supabase Storage（`app_updates` bucket）→ 写 `app_versions` 表
 - 用户下次**冷启动** App 时自动拉取，无需重装 APK
 - ✅ 告知用户：杀掉 App 重开两次（首次后台下载，二次生效）
 
@@ -63,9 +63,16 @@
 
 **适用**：改了 Capacitor 插件、Android 配置、`capacitor.config.json`、原生权限等，热更新覆盖不到的地方。
 
-- ✅ `cap sync` → `gradlew assembleRelease` → 复制到 `~/Desktop/有爱.apk`
-- ✅ 打包后必须验证：构建时间（确认是最新）、签名通过（apksigner verify）、关键改动已入包（unzip 检查）
+- ✅ 跑 `node scripts/release-apk.mjs <版本号>`（自动：cap sync → gradle 打包 → 写 `app_native_versions` 表 → 上传 APK → 覆盖 `~/Desktop/有爱.apk`）
+- ✅ 打包后必须验证：构建时间（确认是最新）、签名通过（`apksigner verify`）、关键改动已入包（unzip 检查）
 - ✅ 告知用户明确的 APK 路径和构建时间
+
+### APK 自更新机制（App 内提示升级，与"打 APK"区分）
+
+- `public/js/apk-update.js`：冷启动 + 前台切回（60 秒节流）时，用 `App.getInfo()` 读**真实 versionName**（非热更新 meta 值），与线上 `app_native_versions` 最新版本比对
+- 命中更新 → 原生插件 `ApkInstaller` 下载（**sha256 校验**）→ 唤起系统安装器
+- **强制更新**：`is_force_update=true` 或本地 < `min_supported_version` 时，更新面板不可关闭
+- **版本号纪律**：`versionCode` 必须**严格递增**（脚本强制校验）
 
 ### APK 文件名固定，必须覆盖（不要堆积）
 
@@ -74,11 +81,11 @@
 - ✅ 打包后用固定文件名覆盖：`cp app-release.apk ~/Desktop/有爱.apk`（不是带时间戳的 `有爱-20260803_0705.apk`）
 - ✅ 打包前先清理桌面的历史 APK（含旧时间戳文件名），只留覆盖后的那一个
 - ❌ 禁止生成 `有爱-时间戳.apk` 这类带版本/时间的文件名，会造成一堆 APK 堆积，用户分不清哪个是最新
-- **血泪教训：** 多次打包用了带时间戳文件名，桌面累积了 `有爱-20260802_2237.apk` / `有爱-20260802_2300.apk` / `有爱-20260803_0705.apk` 一堆，用户困惑哪个能装。从此固定单一文件名 + 覆盖。
+- **血泪教训：** 多次打包用了带时间戳文件名，桌面累积了一堆，用户困惑哪个能装。从此固定单一文件名 + 覆盖。
 
 ### SQL 迁移要可直接复制，不要只放文件里
 
-**需要用户在 Supabase Dashboard 执行的 SQL，必须在交付回复里直接贴出可复制的完整 SQL，不能只写进 `.sql` 文件让用户自己去找。**
+**任何需要用户在 Supabase Dashboard 执行的 SQL，必须在交付回复里直接贴出可复制的完整 SQL，不能只写进 `.sql` 文件让用户自己去找。**
 
 - ✅ 在对话回复里用代码块贴出**完整、可直接复制**的 SQL（用户全选 → 粘到 SQL Editor → Run）
 - ✅ SQL 必须幂等（`ADD COLUMN IF NOT EXISTS` / `ON CONFLICT DO NOTHING` / `DROP POLICY IF EXISTS`），可重复执行不出错
@@ -87,22 +94,77 @@
 - ❌ 禁止只创建 `.sql` 文件然后说"见某某文件"，用户得自己打开文件复制
 - **血泪教训：** 图片功能交付时 SQL 只写进了 `migration-add-todo-images.sql`，用户没看到可复制版本，差点漏执行，导致功能装上用不了。
 
+### 发布前 5 步自检（每次发布都要走一遍）
+
+1. 查线上 `app_versions` 最新版本号，新版本必须语义化更大
+2. 跑回归测试（`scripts/test_*.py` + `scripts/test_*.mjs`），截图/断言确认
+3. 涉及 SQL 改动 → 对话里贴可复制完整 SQL（不是只放 `.sql` 文件）
+4. 涉及 APK 改动 → `apksigner verify` + 检查构建时间 + unzip 确认改动入包
+5. 交付回复列明"已做 X / 已验证 Y / 未验证 Z"（铁律二的硬限制要标）
+
+---
+
+## 铁律四：代码改动需同步更新文档
+
+**代码和文档脱节 = 事故温床。任何改动都必须同步到对应文档。**
+
+- 新增 / 修改数据库表字段 → 同步更新 `PRODUCT-SPEC.md` 的「数据模型」章节
+- 新增 / 修改发布通道、原生插件、构建机制 → 同步更新本文档「铁律三」与「技术栈备忘」
+- 新增 / 修改产品功能 → 同步更新 `PRODUCT-SPEC.md` 的「功能规格」章节
+- 废弃 / 删除旧机制 → 同步清理相关文档描述（不要留下"已死代码"的文档）
+- **开发前先自查**：本次改动是否需要更新文档？需要就先改文档，再改代码。
+
+---
+
+## 铁律五：代码改动自动提交（改完即提交，不再每次询问）
+
+**原则**：一个功能/批次开发完成、测试通过后，自动 `git commit`，不再每次结尾问"要不要提交"。未测试通过、开发中途状态不提交。
+
+### 提交时机（自动触发）
+- 功能开发完成 + 回归测试通过 → 自动 commit
+- 发布（热更新/APK）完成后 → 自动 commit
+- 纯文档改动 → 改完即 commit
+
+### 提交前自检（自动执行，不打扰用户）
+1. `git status` 查看改动清单，确认无敏感文件混入
+2. 确认 `.env` / `*.keystore` / `node_modules` 未进暂存区（已 `.gitignore` 兜底）
+3. 确认无调试残留（`scripts/_debug-*.mjs`、`.release-tmp/`、`.probe/`）
+
+### 提交边界（安全红线）
+- **只 commit，不 push**（push 到 GitHub 需单独指令，绝不自动）
+- 永不提交：`.workbuddy/`（本机记忆）、调试探针、临时产物
+- 用 `git add` 指定文件/目录，不用裸 `git add -A` 一把梭
+
+### commit message 规范（Conventional Commits，中文描述）
+- `feat:` 新功能 / `fix:` 修复 / `refactor:` 重构 / `docs:` 文档 / `chore:` 杂项
+- 一个功能一个 commit，说清"做了什么"；一次发布版本 = 一个原子提交
+
+### 例外（遇到必须停下询问）
+- 改动中混入不属于本次任务的修改 → 先确认范围再提交
+- 检测到敏感文件 → 停下
+- 测试未通过 / 功能未完成 → 不提交
+
 ---
 
 ## 补充：软删除（回收站）机制
 
-鉴于数据丢失的惨痛教训，所有数据的"删除"操作都应改为**软删除**：
-- 数据库加 `deleted_at` 字段，删除只标记时间戳，不物理移除
-- 定期（如 30 天）才真正物理清理
-- 这是防止误删/恶意删除的最后保障（待实现）
+鉴于数据丢失的惨痛教训，所有数据的"删除"操作都采用**软删除**：
+- ✅ **数据层已实现**：`todos.deleted_at`、`daily_notes.deleted_at` 字段，删除只打时间戳，不物理移除
+- ✅ **UI 层已实现**：回收站入口 + 恢复 / 永久删除（H1）、删除撤销 Toast（H2）
+- ⏳ **定期清理**：30 天后真正物理清理（`scripts/cleanup-deleted.mjs` 占位，可手动跑）
+- 这是防止误删/恶意删除的最后保障
 
 ---
 
 ## 技术栈备忘
 
-- 前端：原生 HTML/CSS/JS（无框架），ES Module
-- 后端：Supabase（PostgreSQL + Auth + Realtime），无自建服务器
-- 打包：Capacitor → Android APK
-- **热更新**：`scripts/release.mjs` 打包 public/ 上传 Supabase（`app_updates` bucket + `app_versions` 表），客户端 `public/js/update.js` 启动时检查并下载。纯前端改动走热更新，原生改动才打 APK。
-- 测试：Playwright headless Chromium（双账号 E2E）
-- 本地服务：`node scripts/serve.mjs`（端口 3000）
+- **前端**：原生 HTML/CSS/JS（无框架），ES Module
+- **后端**：Supabase（PostgreSQL + Auth + Realtime），无自建服务器
+- **打包**：Capacitor → Android APK（`com.love.todo`）
+- **发布**：热更新（`release.mjs`）+ APK（`release-apk.mjs`）+ App 内自更新（`apk-update.js` + `ApkInstaller`）
+- **PWA**：`manifest.webmanifest` + `sw.js`（Service Worker v15，仅浏览器环境生效，原生环境 bypass）
+- **Capacitor 插件**：`SystemBars` / `LocalNotifications` / `SplashScreen` / `CapacitorUpdater`（热更）/ 自研 `ApkInstaller`（APK 自更）
+- **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
+- **测试**：Playwright（Python 双账号 E2E）+ Node 局部回归（可 mock）
+- **本地服务**：`node scripts/serve.mjs`（端口 3000）
+- **埋点状态**：⚠️ 目前零埋点，无法回答"哪个功能最常用""两人一天互动几次"。补基础埋点（北极星 = 双端同日活跃天数）在路线图 P0。
