@@ -327,14 +327,29 @@ input {
 }
 
 /* ===== 按钮 ===== */
+/* v2.7.52 A1 按钮升级：显式 height / font-size / font-weight，
+   配合 hover translateY(-1px) + 内部高光 + active scale 0.97（设计 prototype-01/06 期望） */
 .btn {
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
-  /* v2.7.49 Button 升级：内距 6px 14px → 10px 16px（更宽松，符合"被珍视"调性） */
-  padding: 10px 16px;
+  /* v2.7.49 Button 升级：内距 6px 14px → 10px 16px */
+  /* v2.7.52：补 height 44px（中等按钮）+ font-size 14px + font-weight 500 + gap 8px（与设计原型对齐） */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   border-radius: var(--radius-sm);
-  transition: background 0.15s, border-color 0.15s, transform 0.1s, opacity 0.1s;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.18s var(--ease), border-color 0.18s var(--ease),
+              transform 0.12s var(--ease), box-shadow 0.18s var(--ease), opacity 0.1s;
 }
 
 .btn:hover {
@@ -344,18 +359,100 @@ input {
 /* 按压反馈：移动端点按有"按下去"的实在感 */
 .btn:active {
   transform: scale(0.96);
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
+/* 按钮内部径向高光（hover 时浮现，借鉴设计 prototype-01） */
+.btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.22), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.2s var(--ease);
+  pointer-events: none;
+}
+
+/* 主按钮：填充 rose-500 + hover 抬升 + 高光 */
 .btn--primary {
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: #fff;
+  box-shadow: var(--shadow-md);
 }
 
 .btn--primary:hover {
   background: var(--color-primary-dark);
   border-color: var(--color-primary-dark);
+  transform: translateY(-1px); /* hover 轻微抬升（设计原型期望） */
+  box-shadow: var(--shadow-lg);
+}
+.btn--primary:hover::after { opacity: 1; }
+.btn--primary:active { transform: scale(0.97); opacity: 1; }
+
+/* v2.7.52 A2 按钮 btn-ghost 变体：透明底 + 1px 米杏边，用于次要操作
+   （设计原型期望：font-size 14px + height 48px + 可前置 dot 装饰） */
+.btn--ghost {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+.btn--ghost:hover {
+  background: rgba(168, 52, 10, 0.04); /* 暖色 hover 微染色 */
+  border-color: var(--rose-300);
+}
+.btn--ghost:active { background: rgba(168, 52, 10, 0.06); }
+
+/* 前置圆点：6×6 rose-500 + margin-right 8px（设计 prototype-01 期望） */
+.btn--ghost .dot {
+  width: 6px;
+  height: 6px;
+  background: var(--rose-500);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* v2.7.52 A3 按钮 btn-half（半宽双按钮）：flex:1 + height 48px，用于"确认/取消"并排
+   设计原型 btn-half 期望（proto-06 update-actions） */
+.btn--half {
+  flex: 1;
+  height: 48px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* v2.7.52 A4 Spinner（16px 圆环）：rose-200 边 + rose-500 顶边，800ms 旋转
+   设计 prototype-07 期望 */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--rose-200);
+  border-top-color: var(--rose-500);
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 1.6s; } /* 慢速 fallback */
+}
+
+/* v2.7.52 A5 Loading-hint（spinner + 文案）：左 spinner 16px + 右 13px 米杏字
+   设计 prototype-07 期望：用于首屏"加载中..."、离线重连等场景 */
+.loading-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-family: var(--font-cn);
+  font-size: 13px;
+  color: var(--color-text-muted);
 }
 
 /* ===== 主容器 ===== */
