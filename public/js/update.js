@@ -19,13 +19,17 @@
  */
 
 // 当前前端版本（发布脚本会写入 index.html 的 meta）
+// 注意：不要改成 async！之前试过读 Updater.getBuiltinVersion()，但该接口在某些状态下抛异常
+// 导致 fallback 到 meta 默认值 → 永远小于服务器版本 → 无限下载 reload 死循环（2026-09-05 血泪教训）。
+// 正确做法：release.mjs 打包 zip 时注入 meta + 同步更新 public/index.html 的 meta，
+// 确保下次 APK 构建时壳内置的 meta 和最新 bundle 版本一致。
 function getLocalVersion() {
   const meta = document.querySelector('meta[name="app-version"]');
   return (meta && meta.content) || '0.0.0';
 }
 
-// 语义化版本比较：返回 -1 / 0 / 1
-function compareVersions(a, b) {
+// 语义化版本比较：返回 -1 / 0 / 1（apk-update.js 也复用，壳/bundle 两套更新同一套比较语义）
+export function compareVersions(a, b) {
   const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
   const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
   const len = Math.max(pa.length, pb.length);

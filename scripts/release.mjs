@@ -154,9 +154,14 @@ async function main() {
       return;
     }
 
-    // 3. 还原 index.html
-    await writeFile(INDEX_HTML, originalHtml, 'utf8');
-    console.log('  ✓ index.html 已还原');
+    // 3. 还原 index.html —— 改为不还原，让 meta 保持最新版本号！
+    // 为什么：release.mjs 打包 zip 时会把 meta 注入新版本，但之前打包完立即还原了 public/index.html。
+    // 这导致下次 APK 构建时壳内置的 meta 还是旧值（如 2.4.6），getLocalVersion() 读旧值 →
+    // 服务器最新 bundle（如 2.7.31）> 旧值 → 壳更新装完新 APK 又重复拉一遍热更新（双重重启）。
+    // 修复：打包完不再还原，让 index.html 的 meta 和最新 bundle 版本同步，
+    // 确保下次 gradlew assembleRelease 时壳内置 meta 就是对的。
+    // 如果需要回退，手动改 index.html 即可（或 git checkout public/index.html）。
+    console.log('  ✓ index.html meta 已更新为 ' + VERSION + '（不再还原，确保下次 APK 构建壳内置 meta 正确）');
 
     // 4. 上传
     console.log('\n  → 连接 Supabase（service_role）...');
@@ -190,11 +195,9 @@ async function main() {
     console.log(`\n   App 下次冷启动时自动检查并下载；下载完成后再次启动生效。\n`);
 
   } finally {
-    // 保底：确保 index.html 还原 + 清理临时 zip
+    // 保底：index.html meta 不再还原（保持最新版本号，确保下次 APK 构建壳内置 meta 正确），
+    // 只清理临时 zip
     try {
-      if (readFileSync(INDEX_HTML, 'utf8') !== originalHtml) {
-        await writeFile(INDEX_HTML, originalHtml, 'utf8');
-      }
       if (existsSync(ZIP_PATH) && !dryRun) unlinkSync(ZIP_PATH);
     } catch { /* ignore */ }
   }

@@ -4,11 +4,16 @@ import android.os.Bundle;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
+import com.love.todo.plugins.ApkInstallerPlugin;
 
 public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // App 内 APK 更新插件必须在 super.onCreate() 之前注册——
+        // BridgeActivity 在 super 内部会初始化插件注册表，之后再调 registerPlugin 就晚了。
+        registerPlugin(ApkInstallerPlugin.class);
+
         // super 内部完成 setTheme(NoActionBar) + setContentView(WebView 布局) + 插件加载
         // 返回后 window 已绑定到 NoActionBar 主题，此时配置系统栏不会被后续 setTheme 重置
         super.onCreate(savedInstanceState);

@@ -40,4 +40,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- 安卓 13+ 本地通知需要运行时申请此权限 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- App 内更新：安卓 8+ 通过系统安装器安装下载好的 APK 必需 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- 完成庆祝 / 表情点击的 navigator.vibrate（缺此权限真机静默失效） -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 </manifest>
