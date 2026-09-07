@@ -1269,7 +1269,9 @@ input {
 .action-sheet__overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  /* 高于弹层（图鉴/历史弹层 z-index:1000），保证在弹层内长按待办时
+     操作菜单不被弹层遮挡（2026-09-08 修复：历史页长按菜单被弹层拦截） */
+  z-index: 1100;
   background: rgba(0, 0, 0, 0);
   display: flex;
   align-items: flex-end;
@@ -2910,6 +2912,55 @@ input {
   display: none;
 }
 
+/* 已完成历史入口：与图鉴入口（.sticker-entry）同款尺寸/定位 */
+.history-entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), background 0.2s var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.history-entry:active {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--rose-400);
+}
+.history-entry__svg {
+  transition: transform 0.2s var(--ease);
+}
+.history-entry:active .history-entry__svg {
+  transform: scale(0.88);
+}
+
+/* 已完成数量标记：数字小红点（不大于 99，>99 显示 99+）；无已完成时 hidden */
+.history-badge {
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--rose-400);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  font-weight: 600;
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 4px rgba(251, 113, 133, 0.5);
+  pointer-events: none;
+}
+.history-badge.hidden {
+  display: none;
+}
+
 /* ============================================================
    图鉴弹层
    ============================================================ */
@@ -2980,6 +3031,87 @@ input {
   margin: 0 0 16px;
   font-size: 13px;
   color: var(--color-text-muted);
+}
+
+/* ============================================================
+   已完成历史弹层（仿图鉴弹层 .sticker-modal）
+   ============================================================ */
+.history-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 1;
+  transition: opacity 0.25s var(--ease);
+}
+.history-modal.hidden {
+  display: flex; /* 保持 flex 布局，用 opacity + visibility 实现淡出 */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.history-modal__panel {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-radius: 24px 24px 0 0;
+  padding: 20px 18px calc(20px + var(--safe-bottom));
+  box-shadow: 0 -8px 32px rgba(168, 52, 10, 0.10);
+  transform: translateY(0);
+  transition: transform 0.3s var(--ease);
+}
+.history-modal.hidden .history-modal__panel {
+  transform: translateY(100%);
+}
+.history-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.history-modal__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.history-modal__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 50%;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.history-modal__close:active {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* 历史列表：复用 .todo-list/.todo 样式，仅做容器级微调 */
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.history-list__empty {
+  list-style: none;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  padding: 40px 0;
 }
 
 /* ===== 贴纸故事卡：点击已解锁贴纸时浮现（替代全局 Toast，弹层内展示）===== */

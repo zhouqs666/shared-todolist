@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
   <meta name="theme-color" content="#faf6f1" />
   <meta name="description" content="双人共享待办清单" />
-  <meta name="app-version" content="2.7.56" />
+  <meta name="app-version" content="2.7.57" />
   <meta name="shell-version" content="2.1.28" /><!-- 壳版本：release-apk.mjs 每次发布自动更新 -->
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -212,6 +212,15 @@
         </svg>
         <span id="stickerBadge" class="sticker-badge hidden"></span>
       </button>
+      <!-- 已完成历史入口：顶栏按钮，红点显示已完成数量 -->
+      <button id="historyEntry" class="history-entry" type="button" aria-label="已完成历史">
+        <svg class="history-entry__svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <!-- 复选框 + 对勾 -->
+          <rect x="4" y="4" width="16" height="16" rx="4"/>
+          <path d="M8 12l3 3 5-6"/>
+        </svg>
+        <span id="historyBadge" class="history-badge hidden"></span>
+      </button>
       <span id="me" class="topbar__me topbar__me--placeholder">加载中…</span>
     </div>
   </header>
@@ -295,6 +304,19 @@
         <div class="sticker-modal__progress-bar"><span id="stickerProgressBar" class="sticker-modal__progress-fill"></span></div>
         <span id="stickerProgress" class="sticker-modal__progress-text">0 / 12</span>
       </div>
+    </div>
+  </div>
+
+  <!-- 已完成历史弹层：展示已完成的待办，按完成时间倒序 -->
+  <div id="historyModal" class="history-modal hidden" role="dialog" aria-label="已完成历史" aria-modal="true">
+    <div class="history-modal__panel">
+      <div class="history-modal__header">
+        <h2 class="history-modal__title">已完成</h2>
+        <button id="historyModalClose" class="history-modal__close" type="button" aria-label="关闭">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <ul id="historyList" class="todo-list history-list"></ul>
     </div>
   </div>
 

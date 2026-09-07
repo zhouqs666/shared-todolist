@@ -77,6 +77,11 @@ const meEl = document.getElementById('me');
 const todoInput = document.getElementById('todoInput');
 const addBtn = document.getElementById('addBtn');
 const todoListEl = document.getElementById('todoList');
+// 已完成历史：入口按钮 / 弹层 / 列表 / 数量徽标（均为新增，缺省容错）
+const historyEntryEl = document.getElementById('historyEntry');
+const historyModalEl = document.getElementById('historyModal');
+const historyListEl = document.getElementById('historyList');
+const historyBadgeEl = document.getElementById('historyBadge');
 const offlineBar = document.getElementById('offlineBar');
 const loadingBar = document.getElementById('loadingBar');
 const fabBtn = document.getElementById('fabBtn');
@@ -406,6 +411,22 @@ function bindEvents() {
   if (fabBtn) {
     fabBtn.addEventListener('click', openAddPanel);
   }
+  // 已完成历史入口：打开历史弹层（实时渲染已完成列表）
+  if (historyEntryEl) historyEntryEl.addEventListener('click', openHistoryModal);
+  const historyCloseEl = document.getElementById('historyModalClose');
+  if (historyCloseEl) historyCloseEl.addEventListener('click', closeHistoryModal);
+  if (historyModalEl) {
+    // 点击弹层空白处（半透明遮罩）关闭
+    historyModalEl.addEventListener('click', (e) => {
+      if (e.target === historyModalEl) closeHistoryModal();
+    });
+  }
+  // ESC 关闭历史弹层（不影响其它弹层：仅当历史弹层打开时响应）
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && historyModalEl && !historyModalEl.classList.contains('hidden')) {
+      closeHistoryModal();
+    }
+  });
   // 遮罩点击收起
   if (addOverlay) {
     addOverlay.addEventListener('click', closeAddPanel);
@@ -1199,7 +1220,12 @@ function setHeartExcited(on) {
 const renderedIds = new Set();
 
 function render() {
-  const todos = getTodos();
+  // 主页只渲染「未完成」的待办（已完成沉到底、另开历史页查看）。
+  // 已完成项从主页移除 = 视觉上"完成即消失"，不破坏任何数据/排序逻辑。
+  const todos = getTodos().filter((t) => !t.completed);
+  // 历史页与顶栏徽标与主列表同源实时刷新（弹层关闭时 renderHistory 内部 no-op）
+  updateHistoryBadge();
+  renderHistory();
   if (todos.length === 0) {
     todoListEl.innerHTML = '';
     renderedIds.clear();
@@ -1295,6 +1321,64 @@ function render() {
   todoListEl.appendChild(frag);
 }
 
+// ===== 已完成历史（顶栏入口 + 弹层）=====
+// 设计取舍（2026-09-08，最小可用版）：
+//   - 主页 render() 只渲染 !completed；已完成项由本模块单独渲染到 #historyList。
+//   - 不碰数据库 / schema：只是把"已完成沉底"改成"已完成进历史弹层"，纯前端拆分。
+//   - 弹层关闭时不维护 #historyList 的真实 DOM（无视觉意义，省渲染与潜在闪烁）；
+//     打开时由 render() 的实时刷新链路（setTodos→render→renderHistory）自动同步。
+
+/** 顶栏徽标：显示已完成数量（实时）；0 时隐藏 */
+function updateHistoryBadge() {
+  if (!historyBadgeEl) return;
+  const count = getTodos().filter((t) => t.completed && !t.deleted_at).length;
+  if (count === 0) {
+    historyBadgeEl.classList.add('hidden');
+    historyBadgeEl.textContent = '';
+    return;
+  }
+  historyBadgeEl.textContent = count > 99 ? '99+' : String(count);
+  historyBadgeEl.classList.remove('hidden');
+}
+
+/** 渲染历史列表（仅弹层打开时生效）。按 completedAt 倒序，最近完成在前。 */
+function renderHistory() {
+  if (!historyModalEl || !historyListEl) return;
+  // 弹层关闭 → 不渲染（主列表已完成已被过滤移除，无需此处占位）
+  if (historyModalEl.classList.contains('hidden')) return;
+  const done = getTodos()
+    .filter((t) => t.completed && !t.deleted_at)
+    .sort((a, b) => {
+      const ta = a.completedAt || a.createdAt || '';
+      const tb = b.completedAt || b.createdAt || '';
+      return tb.localeCompare(ta); // 倒序：最近完成在前
+    });
+  historyListEl.innerHTML = '';
+  if (done.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'history-list__empty';
+    li.textContent = '还没有完成的事，去完成一条吧～';
+    historyListEl.appendChild(li);
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  done.forEach((todo) => frag.appendChild(renderItem(todo, { history: true })));
+  historyListEl.appendChild(frag);
+}
+
+/** 打开历史弹层 */
+function openHistoryModal() {
+  if (!historyModalEl) return;
+  historyModalEl.classList.remove('hidden');
+  renderHistory();
+}
+
+/** 关闭历史弹层 */
+function closeHistoryModal() {
+  if (!historyModalEl) return;
+  historyModalEl.classList.add('hidden');
+}
+
 /** 构建 meta 文本（创建者 · 时间 · 完成者完成于时间 · 备注） */
 function buildMetaText(todo) {
   const creator = displayOf(todo.createdBy);
@@ -1350,8 +1434,11 @@ function renderImage(li, todo) {
   }
 }
 
-/** 渲染单条（用 DOM API 而非 innerHTML，天然防 XSS） */
-function renderItem(todo) {
+/** 渲染单条（用 DOM API 而非 innerHTML，天然防 XSS）
+ * @param {Object} todo
+ * @param {{history?: boolean}} [opts] history=true 时渲染进历史列表（长按菜单提供"取消完成"）
+ */
+function renderItem(todo, opts = {}) {
   const li = document.createElement('li');
   li.className = 'todo' + (todo.completed ? ' todo--done' : '') + (todo.pending ? ' todo--pending' : '');
   li.dataset.id = todo.id;
@@ -1454,6 +1541,8 @@ function renderItem(todo) {
         onNote: openNotePanel,
         onAddImage: attachImageToTodo,
         onDelete: deleteTodo,
+        // 历史列表项：长按菜单提供"取消完成"回流到主页（主页复选框轻点同样可取消完成）
+        onUncomplete: opts.history ? (id) => toggleComplete(id, false) : undefined,
       });
     }, 350); // 350ms 更跟手（原 500ms 偏长）
   };
@@ -1475,6 +1564,7 @@ function renderItem(todo) {
       onNote: openNotePanel,
       onAddImage: attachImageToTodo,
       onDelete: deleteTodo,
+      onUncomplete: opts.history ? (id) => toggleComplete(id, false) : undefined,
     });
   });
 

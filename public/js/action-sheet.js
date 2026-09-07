@@ -93,6 +93,18 @@ export function showTodoMenu(todo, handlers = {}) {
   const actions = document.createElement('div');
   actions.className = 'action-sheet__actions';
 
+  // 取消完成（历史页回流入口）：仅当调用方提供 onUncomplete 时显示（历史列表项）。
+  // 置顶显示，作为该场景的主操作。
+  if (handlers.onUncomplete) {
+    const undoneBtn = mkIconBtn(ICONS.undone, '取消完成', 'action-sheet__icon-btn--accent');
+    undoneBtn.addEventListener('click', () => {
+      if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+      closeTodoMenu();
+      if (handlers.onUncomplete) handlers.onUncomplete(todo.id);
+    });
+    actions.appendChild(undoneBtn);
+  }
+
   // 编辑待办文案（改文字内容，不动 completed/created_by 等其他字段）
   const editBtn = mkIconBtn(ICONS.edit, '编辑');
   editBtn.addEventListener('click', () => {
