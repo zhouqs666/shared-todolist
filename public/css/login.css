@@ -5,21 +5,22 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  /* 与主 App 一致的氛围：极淡玫瑰渐变 + 顶部柔光斑 */
+  /* 与主 App 一致的氛围：v2.7.48 焦糖玫瑰 + 米杏白底（之前是 rose + 纯白偏红） */
   background:
-    radial-gradient(900px 420px at 50% -8%, rgba(253, 164, 175, 0.22), transparent 62%),
-    linear-gradient(180deg, #fff3f4 0%, #fdf8f8 48%, #fdf3f5 100%);
+    radial-gradient(900px 420px at 50% -8%, rgba(232, 158, 118, 0.22), transparent 62%),
+    linear-gradient(180deg, #faf6f1 0%, #fdfbf7 48%, #faf6f1 100%);
 }
 
 .login__card {
   width: 100%;
   max-width: 360px;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(253, 251, 247, 0.82); /* cream-50 暖白替代纯白 */
   -webkit-backdrop-filter: blur(18px) saturate(1.6);
   backdrop-filter: blur(18px) saturate(1.6);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  border-radius: 24px;
-  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.05), 0 16px 44px rgba(225, 29, 72, 0.10);
+  border: 1px solid rgba(194, 65, 12, 0.12); /* 焦糖色描边 */
+  border-radius: 20px; /* v2.7.48 圆角升级 24→20 */
+  /* v2.7.48 阴影染色：rgba(168,52,10,*) 焦糖 */
+  box-shadow: 0 4px 12px rgba(168, 52, 10, 0.06), 0 16px 44px rgba(168, 52, 10, 0.12);
   padding: 36px 28px;
   text-align: center;
   animation: card-enter 0.4s var(--ease);
@@ -44,12 +45,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* 柔和的粉色光晕，让爱心更醒目 */
-  background: radial-gradient(circle at 50% 50%, rgba(244, 63, 94, 0.14) 0%, rgba(244, 63, 94, 0) 70%);
+  /* v2.7.48 焦糖玫瑰光晕（之前 rose-500 红） */
+  background: radial-gradient(circle at 50% 50%, rgba(194, 65, 12, 0.14) 0%, rgba(194, 65, 12, 0) 70%);
   border-radius: 50%;
   animation: heart-pop 0.5s var(--ease) 0.1s both,
              heart-beat 1.8s ease-in-out 0.6s infinite;
-  filter: drop-shadow(0 6px 12px rgba(225, 29, 72, 0.25));
+  filter: drop-shadow(0 6px 12px rgba(168, 52, 10, 0.25)); /* 焦糖染色 */
 }
 
 .login__heart svg {
@@ -109,31 +110,46 @@
   color: var(--color-text-muted);
 }
 
+/* v2.7.49 Input 视觉升级：
+   - 边框 1px → 1.5px（强调线条）
+   - 内距 12px 14px → 14px 18px（更宽松呼吸）
+   - 圆角 14px → 12px（与 --radius-md 一致）
+   - placeholder 色 --color-text-subtle（更柔和）
+   - focus 环：3px rose-200 offset（之前 rose-500 主色，更克制） */
 .field__input {
-  padding: 12px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: 14px;
+  padding: 14px 18px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 12px;
   background: var(--color-surface);
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
+  color: var(--color-text);
+}
+
+.field__input::placeholder {
+  color: var(--color-text-subtle);
 }
 
 .field__input:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.15);
+  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.12);
 }
 
 /* ===== 提交按钮 ===== */
+/* v2.7.49 Button 视觉升级：
+   - 内距 13px → 16px（更宽松）
+   - 圆角 14px → 12px（与 --radius-md 一致）
+   - 阴影：rgba(168,52,10,*) 焦糖染色 */
 .login__submit {
   width: 100%;
-  padding: 13px;
+  padding: 16px;
   font-size: 16px;
   font-weight: 600;
-  border-radius: 14px;
+  border-radius: 12px;
   margin-top: 4px;
   border: none;
   background: linear-gradient(160deg, var(--color-primary), var(--color-primary-dark));
-  box-shadow: 0 6px 18px rgba(244, 63, 94, 0.32);
+  box-shadow: 0 6px 18px rgba(168, 52, 10, 0.32);
   transition: filter 0.15s var(--ease), transform 0.1s var(--ease), opacity 0.15s;
 }
 .login__submit:hover,
@@ -151,8 +167,9 @@
 .login__error {
   margin: 0;
   padding: 10px 12px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  /* v2.7.48: 错误底改为米杏暖调（之前偏冷红 #fef2f2） */
+  background: rgba(194, 65, 12, 0.06);
+  border: 1px solid rgba(194, 65, 12, 0.2);
   color: var(--color-danger);
   border-radius: var(--radius-md);
   font-size: 13px;

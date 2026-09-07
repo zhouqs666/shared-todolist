@@ -90,6 +90,16 @@ input, textarea, [contenteditable] {
 
   /* 图鉴未解锁剪影墨色：暖灰，对 --color-bg 对比 ≈3.3:1（WCAG 图形最低 3:1） */
   --sticker-locked-ink: #8f8782;
+
+  /* === v2.7.49 字体三轨（渐进式，fallback 完整）===
+     --font-cn：中文宋体栈（首选霞鹜文楷，需自行引入 web font 后生效；
+       未引入时 fallback 到系统宋体/STSong，已具备「克制浪漫」气质）
+     --font-en：英文无衬线栈（Inter / SF Pro Text / system-ui）
+     --font-mono：等宽栈（Berkeley Mono / JetBrains Mono / SF Mono）
+     使用方式：font-family: var(--font-cn); */
+  --font-cn: "LXGW WenKai", "Source Han Serif SC", "Songti SC", "STSong", "Noto Serif CJK SC", "SimSun", serif;
+  --font-en: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", system-ui, sans-serif;
+  --font-mono: "Berkeley Mono", "JetBrains Mono", "SF Mono", "Menlo", monospace;
 }
 
 /* 主题切换 UI 已移除（见 theme.js，setTheme 为 no-op）。
@@ -124,8 +134,8 @@ body {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
-    "Helvetica Neue", Arial, sans-serif;
+  /* v2.7.49 字体三轨：中文衬线栈（首选霞鹜文楷，未引入时 fallback 系统宋体） */
+  font-family: var(--font-cn);
   /* 氛围背景：极淡玫瑰渐变 + 顶部中央一抹柔光斑。
      fixed 让渐变随滚动固定，卡片在"光"上滑动，像午后阳光洒在纸面。 */
   background:
@@ -291,7 +301,8 @@ input {
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
-  padding: 6px 14px;
+  /* v2.7.49 Button 升级：内距 6px 14px → 10px 16px（更宽松，符合"被珍视"调性） */
+  padding: 10px 16px;
   border-radius: var(--radius-sm);
   transition: background 0.15s, border-color 0.15s, transform 0.1s, opacity 0.1s;
 }
@@ -491,11 +502,14 @@ input {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  background: var(--color-surface);
+  /* v2.7.49 卡片纸质感：白 → 米杏 cream-50，像纸贴在桌面上 */
+  background: var(--color-bg-elevated);
   border-radius: var(--radius);
   padding: 15px 16px;
   margin-bottom: 12px; /* #6: 间距 10→12，呼吸感更好 */
-  /* 无边框，品牌染色分层柔影：漂浮感（阴影带一丝玫瑰，比黑灰更暖更"贵"） */
+  /* v2.7.49 卡片纸质感：加 1px 米杏边（cream-200）+ 暖色阴影，默认悬浮感 */
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-sm);
   box-shadow: var(--shadow);
   transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.3s var(--ease);
   /* backwards：配合 JS 的入场延迟，延迟期间的卡片停在起始帧（不闪现） */
@@ -640,6 +654,8 @@ input {
   align-items: center;
   gap: 5px;
   flex-wrap: wrap;
+  /* v2.7.49 字体三轨：时间戳用 mono，自带"刻度感"（"2 分钟前"看起来更稳定） */
+  font-family: var(--font-mono);
 }
 /* meta 文字：占满头像以外的剩余宽度、内部自行换行。
  * 若不设 flex/min-width，flex 换行按整段文字的 max-content 判定，
@@ -1147,6 +1163,8 @@ input {
   line-height: 1;
   letter-spacing: -1px;
   font-variant-numeric: tabular-nums;
+  /* v2.7.49 字体三轨：纪念日主数字用 mono，自带"刻度感" */
+  font-family: var(--font-mono);
 }
 
 /* 分隔线（主区与倒计时之间） */
@@ -1410,7 +1428,8 @@ input {
   font-size: 17px;
   line-height: 30.6px; /* 与横线间距严丝合缝，文字坐在横线上 */
   padding: 14px 18px; /* 纸内边距：文字不骑圆角，四周有呼吸 */
-  font-family: inherit;
+  /* v2.7.49 字体三轨：写信 textarea 用中文衬线栈，强化"手写信"气质 */
+  font-family: var(--font-cn);
 }
 .note-write__textarea::placeholder {
   color: var(--rose-600);
