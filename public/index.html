@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
   <meta name="theme-color" content="#faf6f1" />
   <meta name="description" content="双人共享待办清单" />
-  <meta name="app-version" content="2.7.53" />
+  <meta name="app-version" content="2.7.54" />
   <meta name="shell-version" content="2.1.28" /><!-- 壳版本：release-apk.mjs 每次发布自动更新 -->
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -252,6 +252,9 @@
   <!-- 添加待办展开面板（从底部上滑） -->
   <div id="addPanel" class="add-panel">
     <div class="add-panel__handle" aria-hidden="true"></div>
+    <!-- v2.7.54 B14 overline + em 强调：面板顶部小标签 + 主标题 -->
+    <div class="add-panel__overline">NEW · TODAY</div>
+    <h2 class="add-panel__title">写下<em>这一条</em></h2>
     <!-- 已选图片预览（选图后浮现于面板上方：缩略图 + × 取消；提交成功或关面板时移除） -->
     <div id="attachPreview" class="add-panel__preview" hidden></div>
     <input
