@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
-  <meta name="theme-color" content="#fff3f4" />
+  <meta name="theme-color" content="#faf6f1" />
   <meta name="description" content="双人共享待办清单" />
-  <meta name="app-version" content="2.7.47" />
+  <meta name="app-version" content="2.7.48" />
   <meta name="shell-version" content="2.1.28" /><!-- 壳版本：release-apk.mjs 每次发布自动更新 -->
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -25,9 +25,9 @@
     (function () {
       var h = new Date().getHours();
       var c1, c2;
-      if (h >= 6 && h < 9) { c1 = '#fb8a6b'; c2 = '#e15a3b'; }        // 清晨暖橘
-      else if (h >= 22 || h < 6) { c1 = '#9f1239'; c2 = '#6b1d3a'; }  // 深夜深玫红
-      else { c1 = '#fb7185'; c2 = '#e11d48'; }                        // 白天品牌粉
+      if (h >= 6 && h < 9) { c1 = '#e89e76'; c2 = '#d9774b'; }        // 清晨暖橘
+      else if (h >= 22 || h < 6) { c1 = '#6a1f06'; c2 = '#4a1605'; }  // 深夜深玫红
+      else { c1 = '#d9774b'; c2 = '#a8340a'; }                        // 白天品牌粉
       var s = document.createElement('style');
       s.textContent = '#topHeartGrad stop:nth-child(1){stop-color:' + c1 + '}'
                     + '#topHeartGrad stop:nth-child(2){stop-color:' + c2 + '}';
