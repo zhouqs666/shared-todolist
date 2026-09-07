@@ -19,9 +19,10 @@
  * 查询结果相同但解除了对 app.js 闭包的依赖。
  */
 
-import { isHidden, RARITY_META, celebrateRarity } from './blindbox.js';
+import { isHidden, RARITY_META, celebrateRarity, STICKERS_PER_RARITY } from './blindbox.js';
 import { showToast } from './toast.js';
 import { isFxEnabled } from './theme.js';
+import { getStickers } from './state.js';
 import confetti from './vendor/canvas-confetti.esm.min.js';
 import { playDing } from './utils.js';
 
@@ -85,8 +86,10 @@ export function celebrateCompletion(todo, isRemote = false) {
     // ===== 隐藏款完成：专属文案 + 配色 toast + rarity 粒子 + 卡片光环 =====
     const meta = RARITY_META[rarity];
     const basePhrase = RARITY_COMPLETE_TEXT[rarity] || meta.toast;
-    // 远端完成：带上对方 + 待办内容语义，不丢失信息
-    const phrase = isRemote ? `${basePhrase}（${text}）` : basePhrase;
+    // 完成稀有款是「完成庆祝」，贴纸已在添加时解锁；本端附上图鉴进度，把「完成」与「解锁」区分开
+    const phrase = isRemote
+      ? `${basePhrase}（${text}）`
+      : `${basePhrase} 图鉴 ${getStickers().length}/${STICKERS_PER_RARITY * 3}`;
     // 贴纸图标作为 toast 图标（取该稀有度第一张贴纸）
     const icon = meta.stickerIcons ? meta.stickerIcons[0] : '';
     showToast(phrase, { variant: 'rarity', accent: meta.colors[0], icon, duration: 3000 });

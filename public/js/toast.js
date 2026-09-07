@@ -6,6 +6,7 @@
  *   - 无 opts           → 原样深灰胶囊（图鉴/配图/开奖等通用提示，向后兼容）
  *   - {variant:'success'} → 品牌色完成卡（带勾图标 + 弹簧进入）
  *   - {variant:'rarity', accent, icon} → 隐藏款专属卡（accent 染色光晕 + 图标）
+ *   - {action:{label, onClick}} → 右侧附加一个可点按钮（如删除后的「撤销」）
  */
 
 let toastTimer = null;
@@ -25,8 +26,8 @@ export function showToast(msg, opts = {}) {
   toast.dataset.variant = variant || '';
 
   // 图标 + 文案：用 innerHTML 一次性写入（icon 是受控 SVG，msg 用 textContent 语义转义）
+  toast.textContent = '';
   if (opts.icon) {
-    toast.textContent = '';
     const iconWrap = document.createElement('span');
     iconWrap.className = 'toast__icon';
     iconWrap.innerHTML = opts.icon; // 受控 SVG
@@ -34,7 +35,22 @@ export function showToast(msg, opts = {}) {
     toast.appendChild(iconWrap);
     toast.appendChild(textNode);
   } else {
-    toast.textContent = msg;
+    const textNode = document.createTextNode(msg);
+    toast.appendChild(textNode);
+  }
+
+  // action 按钮（如「撤销」）：附加到末尾，点击触发回调并立即收起
+  if (opts.action && opts.action.label) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast__action';
+    btn.textContent = opts.action.label;
+    btn.addEventListener('click', () => {
+      toast.classList.remove('toast--show');
+      clearTimeout(toastTimer);
+      if (typeof opts.action.onClick === 'function') opts.action.onClick();
+    });
+    toast.appendChild(btn);
   }
 
   // accent 染色（隐藏款专属配色，通过 CSS 变量驱动）

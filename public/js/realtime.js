@@ -267,7 +267,7 @@ export function initPresence({ userId, partnerId, onPartnerOnline }) {
     });
 
   // 定时心跳：重新 track 刷新 presence（防止长时间不活动被清理）
-  const heartbeatTimer = setInterval(async () => {
+  let heartbeatTimer = setInterval(async () => {
     try {
       await channel.track({ userId, at: Date.now() });
     } catch (e) {
@@ -289,6 +289,22 @@ export function initPresence({ userId, partnerId, onPartnerOnline }) {
       clearInterval(heartbeatTimer);
       document.removeEventListener('visibilitychange', onVisibility);
       supabase.removeChannel(channel);
+    },
+    // H4: 暂停心跳（退后台节电，presence 由服务端超时自动清理）
+    suspend() {
+      clearInterval(heartbeatTimer);
+    },
+    // H4: 恢复心跳（回前台重新 track + 重挂定时器）
+    resume() {
+      clearInterval(heartbeatTimer);
+      channel.track({ userId, at: Date.now() }).catch(() => {});
+      heartbeatTimer = setInterval(async () => {
+        try {
+          await channel.track({ userId, at: Date.now() });
+        } catch (e) {
+          console.warn('[presence] 心跳 track 失败:', e.message);
+        }
+      }, HEARTBEAT_MS);
     },
   };
 }

@@ -35,6 +35,8 @@ import { initMessages, onNoteAdded, onNoteRemoved, onNoteUpdated } from './messa
 import { initReactions, renderReactions, onReactionAdded, onReactionRemoved, REACTION_EMOJIS, isMyReaction, toggleReaction, getReactionSvg, getReactionLabel } from './reactions.js';
 import { pickImage, pickImages, uploadTodoImage } from './image-utils.js';
 import { checkForUpdate, setUpdateSupabase, notifyAppReady, getCurrentBundleInfo } from './update.js';
+// App 内 APK 更新（原生壳更新）：先查壳更新，无壳更新才回落 bundle 热更新
+import { checkNativeUpdate, showNativeUpdatePanel, setApkUpdateSupabase, bindForegroundCheck } from './apk-update.js';
 import { supabase } from './supabase.js';
 import { showToast } from './toast.js';
 import { rollRarity, isHidden, applyRarity, celebrateRarity, onRollRarity, RARITY_META } from './blindbox.js';
@@ -49,9 +51,14 @@ import { renderAnniversary, toggleAnniversaryPanel } from './anniversary.js';
 import {
   showTodoMenu,
   showLogoutConfirm,
+  showAccountMenu,
   bindLongPressLogout,
   ICONS,
 } from './action-sheet.js';
+// 回收站（软删除 UI 层）：恢复 / 永久删除
+import { initTrash, openTrash } from './trash.js';
+// 离线写入队列（MVP：仅 addTodo 离线暂存 + 联网重放）
+import { getOfflineQueue, removeOfflineOp, enqueueOffline, isOfflineError } from './offline-queue.js';
 // 完成庆祝特效（撒花/卡片光环/贴纸解锁/远端反应脉冲）已拆出到 ./confetti-effects.js（技术清单第8条）
 import {
   celebrateCompletion,
@@ -104,9 +111,28 @@ function hideLoading() {
   // 是就播欢迎动画。不依赖 localStorage（bundle 切换时 localStorage 不共享）。
   showUpdateWelcomeIfPending();
 
-  // 热更新检查（仅原生 App 生效，浏览器 no-op）
+  // 更新检查（仅原生 App 生效，浏览器 no-op）：
+  // 先查壳（APK）更新——有新版弹面板，本会话跳过 bundle 热更新（新 APK 自带最新前端）；
+  // 无壳更新 / 用户点「稍后再说」→ 回落 bundle 热更新（原逻辑不变）。
+  // 两条流程独立：壳更新拦截时跳过 bundle，壳更新未触发时热更新照常跑。
   setUpdateSupabase(supabase);
-  setTimeout(() => {
+  setApkUpdateSupabase(supabase);
+  bindForegroundCheck(); // 前台切回时检查壳更新（60s 节流）
+  setTimeout(async () => {
+    try {
+      const nativeUpdate = await checkNativeUpdate();
+      if (nativeUpdate) {
+        // checkNativeUpdate 内部已显示顶栏呼吸图标 + 绑定点击
+        // 非强制：等用户点；强制：自动弹面板
+        if (nativeUpdate.isForce) {
+          showNativeUpdatePanel(nativeUpdate);
+        }
+        // 壳更新时跳过热更新（新 APK 自带最新 bundle）
+        return;
+      }
+    } catch (e) {
+      console.warn('[apk-update] 启动检查异常:', e && e.message);
+    }
     checkForUpdate().catch((e) => console.warn('[update] 启动检查异常:', e && e.message));
   }, 1800);
 
@@ -187,6 +213,19 @@ function hideLoading() {
     console.warn('[app] 图鉴加载失败（已忽略）:', err.message);
   }
   initStickerBook({ onStickerUnlockedView: onStickerUnlockedView });
+
+  // 初始化回收站（软删除 UI 层）：恢复后把 todo 加回主列表
+  initTrash({
+    listDeleted: () => db.listDeletedTodos(),
+    restoreTodo: (id) => db.restoreTodo(id),
+    forceDeleteTodo: (id) => db.forceDeleteTodo(id),
+    displayOf,
+    onRestored: (todo) => {
+      if (!getTodos().some((t) => t.id === todo.id)) {
+        setTodos(sortTodos([...getTodos(), todo]));
+      }
+    },
+  });
 
   // 建立 Realtime 订阅（含 todos / daily_notes / reactions / stickers 四表）
   // 监听器治理（技术清单第5条）：保存返回值，beforeunload 时 cleanup
@@ -275,6 +314,37 @@ function hideLoading() {
     if (lastSeenTimer) clearInterval(lastSeenTimer);
   });
 
+  // H4: 退后台暂停心跳（节电），回前台重拉数据 + 恢复心跳（防陈旧）。
+  // realtime 主订阅（todos-changes）依赖 Supabase WebSocket 自动重连，不手动断开；
+  // presence 的 15s 心跳 + last_seen 60s 心跳 + 爱心气色 5min 定时器是后台耗电点，退后台暂停。
+  const handleAppVisibility = () => {
+    const visible = document.visibilityState === 'visible';
+    if (visible) {
+      // 回前台：重拉列表兜底（弥补后台期间的事件，避免短暂陈旧）
+      db.listTodos().then((todos) => setTodos(sortTodos(todos))).catch(() => {});
+      // 恢复 presence 心跳
+      if (presence && typeof presence.resume === 'function') presence.resume();
+      // 恢复 last_seen 心跳 + 立即写一次
+      if (partnerId) {
+        db.updateLastSeen(currentUser.id).catch(() => {});
+        if (!lastSeenTimer) {
+          lastSeenTimer = setInterval(() => {
+            db.updateLastSeen(currentUser.id).catch(() => {});
+          }, 60 * 1000);
+        }
+      }
+      // 恢复爱心气色定时器 + 立即刷一次（跨时段返回时立刻正确）
+      if (!heartTintTimer) heartTintTimer = setInterval(applyHeartTint, 5 * 60 * 1000);
+      applyHeartTint();
+    } else {
+      // 退后台：暂停 presence 心跳 + last_seen 心跳 + 爱心气色定时器
+      if (presence && typeof presence.suspend === 'function') presence.suspend();
+      if (lastSeenTimer) { clearInterval(lastSeenTimer); lastSeenTimer = null; }
+      if (heartTintTimer) { clearInterval(heartTintTimer); heartTintTimer = null; }
+    }
+  };
+  document.addEventListener('visibilitychange', handleAppVisibility);
+
   // 打开计数 +1：每次冷启动 App 都 +1（不依赖 partnerId，自己的打开次数独立累计）
   // 对方打开 App 时会看到对应次数的光晕，看完清零
   db.incrementLoginCount(currentUser.id).catch(() => {});
@@ -290,6 +360,13 @@ function hideLoading() {
   // 热更新回滚守卫：App 主体已正常启动（列表+Realtime 都初始化了），
   // 通知插件当前版本可用，避免下次启动被误判为崩溃而回滚
   notifyAppReady();
+
+  // 冷启动补发离线队列（M2）：队列非空时确保联网监听已绑定，
+  // 联网则立即重放补发，离线则等 online 事件触发（避免离线重启后丢监听）。
+  if (getOfflineQueue().length) {
+    bindOfflineReplay();
+    if (navigator.onLine) replayOfflineQueue();
+  }
 
   // [热更新自检 v2.7.15] 仅 console 打日志，对 App 视觉/交互无任何影响。
   // 用于验证热更新链路：远程调试时在 console 看到 "v2.7.15" 即说明热更新已生效。
@@ -428,9 +505,9 @@ async function addTodo() {
   showLoading();
   // 暂存本次提交的预挂图（finally 里统一清状态，但失败时不清 pendingImage 以便重试）
   const imageToUpload = pendingImage;
+  // 隐藏款盲盒：开奖决定本次待办的稀有度（提到 try 外，离线分支也能复用同一个结果）
+  const rarity = rollRarity();
   try {
-    // 隐藏款盲盒：开奖决定本次待办的稀有度（85% 普通，15% 隐藏款）
-    const rarity = rollRarity();
     // 先创建待办（拿 id），再上传图片挂到这条上。
     // 文字待办创建成功后，即使图片上传失败也保留待办 + 提示可长按补图。
     const todo = await db.createTodo(text, currentUser.id, null, rarity);
@@ -461,11 +538,73 @@ async function addTodo() {
     resetPendingImage(); // 提交成功才清预挂图（失败路径不清，保留以便重试）
     closeAddPanel(); // 提交成功收起面板
   } catch (err) {
-    handleError(toAppError(err), '添加失败');
+    if (isOfflineError(err)) {
+      // M2 离线：暂存到本地 + 乐观显示 pending 待办，联网后自动补发
+      stashOfflineTodo(text, rarity);
+      showToast('当前离线，已暂存，联网后自动同步');
+      todoInput.value = '';
+      resetPendingImage();
+      closeAddPanel();
+    } else {
+      handleError(toAppError(err), '添加失败');
+    }
   } finally {
     addBtn.disabled = false;
     addBtn.classList.remove('add-panel__btn--loading');
     hideLoading();
+  }
+}
+
+// ===== 离线写入（M2 MVP：仅 addTodo）=====
+let offlineReplayBound = false;
+
+/** 生成一条离线 pending 待办并本地显示 + 入队 */
+function stashOfflineTodo(text, rarity) {
+  const localId = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const pendingTodo = {
+    id: localId,
+    text,
+    completed: false,
+    createdBy: currentUser.id,
+    createdAt: new Date().toISOString(),
+    completedBy: null,
+    completedAt: null,
+    imagePaths: null,
+    imagePath: null,
+    completedNote: null,
+    rarity,
+    raritySeen: true,
+    deletedAt: null,
+    pending: true, // 离线暂存标记（UI 半透明 + 待同步标）
+  };
+  setTodos(sortTodos([...getTodos(), pendingTodo]));
+  enqueueOffline({ localId, text, rarity, ts: Date.now() });
+  bindOfflineReplay();
+}
+
+/** 确保 online 监听只绑定一次 */
+function bindOfflineReplay() {
+  if (offlineReplayBound) return;
+  offlineReplayBound = true;
+  window.addEventListener('online', replayOfflineQueue);
+}
+
+/** 串行重放离线队列：每条成功则替换 pending 为真实待办并出队，失败则中断保留 */
+async function replayOfflineQueue() {
+  const queue = getOfflineQueue();
+  if (!queue.length) return;
+  for (const op of queue) {
+    try {
+      const real = await db.createTodo(op.text, currentUser.id, null, op.rarity);
+      // 移除本地 pending；real 可能已由 Realtime 回推（按真实 id 幂等去重）
+      const withoutPending = getTodos().filter((t) => t.id !== op.localId);
+      const alreadyHas = withoutPending.some((t) => t.id === real.id);
+      setTodos(sortTodos(alreadyHas ? withoutPending : withoutPending.concat(real)));
+      removeOfflineOp(op.localId);
+    } catch (e) {
+      // 仍离线或其它失败：中断本轮，保留队列待下次
+      break;
+    }
   }
 }
 
@@ -778,7 +917,25 @@ async function deleteTodo(id) {
   setTodos(getTodos().filter((t) => t.id !== id));
   try {
     await db.deleteTodo(id);
-    showToast('已移到回收站');
+    // 删除撤销：5 秒内可一键撤回软删除
+    showToast('已移到回收站', {
+      action: {
+        label: '撤销',
+        onClick: async () => {
+          try {
+            const restored = await db.restoreTodo(id);
+            if (!getTodos().some((t) => t.id === id)) {
+              setTodos(sortTodos([...getTodos(), restored]));
+            }
+            showToast('已恢复');
+          } catch (e) {
+            console.error('[app] 撤销删除失败:', e.message);
+            showToast('撤销失败，请到回收站恢复');
+          }
+        },
+      },
+      duration: 5000,
+    });
   } catch (err) {
     setTodos(sortTodos([...getTodos(), target])); // 回滚
     handleError(toAppError(err), '删除失败');
@@ -822,7 +979,8 @@ function renderMe() {
     img.src = avatar;
     img.alt = currentUser ? currentUser.displayName : '';
     img.onerror = () => img.remove();
-    bindLongPressLogout(img, () => showLogoutConfirm(logout));
+    // 头像长按 → 账号菜单（回收站 + 退出登录）；退出仍走二次确认条
+    bindLongPressLogout(img, () => showAccountMenu({ onOpenTrash: openTrash, onLogout: () => showLogoutConfirm(logout) }));
     meEl.appendChild(img);
   }
 }
@@ -885,13 +1043,18 @@ async function showUpdateWelcomeIfPending() {
   welcomePlaying = true;
 
   // 查总更新次数（用于文案下方的"第 N 次更新"标注）
+  // 2026-09-05：同时查 app_native_versions（壳更新）+ app_versions（热更新），累加
   let totalCount = 1;
   try {
-    const { count } = await supabase
+    const { count: bundleCount } = await supabase
       .from('app_versions')
       .select('id', { count: 'exact', head: true })
       .eq('enabled', true);
-    totalCount = count || 1;
+    const { count: shellCount } = await supabase
+      .from('app_native_versions')
+      .select('id', { count: 'exact', head: true })
+      .eq('enabled', true);
+    totalCount = (bundleCount || 0) + (shellCount || 0) || 1;
   } catch (_) {}
 
   // 延迟到开屏 splash 淡出后播放（splash 是 1.2s + 0.5s 淡出）
@@ -1157,7 +1320,7 @@ function renderImage(li, todo) {
 /** 渲染单条（用 DOM API 而非 innerHTML，天然防 XSS） */
 function renderItem(todo) {
   const li = document.createElement('li');
-  li.className = 'todo' + (todo.completed ? ' todo--done' : '');
+  li.className = 'todo' + (todo.completed ? ' todo--done' : '') + (todo.pending ? ' todo--pending' : '');
   li.dataset.id = todo.id;
 
   // 自绘圆形复选框（取代原生方框，精致度核心）
@@ -1218,6 +1381,14 @@ function renderItem(todo) {
   metaText.className = 'todo__meta-text';
   metaText.textContent = buildMetaText(todo);
   metaEl.appendChild(metaText);
+
+  // 离线待同步标记（M2）：pending 待办显示半透明 + "待同步"小标
+  if (todo.pending) {
+    const badge = document.createElement('span');
+    badge.className = 'todo__pending-badge';
+    badge.textContent = '待同步';
+    metaEl.appendChild(badge);
+  }
 
   body.appendChild(headline);
   body.appendChild(metaEl);

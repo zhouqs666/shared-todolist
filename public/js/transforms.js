@@ -31,6 +31,7 @@ export function toExternal(row) {
     completedNote: row.completed_note || null, // 备注（完成前后均可加，null=无备注）
     rarity: row.rarity || 'common', // 稀有度：common(普通)/rare/epic/legendary（隐藏款盲盒）
     raritySeen: row.rarity_seen !== false, // 隐藏款是否已被对方看过（false=对方端需播惊喜提示）
+    deletedAt: row.deleted_at || null, // 软删除时间（null=正常，非null=已在回收站）
   };
 }
 

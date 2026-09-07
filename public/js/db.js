@@ -34,6 +34,16 @@ function storagePathFromUrl(url) {
 }
 
 /**
+ * 清理 Storage 中的对象文件（批量 remove，失败静默）。
+ * 独立模块级函数，供 forceDeleteTodo 调用（避免依赖 this 绑定）。
+ */
+async function cleanupStorageFiles(objectPaths) {
+  if (!objectPaths || !objectPaths.length) return;
+  const { error } = await supabase.storage.from('todo-attachments').remove(objectPaths);
+  if (error) console.warn('[db] 清理 Storage 文件失败（已忽略）:', error.message);
+}
+
+/**
  * 包装 Supabase 错误为统一的错误对象
  * 上层用 err.code 判断类型（沿用旧 api.js 的错误码语义）
  */
@@ -145,6 +155,67 @@ export const db = {
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw wrapError(error);
+  },
+
+  // ===== 回收站（软删除的 UI 层）=====
+
+  /** 拉取所有已软删除的 todos（回收站，按删除时间倒序） */
+  async listDeletedTodos() {
+    const { data, error } = await supabase
+      .from('todos')
+      .select('*')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false });
+    if (error) throw wrapError(error);
+    return (data || []).map(toExternal);
+  },
+
+  /** 恢复一条已软删除的 todo（deleted_at 置 null） */
+  async restoreTodo(id) {
+    const { data, error } = await supabase
+      .from('todos')
+      .update({ deleted_at: null })
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+    if (error) throw wrapError(error);
+    if (!data) throw wrapError({ message: 'NOT_FOUND', code: 'NOT_FOUND' });
+    return toExternal(data);
+  },
+
+  /**
+   * 永久删除一条 todo（物理 DELETE，并清理其图片 Storage 文件）。
+   * 仅回收站里的「永久删除」按钮调用；普通删除仍走软删除。
+   */
+  async forceDeleteTodo(id) {
+    // 物理删除前先取出图片路径，删除成功后据此清理 Storage 孤儿文件
+    let objectPaths = [];
+    try {
+      const { data: row } = await supabase
+        .from('todos')
+        .select('image_path, image_paths')
+        .eq('id', id)
+        .maybeSingle();
+      if (row) {
+        const urls = Array.isArray(row.image_paths) && row.image_paths.length
+          ? row.image_paths
+          : row.image_path ? [row.image_path] : [];
+        objectPaths = urls.map(storagePathFromUrl).filter(Boolean);
+      }
+    } catch (e) {
+      console.warn('[db] 读取待删除图片路径失败（继续物理删除）:', e.message);
+    }
+    const { error } = await supabase.from('todos').delete().eq('id', id);
+    if (error) throw wrapError(error);
+    // 物理删后清理 Storage 文件（失败静默：孤儿文件无害，免费层空间足够）
+    if (objectPaths.length) {
+      cleanupStorageFiles(objectPaths).catch(() => {});
+    }
+  },
+
+  /** 清理 Storage 中的对象文件（批量 remove，失败静默）——保留为 db 方法，供需要时显式调用 */
+  async cleanupStorage(objectPaths) {
+    await cleanupStorageFiles(objectPaths);
   },
 
   /**
@@ -385,7 +456,7 @@ export const db = {
   },
 
   /**
-   * 解锁一张贴纸（完成隐藏款待办时调用）。
+   * 解锁一张贴纸（添加待办开出隐藏款时调用，无需完成）。
    * 用 upsert + onConflict('sticker_key') 保证幂等：同一张贴纸重复解锁被忽略。
    * @returns {Promise<Object|null>} 新解锁的贴纸对象；若已存在（重复解锁）返回 null
    */

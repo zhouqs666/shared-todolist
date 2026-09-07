@@ -5,7 +5,7 @@
 --   1. todos 表加 rarity（稀有度）+ rarity_seen（对方是否已看过）字段
 --      —— 添加待办时有概率开出"隐藏款"，稀有度分 rare/epic/legendary
 --   2. 新建 stickers 表（图鉴，两人共享一本）
---      —— 完成隐藏款待办时解锁对应贴纸，任一方解锁即对双方可见
+--      —— 添加待办开出隐藏款时即解锁对应贴纸（无需完成），任一方解锁即对双方可见
 --
 -- 使用方法：
 --   打开 Supabase Dashboard → SQL Editor → 粘贴本文件全部内容 → Run
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS stickers (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sticker_key TEXT NOT NULL,                              -- 如 'rare_1'/'epic_3'/'legendary_4'，每张贴纸的唯一标识
   rarity      TEXT NOT NULL CHECK (rarity IN ('rare','epic','legendary')), -- 该贴纸所属稀有度
-  unlocked_by UUID NOT NULL REFERENCES auth.users(id),   -- 谁完成隐藏款触发的解锁（标记用，图鉴本身共享）
+  unlocked_by UUID NOT NULL REFERENCES auth.users(id),   -- 谁开出隐藏款触发的解锁（标记用，图鉴本身共享）
   todo_id     UUID REFERENCES todos(id) ON DELETE SET NULL, -- 触发解锁的那条隐藏款待办（可空，软删除时置 null）
   unlocked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (sticker_key)                                    -- 共享图鉴：每个 key 全局唯一，重复解锁被忽略

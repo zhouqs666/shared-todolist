@@ -542,6 +542,15 @@ input {
   box-shadow: var(--shadow);
 }
 
+/* 离线待同步态（M2）：半透明 + 轻微降饱和，与正常待办明显区分 */
+.todo--pending {
+  opacity: 0.62;
+}
+.todo--pending .todo__text {
+  /* 省略号视觉提示"尚未真正入库"——不设 text-decoration 以免误认已完成 */
+  filter: saturate(0.55);
+}
+
 /* 自绘圆形复选框：统一退到右上角，18×18 小尺寸，不占布局空间。
    无论完成与否都在同一位置（右上角），文字始终铺满卡片成为主角。
    - 未完成：空心玫瑰小圆（点它完成），按下时点亮成心意的颜色
@@ -639,6 +648,19 @@ input {
   flex: 1 1 0;
   min-width: 0;
   overflow-wrap: anywhere; /* 长串（网址/英文）也能断行，不撑宽卡片 */
+}
+
+/* 待同步小标（M2）：琥珀色点缀，随 meta 行内联排布 */
+.todo__pending-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  color: #b45309;
+  background: rgba(251, 191, 36, 0.18);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  letter-spacing: 0.02em;
 }
 
 /* 待办项 meta 中的小头像（创建者）：极细玫瑰描边，融入卡片色调 */
@@ -2665,6 +2687,19 @@ input {
   }
 }
 
+/* "贴纸可以戳"的轻晃演示：触屏上没有 hover/pointer 线索，靠"会动"暗示可点。
+   JS 只在用户从未点过任何贴纸时给第一张已解锁贴纸加这个类（晃一次就摘掉）。
+   放在 --pop 之前：万一两个类同时存在，点击弹跳的动画优先。 */
+.sticker-cell--wiggle {
+  animation: sticker-cell-wiggle 0.75s var(--ease);
+}
+@keyframes sticker-cell-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-5deg) scale(1.05); }
+  55% { transform: rotate(4deg) scale(1.03); }
+  80% { transform: rotate(-2deg); }
+}
+
 /* 已解锁：白色裁切底板模拟实体贴纸（Die-cut） */
 .sticker-cell__plate {
   width: 44px;
@@ -2863,7 +2898,401 @@ input {
     animation: none !important;
   }
   .sticker-cell--in,
-  .sticker-cell--pop {
+  .sticker-cell--pop,
+  .sticker-cell--wiggle {
     animation: none !important;
   }
+}
+
+/* ============================================================
+   App 内 APK 更新（apk-update.js）— 呼吸图标 + 跳进面板
+   顶栏入口：14px 下载箭头，4s 循环微晃
+   展开：图标缩放 → 面板从图标位置弹出 → 图标跳进面板顶部
+   下载中：心跳幅随进度变
+   ============================================================ */
+
+/* ---- 顶栏呼吸图标 ---- */
+.apk-entry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: 50%;
+  -webkit-tap-highlight-color: transparent;
+  animation: apk-entry-breathe 4s ease-in-out infinite;
+  transition: color 0.2s var(--ease);
+}
+/* [hidden] 必须显式声明 display:none —— 否则上面 .apk-entry 的 display:inline-flex
+   会覆盖 UA 样式表里 [hidden] 的 display:none，导致 JS 设置 entry.hidden=true 后
+   图标仍然可见（血泪教训：2026-09-06，更新图标残留 bug 修了多轮都没修对） */
+.apk-entry[hidden] { display: none; }
+.apk-entry svg {
+  pointer-events: none;
+}
+.apk-entry:hover,
+.apk-entry:focus-visible {
+  color: var(--rose-500);
+  background: rgba(244, 63, 94, 0.08);
+  outline: none;
+}
+.apk-entry:active { transform: scale(0.92); }
+
+/* 呼吸动画：微晃 + 透明度波动 */
+@keyframes apk-entry-breathe {
+  0%, 100% { transform: rotate(-2deg); opacity: 0.55; }
+  50%      { transform: rotate(2deg);  opacity: 0.9;  }
+}
+
+/* 强制更新：急促呼吸 + 大晃动 */
+.apk-entry.apk-entry--urgent {
+  animation-duration: 2s;
+  color: var(--rose-600);
+}
+
+/* 面板打开时图标淡出（面板图标接管视觉） */
+.apk-entry.apk-entry--hide {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.6);
+  animation: none; /* 淡出时停掉呼吸 */
+  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
+}
+
+/* ---- 面板 ---- */
+.apk-panel {
+  position: fixed;
+  width: 200px;
+  padding: 18px 16px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  opacity: 0;
+  transform-origin: top center;
+  transform: scale(0.72) translateY(-6px);
+  transition: opacity 0.28s ease-out, transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 9500;
+  pointer-events: none;
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.14);
+}
+.apk-panel.apk-panel--show {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.apk-panel.apk-panel--force {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* 面板里的下载箭头（从顶栏跳进） */
+.apk-panel__icon {
+  width: 28px;
+  height: 28px;
+  margin: 0 auto 8px;
+  color: var(--rose-500);
+  transform: scale(0);
+  animation: apk-icon-jump 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) 0.08s forwards;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  --beat-scale: 1;
+  transition: transform 0.15s ease-out;
+}
+.apk-panel__icon svg {
+  width: 100%;
+  height: 100%;
+}
+/* 下载中心跳（心跳幅度从 --beat-scale 读取） */
+.apk-panel.apk-panel--downloading .apk-panel__icon {
+  animation: apk-icon-beat 1s ease-in-out infinite;
+}
+@keyframes apk-icon-jump {
+  0%   { transform: scale(0) translateY(-12px); }
+  60%  { transform: scale(1.18) translateY(0); }
+  100% { transform: scale(1) translateY(0); }
+}
+@keyframes apk-icon-beat {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(var(--beat-scale, 1.08)); }
+}
+
+/* 短句标题 */
+.apk-panel__phrase {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--rose-500);
+  opacity: 0.8;
+  text-align: center;
+  margin-bottom: 4px;
+  transform: translateY(6px);
+  animation: apk-phrase-in 0.3s ease-out 0.15s forwards;
+}
+@keyframes apk-phrase-in {
+  to { transform: none; opacity: 0.8; }
+}
+
+/* 进度条 */
+.apk-panel__progress {
+  margin-bottom: 10px;
+}
+.apk-panel__progress-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+  overflow: hidden;
+}
+.apk-panel__progress-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 2px;
+  background: var(--rose-500);
+  transition: width 0.3s var(--ease), transform 0.15s ease-out;
+  --beat-scale: 1;
+  animation: apk-progress-beat 1s ease-in-out infinite;
+}
+@keyframes apk-progress-beat {
+  0%, 100% { transform: scaleX(1); }
+  50%      { transform: scaleX(var(--beat-scale, 1.08)); }
+}
+
+/* 提示 */
+.apk-panel__hint {
+  margin-bottom: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--rose-600);
+}
+
+/* 更新按钮：极淡 rose-50 底 + rose-600 字 + 无边框 */
+.apk-panel__btn {
+  display: block;
+  width: 100%;
+  padding: 10px 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--rose-600);
+  background: rgba(244, 63, 94, 0.08);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.18s ease, transform 0.12s ease, opacity 0.15s ease;
+}
+.apk-panel__btn:active { transform: scale(0.97); background: rgba(244, 63, 94, 0.14); }
+.apk-panel__btn:disabled { opacity: 0.5; cursor: default; }
+
+/* No.X 淡化印记 */
+.apk-panel__count {
+  margin-top: 10px;
+  text-align: right;
+  font-size: 9px;
+  font-weight: 300;
+  letter-spacing: 4px;
+  color: var(--rose-500);
+  opacity: 0.22;
+}
+
+/* 强制更新遮罩 */
+.apk-panel__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 15, 14, 0.38);
+  z-index: 9400;
+  animation: apk-fade 0.25s ease-out;
+}
+
+@keyframes apk-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Reduced motion：跳过所有动画 */
+@media (prefers-reduced-motion: reduce) {
+  .apk-entry,
+  .apk-entry.apk-entry--urgent {
+    animation: none;
+    opacity: 0.75;
+  }
+  .apk-panel,
+  .apk-panel__icon,
+  .apk-panel__phrase,
+  .apk-panel__progress-bar i,
+  .apk-panel__btn,
+  .apk-panel__backdrop {
+    transition: none !important;
+    animation: none !important;
+  }
+  .apk-panel__icon { transform: scale(1); }
+}
+
+/* ===== Toast 动作按钮（如删除后的「撤销」） ===== */
+.toast__action {
+  flex-shrink: 0;
+  margin-left: 4px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  letter-spacing: 0.2px;
+  transition: background 0.15s var(--ease);
+  pointer-events: auto; /* toast 容器 pointer-events:none，按钮需单独恢复可点 */
+}
+.toast__action:active { background: rgba(255, 255, 255, 0.32); }
+
+/* ===== 账号菜单（头像长按：回收站 + 退出登录） ===== */
+.account-menu {
+  background: var(--color-surface);
+  padding: 8px 12px;
+  border-top: 1px solid rgba(253, 164, 175, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.account-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 8px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: background 0.15s var(--ease);
+}
+.account-menu__item:hover,
+.account-menu__item:active { background: rgba(255, 241, 242, 0.9); }
+.account-menu__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+}
+.account-menu__icon svg { width: 22px; height: 22px; }
+.account-menu__item--danger { color: var(--rose-500); }
+.account-menu__item--danger .account-menu__icon { color: var(--rose-500); }
+
+/* ===== 回收站弹层 ===== */
+.trash-sheet {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--color-bg);
+  border-radius: 24px 24px 0 0;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.3s var(--ease);
+  padding-bottom: var(--safe-bottom);
+}
+.action-sheet__overlay--show .trash-sheet { transform: translateY(0); }
+.trash-sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 12px;
+  flex-shrink: 0;
+}
+.trash-sheet__title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--color-text);
+  margin: 0;
+}
+.trash-sheet__close {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: inline-flex;
+}
+.trash-sheet__close:active { background: rgba(255, 241, 242, 0.9); }
+.trash-sheet__body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 16px 8px;
+  min-height: 120px;
+}
+.trash-sheet__loading,
+.trash-sheet__empty {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  padding: 32px 0;
+}
+.trash-sheet__footer {
+  padding: 10px 20px 14px;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.trash-item {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow);
+  transition: opacity 0.18s var(--ease), transform 0.18s var(--ease);
+}
+.trash-item--leaving {
+  opacity: 0;
+  transform: translateX(24px);
+}
+.trash-item__text {
+  font-size: 15px;
+  color: var(--color-text);
+  font-weight: 500;
+  word-break: break-word;
+}
+.trash-item__meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+.trash-item__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.trash-item__btn {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s var(--ease), transform 0.1s var(--ease);
+}
+.trash-item__btn:active { transform: scale(0.97); }
+.trash-item__btn:disabled { opacity: 0.5; cursor: default; }
+.trash-item__btn--restore {
+  background: rgba(var(--color-primary-rgb), 0.1);
+  color: var(--color-primary);
+}
+.trash-item__btn--purge {
+  background: rgba(244, 63, 94, 0.08);
+  color: var(--rose-500);
+}
+.trash-item__btn--armed {
+  background: var(--rose-500);
+  color: #fff;
 }

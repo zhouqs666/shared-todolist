@@ -237,6 +237,84 @@ export function closeLogoutConfirm() {
   setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 250);
 }
 
+// ===== 账号菜单（头像长按：回收站 + 退出登录）=====
+let currentAccountSheet = null;
+
+/**
+ * 显示账号菜单（头像长按触发，替代直接弹退出确认）。
+ * @param {Object} handlers 回调：{ onOpenTrash, onLogout }
+ */
+export function showAccountMenu(handlers = {}) {
+  closeAccountMenu();
+  closeLogoutConfirm();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'action-sheet__overlay';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeAccountMenu(); });
+
+  const sheet = document.createElement('div');
+  sheet.className = 'action-sheet';
+  sheet.setAttribute('role', 'menu');
+  sheet.setAttribute('aria-label', '账号菜单');
+
+  const preview = document.createElement('div');
+  preview.className = 'action-sheet__preview';
+  preview.textContent = '更多';
+  sheet.appendChild(preview);
+
+  const list = document.createElement('div');
+  list.className = 'account-menu';
+
+  // 回收站入口
+  const trashBtn = document.createElement('button');
+  trashBtn.type = 'button';
+  trashBtn.className = 'account-menu__item';
+  trashBtn.innerHTML = '<span class="account-menu__icon">' + ICONS.trash + '</span><span class="account-menu__label">回收站</span>';
+  trashBtn.addEventListener('click', () => {
+    if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+    closeAccountMenu();
+    if (handlers.onOpenTrash) handlers.onOpenTrash();
+  });
+  list.appendChild(trashBtn);
+
+  // 退出登录
+  const logoutBtn = document.createElement('button');
+  logoutBtn.type = 'button';
+  logoutBtn.className = 'account-menu__item account-menu__item--danger';
+  logoutBtn.innerHTML = '<span class="account-menu__icon">'
+    + '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>'
+    + '</span><span class="account-menu__label">退出登录</span>';
+  logoutBtn.addEventListener('click', () => {
+    if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+    closeAccountMenu();
+    if (handlers.onLogout) handlers.onLogout();
+  });
+  list.appendChild(logoutBtn);
+
+  sheet.appendChild(list);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'action-sheet__close';
+  closeBtn.textContent = '取消';
+  closeBtn.addEventListener('click', closeAccountMenu);
+  sheet.appendChild(closeBtn);
+
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('action-sheet__overlay--show'));
+  currentAccountSheet = overlay;
+}
+
+/** 关闭账号菜单 */
+export function closeAccountMenu() {
+  if (!currentAccountSheet) return;
+  const el = currentAccountSheet;
+  currentAccountSheet = null;
+  el.classList.remove('action-sheet__overlay--show');
+  setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 250);
+}
+
 /**
  * 给头像绑定长按退出（移动端长按 800ms / 桌面端右键兜底）。
  * 按住时头像轻微缩放做"按压感"，到时触发确认条。

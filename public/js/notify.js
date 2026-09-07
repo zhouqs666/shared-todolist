@@ -142,7 +142,7 @@ export async function notify(title, body) {
 }
 
 /**
- * 设置 APP 前后台状态（由 app.js 监听 @capacitor/app 事件后调用）
+ * 设置 APP 前后台状态（由 appStateChange 监听 / visibilitychange 兜底调用）
  * @param {boolean} foreground
  */
 export function setForeground(foreground) {
@@ -150,18 +150,36 @@ export function setForeground(foreground) {
 }
 
 /**
+ * 用 document.visibilityState 作为前后台判断的兜底（WebView 也生效）。
+ * 原生 AppApi 监听失败、或非原生环境时使用。
+ */
+function bindVisibilityFallback() {
+  const update = () => setForeground(document.visibilityState === 'visible');
+  document.addEventListener('visibilitychange', update);
+  update(); // 立即校准一次
+}
+
+/**
  * 初始化：加载 Capacitor 脚本，监听 APP 前后台切换。
  * 网页环境自动降级（isNative=false，所有通知方法变 no-op）。
+ *
+ * H5 修复：原来 appInForeground 仅靠 AppApi.addListener 更新，一旦监听失败/脚本加载失败
+ * 就永远停在默认 true，导致通知静默失效。现在统一走 setForeground，并加 visibilitychange 兜底。
  */
 export async function initNotify() {
   await loadCapacitorScripts();
-  if (!isNative || !AppApi) return; // 网页或加载失败：直接返回
+  if (!isNative || !AppApi) {
+    // 非原生 / 脚本加载失败：用 visibilitychange 兜底（虽 isNative=false 时通知本就不弹，但保持状态正确）
+    bindVisibilityFallback();
+    return;
+  }
   try {
     AppApi.addListener('appStateChange', ({ isActive }) => {
-      appInForeground = isActive;
+      setForeground(isActive);
     });
   } catch (err) {
-    console.warn('[notify] 监听前后台失败:', err);
+    console.warn('[notify] 监听前后台失败，降级为 visibilitychange:', err.message);
+    bindVisibilityFallback();
   }
 }
 

@@ -15,6 +15,13 @@
  *   - 打开图鉴时快照当前已看集合 → 未在快照中的贴纸显示"新"角标
  *   - 关闭图鉴时才把当前所有 key 标记已看 → 红点消失
  *   - 对方解锁新贴纸 → 新 key 不在已看集合 → 红点又亮
+ *
+ * 可点击性引导（轻晃演示，克制版）：
+ *   已解锁贴纸可点出专属短句，但触屏上没有 hover/pointer 线索，用户发现不了。
+ *   只教不纠缠：仅当用户从未点过任何贴纸（localStorage: stickerTapEver）且
+ *   演示展示次数未达上限（stickerWiggleOpens < 3）时，打开图鉴约 1.2s 后
+ *   第一张已解锁贴纸轻晃一次做"可以戳"的暗示；点过任意一张后永久退场。
+ *   全程零文案、零新 UI 元素；prefers-reduced-motion 下由 CSS 禁用动画。
  */
 
 import confetti from './vendor/canvas-confetti.esm.min.js';
@@ -34,6 +41,12 @@ const SEEN_KEY = 'seenStickerKeys';
 // localStorage key：集齐庆祝是否已弹过（持久化，避免每次冷启动重弹；
 // 图鉴重新变得不完整时自动清除，下次再集齐会重新庆祝）
 const CELEBRATED_KEY = 'stickerBookCelebrated';
+// localStorage key：轻晃演示的持久化——
+//   TAP_EVER_KEY：用户点过任意贴纸 → 演示永久退场
+//   WIGGLE_OPENS_KEY：演示已展示的打开次数（达 WIGGLE_MAX_OPENS 后不再出现）
+const TAP_EVER_KEY = 'stickerTapEver';
+const WIGGLE_OPENS_KEY = 'stickerWiggleOpens';
+const WIGGLE_MAX_OPENS = 3;
 
 // 是否已庆祝过集齐全集（从持久化恢复；清空重集后会重新庆祝）
 let collectedCelebrated = (() => {
@@ -265,10 +278,43 @@ function bindGridInteraction() {
   });
 }
 
+/**
+ * "贴纸可以戳"的轻晃演示：触屏上没有 hover 线索，靠"会动"暗示可点。
+ * 触发条件（同时满足）：本次打开有已解锁贴纸 + 用户从未点过任何贴纸 + 展示次数未达上限。
+ * 时机：入场动画（首格 ≈0.38s）播完后约 1.2s，轻晃一次即摘掉类。
+ * 每次打开最多演示一次；点过任意贴纸后永久退场。
+ */
+function maybePlayWiggleAffordance() {
+  let everTapped = false;
+  try { everTapped = localStorage.getItem(TAP_EVER_KEY) === '1'; } catch { /* ignore */ }
+  if (everTapped) return;
+
+  const grid = document.getElementById('stickerGrid');
+  const modal = document.getElementById('stickerModal');
+  const firstUnlocked = grid ? grid.querySelector('.sticker-cell--unlocked') : null;
+  if (!firstUnlocked || !modal || modal.classList.contains('hidden')) return;
+
+  let opensShown = 0;
+  try { opensShown = parseInt(localStorage.getItem(WIGGLE_OPENS_KEY) || '0', 10) || 0; } catch { /* ignore */ }
+  if (opensShown >= WIGGLE_MAX_OPENS) return;
+  try { localStorage.setItem(WIGGLE_OPENS_KEY, String(opensShown + 1)); } catch { /* ignore */ }
+
+  setTimeout(() => {
+    // 等待期间弹层被关掉 / 网格被实时刷新重绘 → 跳过这次演示
+    if (!modal || modal.classList.contains('hidden')) return;
+    if (!grid.contains(firstUnlocked)) return;
+    firstUnlocked.classList.add('sticker-cell--wiggle');
+    setTimeout(() => firstUnlocked.classList.remove('sticker-cell--wiggle'), 800);
+  }, 1200);
+}
+
 /** 弹跳动画 + 弹出「贴纸故事卡」（弹层内展示，不再走全局 Toast——会被弹层遮挡） */
 let flavorTimer = null;
 function revealFlavor(cell) {
-  cell.classList.remove('sticker-cell--pop');
+  // 用户戳了贴纸 → 轻晃演示永久退场（学会即不再出现）
+  try { localStorage.setItem(TAP_EVER_KEY, '1'); } catch { /* ignore */ }
+
+  cell.classList.remove('sticker-cell--pop', 'sticker-cell--wiggle');
   // 强制 reflow，保证连续点击也能重放动画
   void cell.offsetWidth;
   cell.classList.add('sticker-cell--pop');
@@ -342,6 +388,8 @@ async function openStickerBook() {
   }
   // 渲染（用最新数据 + 入场节奏）
   renderStickerBook({ animate: true });
+  // "贴纸可以戳"的轻晃演示（从未点过贴纸的用户才触发，详见函数注释）
+  maybePlayWiggleAffordance();
 }
 
 /** 关闭图鉴弹层。此刻才把当前所有贴纸标记为已看 → 清红点。 */
