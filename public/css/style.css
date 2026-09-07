@@ -557,6 +557,127 @@ input {
   .offline-bar__dots i { animation: none; opacity: 0.5; }
 }
 
+/* v2.7.53 A10 错误态 Error State 全套（设计 prototype-07）
+   用于离线重连失败、Supabase 同步错误、APK 更新失败等场景 */
+
+/* 错误提示条：玫瑰淡红 bg + 米杏边 + glyph 圆 */
+.error-alert {
+  margin: 12px 16px 0;
+  padding: 14px 16px;
+  background: rgba(168, 52, 10, 0.06);
+  border: 1px solid rgba(168, 52, 10, 0.18);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-cn);
+  font-size: 13px;
+  color: var(--rose-700);
+  animation: error-alert-in 0.4s var(--ease) both;
+}
+.error-alert__glyph {
+  width: 24px;
+  height: 24px;
+  background: var(--rose-500);
+  border-radius: 50%;
+  color: var(--cream-50);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.error-alert__msg { flex: 1; line-height: 1.5; }
+.error-alert__action {
+  background: transparent;
+  border: none;
+  color: var(--rose-700);
+  font-family: var(--font-cn);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.error-alert__action:hover { background: rgba(168, 52, 10, 0.10); }
+
+@keyframes error-alert-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 错误态中心区：dashed circle 96px + retry 按钮 */
+.error-state {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 32px;
+  text-align: center;
+  min-height: 320px;
+}
+.error-state__il {
+  width: 96px;
+  height: 96px;
+  background: rgba(168, 52, 10, 0.06);
+  border: 1px dashed rgba(168, 52, 10, 0.32);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  color: var(--rose-700);
+  font-size: 36px;
+  font-weight: 600;
+  font-family: var(--font-cn);
+}
+.error-state__overline {
+  font-family: var(--font-en);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--rose-700);
+  margin-bottom: 10px;
+}
+.error-state__title {
+  font-family: var(--font-cn);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 12px;
+}
+.error-state__desc {
+  font-family: var(--font-cn);
+  font-size: 13px;
+  color: var(--color-text-muted);
+  line-height: 1.7;
+  margin-bottom: 24px;
+  max-width: 280px;
+}
+.error-state__retry {
+  height: 48px;
+  padding: 0 24px;
+  background: var(--color-primary);
+  color: var(--cream-50);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-cn);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: transform 0.12s var(--ease), box-shadow 0.18s var(--ease);
+}
+.error-state__retry:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg);
+}
+.error-state__retry:active { transform: scale(0.97); }
+
 /* ===== 列表 ===== */
 .todo-list {
   list-style: none;
@@ -571,8 +692,24 @@ input {
   position: relative;
 }
 
+/* v2.7.53 A8 空状态 overline + em 强调（设计 prototype-07 期望） */
+.todo-list__empty-overline {
+  font-family: var(--font-en);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  margin-bottom: 12px;
+}
+.todo-list__empty em {
+  font-style: normal;
+  color: var(--color-text-rose, var(--rose-500));
+}
+
 /* 空状态：品牌渐变大爱心 + 柔光晕呼吸（像在安静地等待）。
-   爱心后面垫一圈极淡的玫瑰光斑，让"等待"有温度。 */
+   爱心后面垫一圈极淡的玫瑰光斑，让"等待"有温度。
+   v2.7.53 A9 浮动 animation：4.8s 慢速 translateY(-8px) 漂浮（设计 prototype-07 期望），更'克制' */
 .todo-list__empty-heart {
   position: relative;
   width: 72px;
@@ -581,7 +718,7 @@ input {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: empty-heart-breath 2.6s ease-in-out infinite;
+  animation: empty-heart-float 4.8s ease-in-out infinite;
 }
 .todo-list__empty-heart::before {
   content: "";
@@ -589,15 +726,16 @@ input {
   inset: -26px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(232, 158, 118, 0.22) 0%, rgba(255, 228, 230, 0.12) 45%, transparent 70%);
-  animation: empty-glow-breath 2.6s ease-in-out infinite;
+  animation: empty-glow-breath 4.8s ease-in-out infinite;
 }
 .todo-list__empty-heart svg {
   position: relative;
   filter: drop-shadow(0 6px 16px rgba(194, 65, 12, 0.22));
 }
-@keyframes empty-heart-breath {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.06); }
+/* v2.7.53 A9 改用设计原型期望的 float（translateY(-8px)）替代原 scale breath */
+@keyframes empty-heart-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
 }
 @keyframes empty-glow-breath {
   0%, 100% { opacity: 0.65; transform: scale(0.96); }
@@ -609,19 +747,29 @@ input {
 }
 
 .todo-list__empty-text {
-  font-size: 15px;
+  font-family: var(--font-cn);
+  font-size: 22px;
+  font-weight: 600;
   color: var(--color-text);
-  opacity: 0.72;
-  letter-spacing: 0.5px;
+  line-height: 1.4;
+  margin-bottom: 14px;
 }
 
 /* 副文案：轻轻的一句引导，比主文案更小更淡 */
 .todo-list__empty-sub {
-  margin-top: 8px;
-  font-size: 13px;
-  color: var(--rose-400);
-  opacity: 0.75;
-  letter-spacing: 0.5px;
+  font-family: var(--font-cn);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-text-muted);
+  margin-bottom: 28px;
+}
+
+/* v2.7.53 A7 空状态 CTA 双按钮容器（设计 prototype-07 empty-cta） */
+.todo-list__empty-cta {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 4px;
 }
 
 /* ===== 单条待办 ===== */
@@ -929,11 +1077,13 @@ input {
 }
 
 .skeleton__box {
+  /* v2.7.53 A6 骨架屏 shimmer 暖化：原冷色 rgba(254,205,211,*) → 暖蜜桃 rose-100/200 + cream-100
+     与设计 prototype-07 对齐，整体更'暖' */
   background: linear-gradient(
     90deg,
-    rgba(254, 205, 211, 0.45) 0%,
-    rgba(255, 241, 242, 0.9) 50%,
-    rgba(254, 205, 211, 0.45) 100%
+    rgba(249, 227, 212, 0.45) 0%,
+    rgba(241, 196, 168, 0.55) 50%,
+    rgba(249, 227, 212, 0.45) 100%
   );
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
@@ -1034,6 +1184,23 @@ input {
 }
 @keyframes icon-spin {
   to { transform: rotate(360deg); }
+}
+
+/* v2.7.53 A11 btn--icon loading 态升级：
+   - 整体降透明度表示"加载中"
+   - svg 用 rose-500 着色 + 0.6s 淡入（设计 prototype-07 期望）
+   - 禁止重复点击（pointer-events:none） */
+.btn--icon--loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+.btn--icon--loading svg {
+  color: var(--rose-500);
+  animation: icon-spin 0.8s linear infinite, icon-fade-in 0.3s var(--ease) both;
+}
+@keyframes icon-fade-in {
+  from { opacity: 0.3; }
+  to   { opacity: 1; }
 }
 @media (max-width: 400px) {
   .btn--icon {

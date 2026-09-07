@@ -1214,15 +1214,44 @@ function render() {
       '<stop offset="0%" stop-color="#e89e76"/><stop offset="100%" stop-color="#c2410c"/>' +
       '</linearGradient></defs>' +
       '<path d="M12 21s-7.5-4.7-7.5-10.2C4.5 7.6 7 5.5 9.8 5.5c1.4 0 2.7.7 3.2 1.8.5-1.1 1.8-1.8 3.2-1.8 2.8 0 5.3 2.1 5.3 5.3C21.5 16.3 12 21 12 21z" fill="url(#emptyHeartGrad)"/></svg>';
+    // v2.7.53 A8：overline 小标签（11px 字间距 0.24em，全大写）+ 主标题含 <em> 强调
+    const overline = document.createElement('div');
+    overline.className = 'todo-list__empty-overline';
+    overline.textContent = 'EMPTY · TODAY';
     const text = document.createElement('div');
     text.className = 'todo-list__empty-text';
-    text.textContent = '这里空空的，像在等你';
+    text.innerHTML = '这里<em>空空的</em>，像在等你';
     const sub = document.createElement('div');
     sub.className = 'todo-list__empty-sub';
     sub.textContent = '写下第一条，和 ta 一起开始';
     li.appendChild(heart);
+    li.appendChild(overline);
     li.appendChild(text);
     li.appendChild(sub);
+
+    // v2.7.53 A7：CTA 双按钮容器（写第一条 + 查看图鉴）
+    const cta = document.createElement('div');
+    cta.className = 'todo-list__empty-cta';
+    const ctaPrimary = document.createElement('button');
+    ctaPrimary.type = 'button';
+    ctaPrimary.className = 'btn btn--primary';
+    ctaPrimary.textContent = '写第一条';
+    ctaPrimary.addEventListener('click', () => {
+      const addBtn = document.getElementById('addBtn') || document.querySelector('.add-fab');
+      if (addBtn) addBtn.click();
+    });
+    const ctaGhost = document.createElement('button');
+    ctaGhost.type = 'button';
+    ctaGhost.className = 'btn btn--ghost';
+    ctaGhost.textContent = '看看图鉴';
+    ctaGhost.addEventListener('click', () => {
+      const stickerBtn = document.querySelector('.sticker-entry') || document.querySelector('[data-action="open-stickers"]');
+      if (stickerBtn) stickerBtn.click();
+    });
+    cta.appendChild(ctaPrimary);
+    cta.appendChild(ctaGhost);
+    li.appendChild(cta);
+
     todoListEl.appendChild(li);
     return;
   }
