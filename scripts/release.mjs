@@ -31,6 +31,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { assertNewerThanLatest } from './_lib-version-check.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -114,6 +115,12 @@ if (SERVICE_KEY.length < 100) {
 async function main() {
   console.log(`\n🚀 发布热更新版本 ${VERSION}\n`);
 
+  // 1.【铁律】先查线上最新版本，版本号必须语义化大于线上
+  // 2026-08-07 血泪教训：没查线上发 2.0.1，App 判定无更新，用户永远收不到
+  const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+  await assertNewerThanLatest(sb, 'app_versions', 'version', VERSION,
+    '  血泪教训 2026-08-07：热更新版本号低，App 判定无更新，用户连开几次都收不到。');
+
   const originalHtml = await readFile(INDEX_HTML, 'utf8');
   const versionedHtml = originalHtml.replace(
     /<meta name="app-version" content="[^"]*" \/>/,
@@ -163,10 +170,7 @@ async function main() {
     // 如果需要回退，手动改 index.html 即可（或 git checkout public/index.html）。
     console.log('  ✓ index.html meta 已更新为 ' + VERSION + '（不再还原，确保下次 APK 构建壳内置 meta 正确）');
 
-    // 4. 上传
-    console.log('\n  → 连接 Supabase（service_role）...');
-    const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
-
+    // 4. 上传（sb client 已在 main 顶部版本检查时创建）
     const storagePath = `releases/${VERSION}.zip`;
     console.log(`  → 上传到 app_updates/${storagePath} ...`);
     const zipBuf = await readFile(ZIP_PATH);

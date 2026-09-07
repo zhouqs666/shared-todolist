@@ -31,6 +31,7 @@ import { join, resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { assertNewerThanLatest } from './_lib-version-check.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -109,20 +110,6 @@ if (SERVICE_KEY.length < 100) {
   process.exit(1);
 }
 
-// 语义化比较：-1 / 0 / 1（与前端 update.js 同一套语义）
-function compareVersions(a, b) {
-  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
-  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
-  const len = Math.max(pa.length, pb.length);
-  for (let i = 0; i < len; i++) {
-    const da = pa[i] || 0;
-    const db = pb[i] || 0;
-    if (da > db) return 1;
-    if (da < db) return -1;
-  }
-  return 0;
-}
-
 // ---------- 主流程 ----------
 async function main() {
   console.log(`\n📦 发布 APK 版本 ${VERSION}\n`);
@@ -130,30 +117,9 @@ async function main() {
 
   // 1.【铁律】先查线上最新启用版本，版本号必须语义化大于线上
   console.log('  → 查询线上最新壳版本（铁律：不允许版本号倒挂）...');
-  let onlineLatest = null;
-  const { data: latestRows, error: qErr } = await sb
-    .from('app_native_versions')
-    .select('version_name, version_code')
-    .eq('enabled', true)
-    .order('released_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (qErr) {
-    console.error(`✗ 查询 app_native_versions 失败：${qErr.message}
-  （若还没执行 migration-app-native-versions.sql，请先到 Supabase Dashboard → SQL Editor 建表）`);
-    process.exit(1);
-  }
-  onlineLatest = latestRows || null;
-  if (onlineLatest) {
-    if (compareVersions(VERSION, onlineLatest.version_name) <= 0) {
-      console.error(`✗ 版本号必须大于线上最新（线上 ${onlineLatest.version_name}，要发 ${VERSION}）。
-  血泪教训 2026-08-07：版本号低会导致 App 判定"无更新"，用户永远收不到。`);
-      process.exit(1);
-    }
-    console.log(`  ✓ 线上最新 ${onlineLatest.version_name}，本次发 ${VERSION}，可发布`);
-  } else {
-    console.log('  ✓ 线上无记录（首发），可直接发布');
-  }
+  const onlineLatest = await assertNewerThanLatest(sb, 'app_native_versions', 'version_name', VERSION,
+    '  血泪教训 2026-08-07：壳版本号低，App 判定无更新，用户永远收不到。');
+  // 后续会用 onlineLatest.version_code（L257）做 versionCode 校验；首发时为 null，逻辑已处理
 
   // 2. 先检查 android assets 旧 meta 值（判断是否需要 gradle rebuild）
   const androidIndexPath = resolve(ROOT, 'android', 'app', 'src', 'main', 'assets', 'public', 'index.html');
