@@ -126,7 +126,10 @@ async function main() {
     /<meta name="app-version" content="[^"]*" \/>/,
     `<meta name="app-version" content="${VERSION}" />`
   );
-  if (versionedHtml === originalHtml) {
+  // 用 regex.test 检测"是否找到 meta"，而非 strict equal —— V8 的 String.replace 优化
+  // 在 replacement 与原文一致时会返回同一字符串引用，导致 strict equal 误判"未找到"。
+  // 场景：index.html 已是 VERSION（如上次发布的 meta 没还原），重发同一版本号会命中。
+  if (!/<meta name="app-version" content="[^"]*" \/>/.test(originalHtml)) {
     console.error('✗ index.html 未找到 <meta name="app-version">，请确认已添加');
     process.exit(1);
   }
