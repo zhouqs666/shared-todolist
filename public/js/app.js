@@ -374,7 +374,7 @@ function hideLoading() {
 
   // [热更新自检 v2.7.15] 仅 console 打日志，对 App 视觉/交互无任何影响。
   // 用于验证热更新链路：远程调试时在 console 看到 "v2.7.15" 即说明热更新已生效。
-  console.log('%c有爱 v2.7.15 已加载', 'color:#c2410c;font-weight:bold');
+  console.log('%c有爱 v2.7.15 已加载', 'color:#d34c14;font-weight:bold');
 
   // 监听 auth 状态变化（token 失效时自动跳登录）
   auth.onAuthChange((event) => {
@@ -999,14 +999,14 @@ function renderMe() {
 function getHeartTint(hour) {
   if (hour >= 6 && hour < 9) {
     // 清晨：暖橘偏移（晨光感）—v2.7.51 P3.3 微调为更暖
-    return ['#f1c4a8', '#e89e76'];
+    return ['#f4cbb4', '#eda984'];
   }
   if (hour >= 22 || hour < 6) {
     // 深夜：v2.7.51 P3.3 改用暖深焦糖（rose-700/800），不再是冷深 rose
     return ['#7a2c08', '#4a1a06'];
   }
   // 白天/傍晚：v2.7.51 P3.3 暖玫瑰 rose-300/500
-  return ['#e89e76', '#c2410c'];
+  return ['#eda984', '#d34c14'];
 }
 
 /** 把配色应用到顶栏爱心的 SVG 渐变 */
@@ -1069,7 +1069,7 @@ async function showUpdateWelcomeIfPending() {
       'position:fixed', 'inset:0', 'z-index:99999',
       'display:flex', 'flex-direction:column',
       'align-items:center', 'justify-content:center',
-      'background:linear-gradient(160deg,#faf6f1 0%,#f5efe4 60%,#f9e3d4 100%)',
+      'background:linear-gradient(160deg,#fdfaf6 0%,#faf5ec 60%,#fdeee0 100%)',
       'opacity:0', 'transition:opacity 0.4s ease',
     ].join(';');
 
@@ -1090,14 +1090,14 @@ async function showUpdateWelcomeIfPending() {
         <svg viewBox="0 0 512 512" width="90" height="90" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="uwh" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#e89e76"/><stop offset="100%" stop-color="#c2410c"/>
+              <stop offset="0%" stop-color="#eda984"/><stop offset="100%" stop-color="#d34c14"/>
             </linearGradient>
           </defs>
           <path d="M256 402s-110-66-110-140.6c0-36.4 28.8-63.4 63-63.4 22.6 0 41.4 11.6 47 28.2 5.6-16.6 24.4-28.2 47-28.2 34.2 0 63 27 63 63.4C366 336 256 402 256 402z" fill="url(#uwh)"/>
         </svg>
       </div>
-      <div style="color:#c2410c;font-size:15px;font-weight:400;letter-spacing:2px;animation:uw-fade 0.5s ease 0.4s both">${msg}</div>
-      <div style="position:fixed;bottom:18px;right:20px;color:#872a08;font-size:9px;font-weight:300;letter-spacing:4px;opacity:0.22;animation:uw-fade 0.5s ease 1s both">No.${totalCount}</div>
+      <div style="color:#d34c14;font-size:15px;font-weight:400;letter-spacing:2px;animation:uw-fade 0.5s ease 0.4s both">${msg}</div>
+      <div style="position:fixed;bottom:18px;right:20px;color:#9d330f;font-size:9px;font-weight:300;letter-spacing:4px;opacity:0.22;animation:uw-fade 0.5s ease 1s both">No.${totalCount}</div>
       <style>
         @keyframes uw-pop{0%{opacity:0;transform:scale(0.3) translateY(30px)}60%{opacity:1;transform:scale(1.1) translateY(0)}100%{opacity:1;transform:scale(1)}}
         @keyframes uw-beat{0%,100%{transform:scale(1)}15%{transform:scale(1.2)}30%{transform:scale(1)}45%{transform:scale(1.12)}60%{transform:scale(1)}}
@@ -1211,7 +1211,7 @@ function render() {
     heart.innerHTML =
       '<svg viewBox="0 0 24 24" width="52" height="52" aria-hidden="true">' +
       '<defs><linearGradient id="emptyHeartGrad" x1="0%" y1="0%" x2="100%" y2="100%">' +
-      '<stop offset="0%" stop-color="#e89e76"/><stop offset="100%" stop-color="#c2410c"/>' +
+      '<stop offset="0%" stop-color="#eda984"/><stop offset="100%" stop-color="#d34c14"/>' +
       '</linearGradient></defs>' +
       '<path d="M12 21s-7.5-4.7-7.5-10.2C4.5 7.6 7 5.5 9.8 5.5c1.4 0 2.7.7 3.2 1.8.5-1.1 1.8-1.8 3.2-1.8 2.8 0 5.3 2.1 5.3 5.3C21.5 16.3 12 21 12 21z" fill="url(#emptyHeartGrad)"/></svg>';
     // v2.7.53 A8：overline 小标签（11px 字间距 0.24em，全大写）+ 主标题含 <em> 强调

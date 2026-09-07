@@ -8,7 +8,7 @@
   /* 与主 App 一致的氛围：v2.7.48 焦糖玫瑰 + 米杏白底（之前是 rose + 纯白偏红） */
   background:
     radial-gradient(900px 420px at 50% -8%, rgba(232, 158, 118, 0.22), transparent 62%),
-    linear-gradient(180deg, #faf6f1 0%, #fdfbf7 48%, #faf6f1 100%);
+    linear-gradient(180deg, #fdfaf6 0%, #fefdfa 48%, #fdfaf6 100%);
 }
 
 .login__card {
@@ -17,7 +17,7 @@
   background: rgba(253, 251, 247, 0.82); /* cream-50 暖白替代纯白 */
   -webkit-backdrop-filter: blur(18px) saturate(1.6);
   backdrop-filter: blur(18px) saturate(1.6);
-  border: 1px solid rgba(194, 65, 12, 0.12); /* 焦糖色描边 */
+  border: 1px solid rgba(211, 76, 20, 0.12); /* 焦糖色描边 */
   border-radius: 20px; /* v2.7.48 圆角升级 24→20 */
   /* v2.7.48 阴影染色：rgba(168,52,10,*) 焦糖 */
   box-shadow: 0 4px 12px rgba(168, 52, 10, 0.06), 0 16px 44px rgba(168, 52, 10, 0.12);
@@ -46,7 +46,7 @@
   align-items: center;
   justify-content: center;
   /* v2.7.48 焦糖玫瑰光晕（之前 rose-500 红） */
-  background: radial-gradient(circle at 50% 50%, rgba(194, 65, 12, 0.14) 0%, rgba(194, 65, 12, 0) 70%);
+  background: radial-gradient(circle at 50% 50%, rgba(211, 76, 20, 0.14) 0%, rgba(211, 76, 20, 0) 70%);
   border-radius: 50%;
   animation: heart-pop 0.5s var(--ease) 0.1s both,
              heart-beat 1.8s ease-in-out 0.6s infinite;
@@ -132,7 +132,7 @@
 
 .field__input:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.12);
+  box-shadow: 0 0 0 3px rgba(211, 76, 20, 0.12);
 }
 
 /* ===== 提交按钮 ===== */
@@ -176,8 +176,8 @@
   margin: 0;
   padding: 10px 12px;
   /* v2.7.48: 错误底改为米杏暖调（之前偏冷红 #fef2f2） */
-  background: rgba(194, 65, 12, 0.06);
-  border: 1px solid rgba(194, 65, 12, 0.2);
+  background: rgba(211, 76, 20, 0.06);
+  border: 1px solid rgba(211, 76, 20, 0.2);
   color: var(--color-danger);
   border-radius: var(--radius-md);
   font-size: 13px;
