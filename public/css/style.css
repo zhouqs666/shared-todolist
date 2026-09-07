@@ -29,17 +29,18 @@ input, textarea, [contenteditable] {
      【规则】新增组件必须用 semantic（--color-*），禁止直接引用 primitive。
      【存量】约 14 处组件仍用 var(--rose-500/600)（值=--color-primary，因主色=情感色=rose
             不会换，改了值不变但有破坏风险，暂不强制改；渐变 var(--rose-400/600) 无对应 semantic 保留）。 */
-  /* 主色：玫瑰（与情感色 rose 完全统一，「有爱」的品牌色）。
+  /* 主色：樱粉（与情感色 rose 完全统一，「有爱」的品牌色）。
      原 mint 薄荷绿已退役——绿（工具感）与粉（情感）割裂，统一后整体氛围如情书般温暖。
-     v2.7.59 色系提亮：整体从「深焦糖」提亮到「暖珊瑚」，消除护眼模式般的暗黄感 */
+     v2.7.61 色系更换：暖橙（焦糖→珊瑚）不受欢迎，无论调暗调亮都显脏；
+     更换为「樱白粉」——低饱和日系浪漫粉，冷粉白底彻底消除护眼模式的黄感 */
   --color-primary: var(--rose-500);
   --color-primary-dark: var(--rose-600);
-  --color-primary-rgb: 232, 86, 29;
-  /* 文字/边框用暖灰（stone 系）而非冷灰，与玫瑰氛围协调 */
+  --color-primary-rgb: 232, 132, 168;
+  /* 文字/边框用粉灰（stone 系）而非冷灰，与樱粉氛围协调 */
   --color-text: var(--stone-900);
   --color-text-muted: var(--stone-500);
   --color-border: var(--stone-200);
-  --color-bg: #fefdfb;
+  --color-bg: #fffbfc;
   --color-surface: #ffffff;
   --color-danger: #ef4444;
   /* 圆角体系：4 档语义化（sm 胶囊小件 / md 输入与按钮 / lg 卡片 / xl 弹层）。
@@ -51,48 +52,48 @@ input, textarea, [contenteditable] {
   --radius: 16px;
   /* 阴影体系：品牌色染色（低饱和玫瑰），比纯黑灰阴影更"贵"。
      旧变量名保留兼容，语义即三级 elevation。 */
-  --shadow-xs: 0 1px 2px rgba(135, 42, 8, 0.04);
-  --shadow: 0 1px 2px rgba(168, 52, 10, 0.04), 0 2px 8px rgba(168, 52, 10, 0.05);
-  --shadow-md: 0 2px 6px rgba(168, 52, 10, 0.05), 0 8px 24px rgba(168, 52, 10, 0.08);
-  --shadow-lg: 0 4px 12px rgba(168, 52, 10, 0.08), 0 16px 40px rgba(168, 52, 10, 0.12);
+  --shadow-xs: 0 1px 2px rgba(150, 74, 102, 0.04);
+  --shadow: 0 1px 2px rgba(184, 90, 124, 0.04), 0 2px 8px rgba(184, 90, 124, 0.05);
+  --shadow-md: 0 2px 6px rgba(184, 90, 124, 0.05), 0 8px 24px rgba(184, 90, 124, 0.08);
+  --shadow-lg: 0 4px 12px rgba(184, 90, 124, 0.08), 0 16px 40px rgba(184, 90, 124, 0.12);
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
-  /* 情感色（玫红系）：爱 / 纪念日 / 心里话 / 完成庆祝专属。
+  /* 情感色（樱粉系）：爱 / 纪念日 / 心里话 / 完成庆祝专属。
      与 mint 功能色各司其职：mint=日常操作，rose=情感表达。
-     v2.7.59 提亮：全阶提亮一档（深焦糖 → 暖珊瑚），亮度提升但保持暖调不回冷粉 */
-  --rose-50: #fffbf8;
-  --rose-100: #fdeee3;
-  --rose-200: #f8d6c2;
-  --rose-300: #f2b894;
-  --rose-400: #eb9058;
-  --rose-500: #e8561d;
-  --rose-600: #d4460f;
-  --rose-700: #b23a10;
+     v2.7.61 樱白粉全阶：500=#e884a8（低饱和浪漫粉），浅阶偏白粉、深阶偏梅紫 */
+  --rose-50: #fffbfc;
+  --rose-100: #fdf0f5;
+  --rose-200: #f9d6e2;
+  --rose-300: #f3b9cd;
+  --rose-400: #ee9cba;
+  --rose-500: #e884a8;
+  --rose-600: #d46e94;
+  --rose-700: #b85a7c;
 
-  /* 暖灰色阶（stone，文字/边框/中性面，与玫瑰氛围协调，非冷灰）
-     v2.7.59 边框提亮减黄：#e8dcc6 → #f0e6d6 */
-  --stone-200: #f0e6d6;
-  --stone-500: #6b6051;
-  --stone-900: #2f2820;
+  /* 粉灰阶（stone，文字/边框/中性面，与樱粉氛围协调，非冷灰）
+     v2.7.61 换色：暖米色 → 粉灰，边框 #f5e2e9（樱粉白边框） */
+  --stone-200: #f5e2e9;
+  --stone-500: #7a6572;
+  --stone-900: #352530;
 
-  /* 米杏白（cream）：纸质卡片底色 / 选中态填充 / 暖白顶栏背景。
-     v2.7.59 提亮去黄：黄感减弱，更接近白但仍是暖白 */
-  --cream-50: #fefdfb;
-  --cream-100: #fbf8f1;
-  --cream-200: #f0e6d6;
-  --cream-300: #ddcdae;
+  /* 樱贝白（cream）：纸质卡片底色 / 选中态填充 / 粉白顶栏背景。
+     v2.7.61 换色：米杏白 → 樱贝白，冷粉白底彻底去黄 */
+  --cream-50: #fffbfc;
+  --cream-100: #fdf7fa;
+  --cream-200: #f5e2e9;
+  --cream-300: #e5c6d3;
 
   /* v2.7.51 P3.2 隐藏款稀有度语义色（Semantic · 二级 token）
      引用 primitive（rose/violet/gold），但语义上明确表达「稀有度」概念，
      让 todo--rare/epic/legendary 等组件不再直接耦合 primitive，便于将来调色。
-     rare：暖蜜桃（rose 系，最克制稀有度）
+     rare：樱粉（rose 系，最克制稀有度）
      epic：雾紫（violet 系，浪漫但不浮夸）
      legendary：香槟金（gold 系，最具仪式感的高稀有度） */
   --rare-50: var(--rose-50);
   --rare-100: var(--rose-100);
-  --rare-300: #fda4af;        /* 蜜桃粉（warm peach）*/
+  --rare-300: #fda4af;        /* 樱粉强调（rarity accent pink）*/
   --rare-500: var(--rose-500);
   --epic-50: var(--violet-50);
   --epic-100: var(--violet-100);
@@ -168,8 +169,8 @@ body {
   /* 氛围背景：极淡玫瑰渐变 + 顶部中央一抹柔光斑。
      fixed 让渐变随滚动固定，卡片在"光"上滑动，像午后阳光洒在纸面。 */
   background:
-    radial-gradient(1100px 480px at 50% -12%, rgba(232, 158, 118, 0.20), transparent 62%),
-    linear-gradient(180deg, #fefdfb 0%, #fefefd 42%, #fefdfb 100%);
+    radial-gradient(1100px 480px at 50% -12%, rgba(243, 185, 205, 0.20), transparent 62%),
+    linear-gradient(180deg, #fffbfc 0%, #fefcfd 42%, #fffbfc 100%);
   background-attachment: fixed;
   color: var(--color-text);
   font-size: 16px;
@@ -196,7 +197,7 @@ input {
   /* v2.7.50 顶栏毛玻璃增强：
      - 背景透明度 rgba(255,255,255,0.72) → rgba(253,251,247,0.72) 暖白
      - backdrop-filter blur 20→24 + saturate 1.7→1.85 + brightness 1.02（更"漂浮"） */
-  background: rgba(253, 251, 247, 0.72);
+  background: rgba(255, 251, 252, 0.72);
   -webkit-backdrop-filter: blur(24px) saturate(1.85) brightness(1.02);
   backdrop-filter: blur(24px) saturate(1.85) brightness(1.02);
   /* v2.7.50 顶栏边框：rgba(194,65,12,0.08) → var(--color-border) 米杏渐层 */
@@ -226,7 +227,7 @@ input {
   align-items: center;
   line-height: 0;
   position: relative; /* 给光晕伪元素 ::after 定位 */
-  filter: drop-shadow(0 2px 4px rgba(232, 86, 29, 0.25));
+  filter: drop-shadow(0 2px 4px rgba(232, 132, 168, 0.25));
   /* 持续心跳：克制的心跳节奏（咚-咚...呼吸...），仿真心跳 */
   animation: heart-beat 2.4s ease-in-out infinite;
 }
@@ -400,10 +401,10 @@ input {
   color: var(--color-text);
 }
 .btn--ghost:hover {
-  background: rgba(168, 52, 10, 0.04); /* 暖色 hover 微染色 */
+  background: rgba(184, 90, 124, 0.04); /* 暖色 hover 微染色 */
   border-color: var(--rose-300);
 }
-.btn--ghost:active { background: rgba(168, 52, 10, 0.06); }
+.btn--ghost:active { background: rgba(184, 90, 124, 0.06); }
 
 /* 前置圆点：6×6 rose-500 + margin-right 8px（设计 prototype-01 期望） */
 .btn--ghost .dot {
@@ -566,8 +567,8 @@ input {
 .error-alert {
   margin: 12px 16px 0;
   padding: 14px 16px;
-  background: rgba(168, 52, 10, 0.06);
-  border: 1px solid rgba(168, 52, 10, 0.18);
+  background: rgba(184, 90, 124, 0.06);
+  border: 1px solid rgba(184, 90, 124, 0.18);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -603,7 +604,7 @@ input {
   cursor: pointer;
   transition: background 0.15s;
 }
-.error-alert__action:hover { background: rgba(168, 52, 10, 0.10); }
+.error-alert__action:hover { background: rgba(184, 90, 124, 0.10); }
 
 @keyframes error-alert-in {
   from { opacity: 0; transform: translateY(-4px); }
@@ -624,8 +625,8 @@ input {
 .error-state__il {
   width: 96px;
   height: 96px;
-  background: rgba(168, 52, 10, 0.06);
-  border: 1px dashed rgba(168, 52, 10, 0.32);
+  background: rgba(184, 90, 124, 0.06);
+  border: 1px dashed rgba(184, 90, 124, 0.32);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -727,12 +728,12 @@ input {
   position: absolute;
   inset: -26px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(232, 158, 118, 0.22) 0%, rgba(255, 228, 230, 0.12) 45%, transparent 70%);
+  background: radial-gradient(circle, rgba(243, 185, 205, 0.22) 0%, rgba(255, 228, 230, 0.12) 45%, transparent 70%);
   animation: empty-glow-breath 4.8s ease-in-out infinite;
 }
 .todo-list__empty-heart svg {
   position: relative;
-  filter: drop-shadow(0 6px 16px rgba(232, 86, 29, 0.22));
+  filter: drop-shadow(0 6px 16px rgba(232, 132, 168, 0.22));
 }
 /* v2.7.53 A9 改用设计原型期望的 float（translateY(-8px)）替代原 scale breath */
 @keyframes empty-heart-float {
@@ -853,7 +854,7 @@ input {
   width: 18px;
   height: 18px;
   padding: 0;
-  border: 1.5px solid rgba(232, 158, 118, 0.85);
+  border: 1.5px solid rgba(243, 185, 205, 0.85);
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
@@ -971,7 +972,7 @@ input {
   flex-shrink: 0;
   background: var(--color-border);
   vertical-align: middle;
-  box-shadow: 0 0 0 1px rgba(232, 158, 118, 0.45);
+  box-shadow: 0 0 0 1px rgba(243, 185, 205, 0.45);
 }
 
 /* 无头像时的占位点 */
@@ -1279,7 +1280,7 @@ input {
   transition: background 0.25s var(--ease);
 }
 .action-sheet__overlay--show {
-  background: rgba(168, 52, 10, 0.42);
+  background: rgba(184, 90, 124, 0.42);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
 }
@@ -1307,7 +1308,7 @@ input {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  box-shadow: 0 -4px 24px rgba(168, 52, 10, 0.08);
+  box-shadow: 0 -4px 24px rgba(184, 90, 124, 0.08);
 }
 
 /* 图标按钮组（横向排列） */
@@ -1318,7 +1319,7 @@ input {
   gap: 6px;
   background: var(--color-surface);
   padding: 16px 12px;
-  border-top: 1px solid rgba(232, 158, 118, 0.18);
+  border-top: 1px solid rgba(243, 185, 205, 0.18);
 }
 /* 单个图标按钮（统一 48×48 圆形） */
 .action-sheet__icon-btn {
@@ -1365,7 +1366,7 @@ input {
   color: var(--rose-500);
 }
 .action-sheet__icon-btn--danger:hover {
-  background: rgba(232, 86, 29, 0.1);
+  background: rgba(232, 132, 168, 0.1);
   color: var(--rose-600);
 }
 
@@ -1381,7 +1382,7 @@ input {
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(168, 52, 10, 0.06);
+  box-shadow: 0 4px 16px rgba(184, 90, 124, 0.06);
   transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
 .action-sheet__close:hover { background: var(--color-bg); color: var(--color-text); }
@@ -1417,8 +1418,8 @@ input {
   padding: 28px 24px;
   border-radius: 24px;
   background: linear-gradient(160deg, var(--rose-50) 0%, var(--rose-100) 55%, var(--rose-200) 100%);
-  border: 1px solid rgba(232, 86, 29, 0.15);
-  box-shadow: 0 12px 40px rgba(232, 86, 29, 0.18);
+  border: 1px solid rgba(232, 132, 168, 0.15);
+  box-shadow: 0 12px 40px rgba(232, 132, 168, 0.18);
   text-align: center;
   width: calc(100% - 40px);
   max-width: 360px;
@@ -1484,11 +1485,11 @@ input {
    （animation 已在上文 .anni-panel__heart / .anni-panel__heart--intro 中定义） */
 
 @keyframes anni-panel-heart-glow {
-  0%, 100% { filter: drop-shadow(0 0 6px rgba(232, 86, 29, 0.18)); }
-  10% { filter: drop-shadow(0 0 14px rgba(232, 86, 29, 0.38)); }  /* 第一跳扩散 */
-  22% { filter: drop-shadow(0 0 10px rgba(232, 86, 29, 0.26)); }
-  30% { filter: drop-shadow(0 0 13px rgba(232, 86, 29, 0.32)); }  /* 第二跳 */
-  44% { filter: drop-shadow(0 0 7px rgba(232, 86, 29, 0.20)); }
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(232, 132, 168, 0.18)); }
+  10% { filter: drop-shadow(0 0 14px rgba(232, 132, 168, 0.38)); }  /* 第一跳扩散 */
+  22% { filter: drop-shadow(0 0 10px rgba(232, 132, 168, 0.26)); }
+  30% { filter: drop-shadow(0 0 13px rgba(232, 132, 168, 0.32)); }  /* 第二跳 */
+  44% { filter: drop-shadow(0 0 7px rgba(232, 132, 168, 0.20)); }
 }
 
 /* 飘落入场：从上方坠落 → 回弹 → 落定，带弹性曲线 */
@@ -1533,7 +1534,7 @@ input {
 /* 分隔线（主区与倒计时之间） */
 .anni-panel__divider {
   height: 1px;
-  background: rgba(232, 86, 29, 0.15);
+  background: rgba(232, 132, 168, 0.15);
   margin: 22px 0 8px;
 }
 
@@ -1550,7 +1551,7 @@ input {
   align-items: center;
   gap: 10px;
   padding: 10px 10px;
-  border-bottom: 1px solid rgba(232, 86, 29, 0.08);
+  border-bottom: 1px solid rgba(232, 132, 168, 0.08);
   border-radius: 10px;
   transition: background 0.15s var(--ease);
 }
@@ -1641,7 +1642,7 @@ input {
   position: absolute;
   inset: 4px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(232, 86, 29, 0.3), transparent 70%);
+  background: radial-gradient(circle, rgba(232, 132, 168, 0.3), transparent 70%);
   animation: note-glow-ring 1.8s ease-in-out infinite;
   pointer-events: none;
 }
@@ -1654,7 +1655,7 @@ input {
   0%, 100% { opacity: 0.4; transform: scale(0.9); }
   50%      { opacity: 0.8; transform: scale(1.15); }
 }
-.note-bell:hover { background: rgba(232, 86, 29, 0.1); }
+.note-bell:hover { background: rgba(232, 132, 168, 0.1); }
 .note-bell:focus-visible {
   outline: 2px solid var(--rose-500);
   outline-offset: 2px;
@@ -1749,15 +1750,15 @@ input {
   display: flex;
   flex-direction: column;
   background-color: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(232, 158, 118, 0.28);
-  box-shadow: 0 2px 8px rgba(168, 52, 10, 0.05), 0 12px 32px rgba(168, 52, 10, 0.12);
+  border: 1px solid rgba(243, 185, 205, 0.28);
+  box-shadow: 0 2px 8px rgba(184, 90, 124, 0.05), 0 12px 32px rgba(184, 90, 124, 0.12);
   /* 横线间距 30.6px（严丝合缝 textarea line-height），每条线 1px */
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0,
     transparent 29.6px,
-    rgba(232, 86, 29, 0.15) 29.6px,
-    rgba(232, 86, 29, 0.15) 30.6px
+    rgba(232, 132, 168, 0.15) 29.6px,
+    rgba(232, 132, 168, 0.15) 30.6px
   );
   /* 让横线落在文字基线下沿（字"坐"在横线上，像作业本）：
      textarea 有 padding-top 14px，基线下沿 = 14 + 25 ≈ 39px，
@@ -1774,9 +1775,9 @@ input {
   height: 3px;
   background: linear-gradient(90deg,
     transparent 0%,
-    rgba(232, 158, 118, 0.65) 18%,
-    rgba(232, 86, 29, 0.5) 50%,
-    rgba(232, 158, 118, 0.65) 82%,
+    rgba(243, 185, 205, 0.65) 18%,
+    rgba(232, 132, 168, 0.5) 50%,
+    rgba(243, 185, 205, 0.65) 82%,
     transparent 100%);
   pointer-events: none;
 }
@@ -1861,12 +1862,12 @@ input {
   color: #fff;
   font-size: 16px;
   font-weight: 600;
-  box-shadow: 0 6px 20px rgba(232, 86, 29, 0.35);
+  box-shadow: 0 6px 20px rgba(232, 132, 168, 0.35);
   transition: filter 0.15s var(--ease), transform 0.1s var(--ease), box-shadow 0.15s var(--ease);
 }
 .note-write__send:hover {
   filter: brightness(1.06);
-  box-shadow: 0 8px 26px rgba(232, 86, 29, 0.42);
+  box-shadow: 0 8px 26px rgba(232, 132, 168, 0.42);
 }
 /* 字距 + 尾距补偿：letter-spacing 会在末字后多出 3px，往回收正视觉中心 */
 .note-write__send-text { letter-spacing: 3px; margin-right: -3px; }
@@ -1973,7 +1974,7 @@ input {
 }
 /* 星空氛围：文字本就浅色，发亮用暖白 */
 .note-read--night.note-read--pressing .note-read__content {
-  text-shadow: 0 0 12px rgba(232, 158, 118, 0.5);
+  text-shadow: 0 0 12px rgba(243, 185, 205, 0.5);
 }
 @media (prefers-reduced-motion: reduce) {
   .note-read--pressing .note-read__content { text-shadow: none; }
@@ -2022,7 +2023,7 @@ input {
   background: linear-gradient(165deg, #fff9f2 0%, #fef0e0 50%, #fce8d2 100%);
 }
 .note-read--dusk .note-read__seal {
-  box-shadow: 0 0 0 6px rgba(168, 52, 10, 0.10);
+  box-shadow: 0 0 0 6px rgba(184, 90, 124, 0.10);
 }
 /* 星空（22-5点）：深蓝夜幕 + 微光粒子，文字转浅 */
 .note-read--night {
@@ -2046,8 +2047,8 @@ input {
 }
 .note-read--night .note-read__seal {
   background: rgba(255, 255, 255, 0.08);
-  color: #f2b894;
-  box-shadow: 0 0 0 6px rgba(232, 158, 118, 0.1);
+  color: #f3b9cd;
+  box-shadow: 0 0 0 6px rgba(243, 185, 205, 0.1);
 }
 
 /* ===== 留言飞向桃心：爱意送达/珍藏的视觉隐喻 ===== */
@@ -2067,8 +2068,8 @@ input {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 235, 240, 1) 0%, var(--rose-400) 45%, rgba(232, 86, 29, 0.4) 75%, transparent 100%);
-  box-shadow: 0 0 12px 3px rgba(232, 86, 29, 0.35);
+  background: radial-gradient(circle, rgba(255, 235, 240, 1) 0%, var(--rose-400) 45%, rgba(232, 132, 168, 0.4) 75%, transparent 100%);
+  box-shadow: 0 0 12px 3px rgba(232, 132, 168, 0.35);
   transform: translate(-50%, -50%) scale(0.4);
   opacity: 0;
   pointer-events: none;
@@ -2130,14 +2131,14 @@ input {
   color: var(--rose-700);
   opacity: 0.55;
   font-size: 13px;
-  border-top: 1px solid rgba(232, 86, 29, 0.12);
+  border-top: 1px solid rgba(232, 132, 168, 0.12);
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   transition: color 0.15s var(--ease), background 0.15s var(--ease), opacity 0.15s;
   cursor: pointer;
 }
 .anni-panel__writenote:hover {
   opacity: 0.85;
-  background: rgba(232, 86, 29, 0.05);
+  background: rgba(232, 132, 168, 0.05);
 }
 
 /* ===== 待办「有图」徽标（小相纸图标，紧跟主文案后边）=====
@@ -2352,11 +2353,11 @@ input {
 }
 .img-lightbox__act:active { transform: scale(0.96); }
 .img-lightbox__act--del {
-  background: #d4460f;
-  box-shadow: 0 4px 16px rgba(168, 52, 10, 0.4);
+  background: #d46e94;
+  box-shadow: 0 4px 16px rgba(184, 90, 124, 0.4);
 }
 .img-lightbox__act--confirm {
-  background: #b23a10;
+  background: #b85a7c;
   box-shadow: 0 4px 16px rgba(159, 18, 57, 0.5);
   animation: del-confirm-pulse 0.6s var(--ease);
 }
@@ -2386,8 +2387,8 @@ input {
   gap: 3px;
   padding: 2px 7px;
   border-radius: 10px;
-  background: rgba(232, 86, 29, 0.08);
-  border: 1px solid rgba(232, 86, 29, 0.14);
+  background: rgba(232, 132, 168, 0.08);
+  border: 1px solid rgba(232, 132, 168, 0.14);
   color: var(--rose-500);
   pointer-events: none;
   animation: reactions-enter 0.3s var(--ease);
@@ -2398,8 +2399,8 @@ input {
   display: block;
 }
 .todo__reaction--mine {
-  background: rgba(232, 86, 29, 0.16);
-  border-color: rgba(232, 86, 29, 0.3);
+  background: rgba(232, 132, 168, 0.16);
+  border-color: rgba(232, 132, 168, 0.3);
   color: var(--rose-600);
 }
 .todo__reaction-count {
@@ -2444,7 +2445,7 @@ input {
   background: linear-gradient(160deg, var(--color-primary), var(--color-primary-dark));
   color: #fff;
   /* v2.7.54 B17 FAB 升级：阴影用 --shadow-lg（暖色染色），与全 App 阴影 token 对齐 */
-  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(168, 52, 10, 0.05);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(184, 90, 124, 0.05);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2495,7 +2496,7 @@ input {
   z-index: 60;
   background: var(--color-surface);
   border-radius: 24px 24px 0 0;
-  box-shadow: 0 -4px 24px rgba(168, 52, 10, 0.10);
+  box-shadow: 0 -4px 24px rgba(184, 90, 124, 0.10);
   padding: 8px 16px calc(16px + var(--safe-bottom));
   display: flex;
   align-items: center;
@@ -2519,10 +2520,10 @@ input {
   width: 44px;
   height: 5px;
   border-radius: 3px;
-  background: linear-gradient(90deg, rgba(232, 158, 118, 0.45) 0%, rgba(232, 86, 29, 0.65) 50%, rgba(232, 158, 118, 0.45) 100%);
+  background: linear-gradient(90deg, rgba(243, 185, 205, 0.45) 0%, rgba(232, 132, 168, 0.65) 50%, rgba(243, 185, 205, 0.45) 100%);
   transition: width 0.18s var(--ease), background 0.18s var(--ease);
 }
-.add-panel:active .add-panel__handle { width: 56px; background: linear-gradient(90deg, rgba(232, 158, 118, 0.65) 0%, rgba(232, 86, 29, 0.85) 50%, rgba(232, 158, 118, 0.65) 100%); }
+.add-panel:active .add-panel__handle { width: 56px; background: linear-gradient(90deg, rgba(243, 185, 205, 0.65) 0%, rgba(232, 132, 168, 0.85) 50%, rgba(243, 185, 205, 0.65) 100%); }
 
 .add-panel__input {
   flex: 1;
@@ -2631,7 +2632,7 @@ input {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 14px;
-  box-shadow: 0 6px 24px rgba(168, 52, 10, 0.16);
+  box-shadow: 0 6px 24px rgba(184, 90, 124, 0.16);
   animation: add-preview-in 0.22s var(--ease);
 }
 @keyframes add-preview-in {
@@ -2672,12 +2673,12 @@ input {
   position: fixed;
   inset: 0;
   z-index: 55;
-  background: rgba(168, 52, 10, 0);
+  background: rgba(184, 90, 124, 0);
   visibility: hidden;
   transition: background 0.25s var(--ease), visibility 0s 0.25s;
 }
 .add-overlay--show {
-  background: rgba(168, 52, 10, 0.38);
+  background: rgba(184, 90, 124, 0.38);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   visibility: visible;
@@ -2710,7 +2711,7 @@ input {
   bottom: 0;
   background: var(--color-surface);
   border-radius: 24px 24px 0 0;
-  box-shadow: 0 -4px 24px rgba(168, 52, 10, 0.10);
+  box-shadow: 0 -4px 24px rgba(184, 90, 124, 0.10);
   padding: 8px 16px calc(20px + var(--safe-bottom));
   transform: translateY(100%);
   transition: transform 0.28s var(--ease);
@@ -2724,7 +2725,7 @@ input {
   width: 44px;
   height: 5px;
   border-radius: 3px;
-  background: linear-gradient(90deg, rgba(232, 158, 118, 0.45) 0%, rgba(232, 86, 29, 0.65) 50%, rgba(232, 158, 118, 0.45) 100%);
+  background: linear-gradient(90deg, rgba(243, 185, 205, 0.45) 0%, rgba(232, 132, 168, 0.65) 50%, rgba(243, 185, 205, 0.45) 100%);
   margin: 0 auto 14px;
 }
 
@@ -2842,7 +2843,7 @@ input {
   position: absolute;
   inset: -2px;
   border-radius: inherit;
-  border: 2px solid var(--burst-color, #f2b894);
+  border: 2px solid var(--burst-color, #f3b9cd);
   pointer-events: none;
   opacity: 0;
   z-index: 5;
@@ -2944,7 +2945,7 @@ input {
   background: var(--color-surface);
   border-radius: 24px 24px 0 0;
   padding: 20px 18px calc(20px + var(--safe-bottom));
-  box-shadow: 0 -8px 32px rgba(168, 52, 10, 0.10);
+  box-shadow: 0 -8px 32px rgba(184, 90, 124, 0.10);
   transform: translateY(0);
   transition: transform 0.3s var(--ease);
 }
@@ -2996,11 +2997,11 @@ input {
   gap: 12px;
   padding: 12px 16px;
   border-radius: 16px;
-  border: 1px solid rgba(232, 86, 29, 0.2);
-  background: linear-gradient(150deg, rgba(232, 158, 118, 0.2), rgba(232, 86, 29, 0.1));
+  border: 1px solid rgba(232, 132, 168, 0.2);
+  background: linear-gradient(150deg, rgba(243, 185, 205, 0.2), rgba(232, 132, 168, 0.1));
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 8px 24px rgba(135, 42, 8, 0.14);
+  box-shadow: 0 8px 24px rgba(150, 74, 102, 0.14);
   opacity: 0;
   transform: translateY(12px);
   transition: opacity 0.28s var(--ease), transform 0.28s var(--ease);
@@ -3013,8 +3014,8 @@ input {
 }
 /* 稀有度渐变底 */
 .sticker-modal__flavor--rare {
-  background: linear-gradient(150deg, rgba(232, 158, 118, 0.22), rgba(232, 86, 29, 0.1));
-  border-color: rgba(232, 86, 29, 0.22);
+  background: linear-gradient(150deg, rgba(243, 185, 205, 0.22), rgba(232, 132, 168, 0.1));
+  border-color: rgba(232, 132, 168, 0.22);
 }
 .sticker-modal__flavor--epic {
   background: linear-gradient(150deg, rgba(196, 181, 253, 0.24), rgba(139, 92, 246, 0.12));
@@ -3033,7 +3034,7 @@ input {
   justify-content: center;
   background: #fff;
   border-radius: 11px;
-  box-shadow: 0 1px 3px rgba(135, 42, 8, 0.12);
+  box-shadow: 0 1px 3px rgba(150, 74, 102, 0.12);
   padding: 3px;
 }
 .sticker-modal__flavor-icon svg {
@@ -3086,7 +3087,7 @@ input {
 @media (hover: hover) {
   .sticker-cell--unlocked:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(168, 52, 10, 0.10);
+    box-shadow: 0 4px 12px rgba(184, 90, 124, 0.10);
   }
 }
 
@@ -3112,7 +3113,7 @@ input {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 1px 2px rgba(135, 42, 8, 0.08), 0 2px 6px rgba(135, 42, 8, 0.07);
+  box-shadow: 0 1px 2px rgba(150, 74, 102, 0.08), 0 2px 6px rgba(150, 74, 102, 0.07);
 }
 .sticker-cell__icon {
   display: flex;
@@ -3136,7 +3137,7 @@ input {
   color: #fff;
   background: var(--rose-600);
   border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(168, 52, 10, 0.35);
+  box-shadow: 0 1px 4px rgba(184, 90, 124, 0.35);
 }
 
 .sticker-cell__name {
@@ -3168,7 +3169,7 @@ input {
   border-color: rgba(254, 205, 211, 0.6);
 }
 .sticker-cell--rare .sticker-cell__plate {
-  box-shadow: 0 1px 2px rgba(135, 42, 8, 0.08), 0 2px 6px rgba(135, 42, 8, 0.07),
+  box-shadow: 0 1px 2px rgba(150, 74, 102, 0.08), 0 2px 6px rgba(150, 74, 102, 0.07),
     0 0 0 1.5px rgba(251, 113, 133, 0.3);
 }
 .sticker-cell--epic {
@@ -3176,7 +3177,7 @@ input {
   border-color: rgba(196, 181, 253, 0.6);
 }
 .sticker-cell--epic .sticker-cell__plate {
-  box-shadow: 0 1px 2px rgba(135, 42, 8, 0.08), 0 2px 6px rgba(135, 42, 8, 0.07),
+  box-shadow: 0 1px 2px rgba(150, 74, 102, 0.08), 0 2px 6px rgba(150, 74, 102, 0.07),
     0 0 0 1.5px rgba(139, 92, 246, 0.32);
 }
 .sticker-cell--legendary {
@@ -3185,7 +3186,7 @@ input {
   box-shadow: 0 2px 10px rgba(245, 158, 11, 0.12);
 }
 .sticker-cell--legendary .sticker-cell__plate {
-  box-shadow: 0 1px 2px rgba(135, 42, 8, 0.08), 0 2px 6px rgba(135, 42, 8, 0.07),
+  box-shadow: 0 1px 2px rgba(150, 74, 102, 0.08), 0 2px 6px rgba(150, 74, 102, 0.07),
     0 0 0 1.5px rgba(245, 158, 11, 0.45), 0 0 12px rgba(251, 191, 36, 0.35);
 }
 
@@ -3371,7 +3372,7 @@ input {
 .apk-entry:hover,
 .apk-entry:focus-visible {
   color: var(--rose-500);
-  background: rgba(232, 86, 29, 0.08);
+  background: rgba(232, 132, 168, 0.08);
   outline: none;
 }
 .apk-entry:active { transform: scale(0.92); }
@@ -3511,14 +3512,14 @@ input {
   font-size: 14px;
   font-weight: 500;
   color: var(--rose-600);
-  background: rgba(232, 86, 29, 0.08);
+  background: rgba(232, 132, 168, 0.08);
   border: none;
   border-radius: 10px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: background 0.18s ease, transform 0.12s ease, opacity 0.15s ease;
 }
-.apk-panel__btn:active { transform: scale(0.97); background: rgba(232, 86, 29, 0.14); }
+.apk-panel__btn:active { transform: scale(0.97); background: rgba(232, 132, 168, 0.14); }
 .apk-panel__btn:disabled { opacity: 0.5; cursor: default; }
 
 /* No.X 淡化印记 */
@@ -3587,7 +3588,7 @@ input {
 .account-menu {
   background: var(--color-surface);
   padding: 8px 12px;
-  border-top: 1px solid rgba(232, 158, 118, 0.18);
+  border-top: 1px solid rgba(243, 185, 205, 0.18);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -3723,7 +3724,7 @@ input {
   color: var(--color-primary);
 }
 .trash-item__btn--purge {
-  background: rgba(232, 86, 29, 0.08);
+  background: rgba(232, 132, 168, 0.08);
   color: var(--rose-500);
 }
 .trash-item__btn--armed {

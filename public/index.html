@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
-  <meta name="theme-color" content="#fefdfb" />
+  <meta name="theme-color" content="#fffbfc" />
   <meta name="description" content="双人共享待办清单" />
-  <meta name="app-version" content="2.7.60" />
+  <meta name="app-version" content="2.7.61" />
   <meta name="shell-version" content="2.1.28" /><!-- 壳版本：release-apk.mjs 每次发布自动更新 -->
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -25,9 +25,9 @@
     (function () {
       var h = new Date().getHours();
       var c1, c2;
-      if (h >= 6 && h < 9) { c1 = '#f2b894'; c2 = '#eb9058'; }        // 清晨暖橘
-      else if (h >= 22 || h < 6) { c1 = '#6a1f06'; c2 = '#4a1605'; }  // 深夜深玫红
-      else { c1 = '#eb9058'; c2 = '#d4460f'; }                        // 白天品牌珊瑚
+      if (h >= 6 && h < 9) { c1 = '#f3b9cd'; c2 = '#ee9cba'; }        // 清晨柔樱粉
+      else if (h >= 22 || h < 6) { c1 = '#83305a'; c2 = '#571c3a'; }  // 深夜深梅紫
+      else { c1 = '#ee9cba'; c2 = '#d46e94'; }                        // 白天品牌樱粉
       var s = document.createElement('style');
       s.textContent = '#topHeartGrad stop:nth-child(1){stop-color:' + c1 + '}'
                     + '#topHeartGrad stop:nth-child(2){stop-color:' + c2 + '}';
@@ -43,12 +43,12 @@
 </head>
 <body>
   <!-- JS 爱心开屏动画（首帧即铺满，1.2s 后淡出） -->
-  <div id="js-splash" style="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#fefdfb 0%,#fcf7ef 60%,#fef0e4 100%);transition:opacity 0.5s ease;pointer-events:none">
+  <div id="js-splash" style="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#fffbfc 0%,#fdf5f8 60%,#fbe8f0 100%);transition:opacity 0.5s ease;pointer-events:none">
     <div style="width:130px;height:130px;animation:js-splash-pop 0.6s cubic-bezier(0.16,1,0.3,1) both, js-splash-beat 1.2s ease-in-out 0.6s infinite">
       <svg viewBox="0 0 512 512" width="120" height="120" xmlns="http://www.w3.org/2000/svg">
         <defs>
-<linearGradient id="jsh1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#fdeee3"/></linearGradient>
-<linearGradient id="jsh2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#fffbf8"/><stop offset="100%" stop-color="#f8d6c2"/></linearGradient>
+<linearGradient id="jsh1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#fdf0f5"/></linearGradient>
+<linearGradient id="jsh2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#fffbfc"/><stop offset="100%" stop-color="#f9d6e2"/></linearGradient>
         </defs>
         <path d="M256 402s-110-66-110-140.6c0-36.4 28.8-63.4 63-63.4 22.6 0 41.4 11.6 47 28.2 5.6-16.6 24.4-28.2 47-28.2 34.2 0 63 27 63 63.4C366 336 256 402 256 402z" fill="url(#jsh1)"/>
         <g transform="translate(262 248) scale(0.5)">
@@ -78,8 +78,8 @@
         <svg viewBox="0 0 32 32" width="48" height="48">
           <defs>
             <linearGradient id="anniHeartGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#f2b894"/>
-              <stop offset="100%" stop-color="#e8561d"/>
+              <stop offset="0%" stop-color="#f3b9cd"/>
+              <stop offset="100%" stop-color="#e884a8"/>
             </linearGradient>
           </defs>
           <path d="M16 28s-11-6.6-11-14.2C5 9.2 7.9 6.5 11.3 6.5c2 0 3.8 1 4.7 2.6.9-1.6 2.7-2.6 4.7-2.6C24.1 6.5 27 9.2 27 13.8 27 21.4 16 28 16 28z" fill="url(#anniHeartGrad)"/>
@@ -169,8 +169,8 @@
         <svg viewBox="0 0 32 32" width="24" height="24" role="img" aria-label="爱心">
           <defs>
             <linearGradient id="topHeartGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#f2b894"/>
-              <stop offset="100%" stop-color="#e8561d"/>
+              <stop offset="0%" stop-color="#f3b9cd"/>
+              <stop offset="100%" stop-color="#e884a8"/>
             </linearGradient>
           </defs>
           <path d="M16 28s-11-6.6-11-14.2C5 9.2 7.9 6.5 11.3 6.5c2 0 3.8 1 4.7 2.6.9-1.6 2.7-2.6 4.7-2.6C24.1 6.5 27 9.2 27 13.8 27 21.4 16 28 16 28z" fill="url(#topHeartGrad)"/>

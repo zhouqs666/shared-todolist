@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-<!-- 背景：v2.7.51 P3.2 暖焦糖渐变（深→浅，与 brand rose token 对齐） -->
+<!-- 背景：v2.7.61 樱粉渐变（浅→深，与 brand rose token 对齐） -->
   <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-    <stop offset="0%" stop-color="#e8561d"/>
-    <stop offset="55%" stop-color="#d4460f"/>
-    <stop offset="100%" stop-color="#b23a10"/>
+    <stop offset="0%" stop-color="#e884a8"/>
+    <stop offset="55%" stop-color="#d46e94"/>
+    <stop offset="100%" stop-color="#b85a7c"/>
   </linearGradient>
-  <!-- 爱心：纯白到米杏白（cream-50） -->
+  <!-- 爱心：纯白到樱白（cream-50） -->
   <linearGradient id="heartGrad" x1="0%" y1="0%" x2="50%" y2="100%">
     <stop offset="0%" stop-color="#ffffff"/>
-    <stop offset="100%" stop-color="#fefdfb"/>
+    <stop offset="100%" stop-color="#fffbfc"/>
   </linearGradient>
     <!-- 爱心投影（增强立体） -->
     <filter id="heartShadow" x="-20%" y="-20%" width="140%" height="140%">
