@@ -15,6 +15,10 @@ import { auth } from './auth.js';
   function showError(msg) {
     errorEl.textContent = msg;
     errorEl.hidden = false;
+    // v2.7.55 C21：触发 shake 动画（重新播放需要先移除再加 class）
+    errorEl.classList.remove('login__error--shake');
+    void errorEl.offsetWidth; // 强制 reflow 以重启动画
+    errorEl.classList.add('login__error--shake');
   }
 
   function clearError() {

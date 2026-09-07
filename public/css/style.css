@@ -1111,6 +1111,62 @@ input {
   width: 40%;
 }
 
+/* v2.7.55 C23 骨架屏完整结构（设计 prototype-07 期望）：
+   - skeleton-page：首屏整体容器
+   - skeleton-hero：纪念日面板区域占位
+   - skeleton-list-title：列表标题占位
+   - skeleton-button：按钮占位 */
+.skeleton-page {
+  padding: 12px 16px;
+}
+.skeleton-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 24px 0;
+}
+.skeleton-hero .skeleton__line { margin: 0; }
+.skeleton-hero .skeleton__line--w40 { width: 40%; }
+.skeleton-hero .skeleton__line--w70 { width: 70%; }
+
+.skeleton-list-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 18px 0 12px;
+}
+.skeleton-list-title .lbl {
+  width: 80px;
+  height: 14px;
+}
+.skeleton-list-title .count {
+  width: 36px;
+  height: 14px;
+  border-radius: 999px;
+}
+
+/* 骨架按钮占位（用于 update panel / error retry 等） */
+.skeleton-button {
+  width: 100%;
+  height: 48px;
+  border-radius: var(--radius-sm);
+}
+
+/* 骨架高度档位（h10/h14/h20/h32）— 与设计原型一致 */
+.skeleton__box.h10 { height: 10px; }
+.skeleton__box.h14 { height: 14px; }
+.skeleton__box.h20 { height: 20px; }
+.skeleton__box.h32 { height: 32px; }
+/* 骨架宽度档位 */
+.skeleton__box.w40 { width: 40%; }
+.skeleton__box.w50 { width: 50%; }
+.skeleton__box.w60 { width: 60%; }
+.skeleton__box.w70 { width: 70%; }
+.skeleton__box.w90 { width: 90%; }
+.skeleton__box.w100 { width: 100%; }
+
 @keyframes shimmer {
   0% {
     background-position: 200% 0;
