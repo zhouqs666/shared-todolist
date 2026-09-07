@@ -46,7 +46,7 @@ export const RARITY_META = {
     ],
     // 稀有度配色（撒花/视觉用）：暖蜜桃（v2.7.51 P3.2 与 rose token 升级对齐）
     // 原色 #fda4af / #fb7185 / #fecdd3（冷粉）→ #f9e3d4 / #f1c4a8 / #fda4af（warm peach）
-    colors: ['#fce7da', '#f4cbb4', '#fda4af'],
+    colors: ['#fdeee3', '#f8d6c2', '#fda4af'],
     // 清新·自然意象：嫩芽 / 露珠 / 四叶草 / 小花（多层彩色插画，渐变 id 全局唯一）
     stickerIcons: [
       // 初心·嫩芽：双色新叶 + 茎 + 露珠高光 + 星芒点缀

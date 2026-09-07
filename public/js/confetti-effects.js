@@ -49,7 +49,7 @@ function getHeartShape() {
 // 情感色常量（与 CSS --rose-* 同源，confetti 用）：mint 主色 + rose 情感色和谐共舞
 // v2.7.51 P3.1 完成庆祝配色升级：rose-500/300/100 焦糖玫瑰系（#c2410c / #e89e76 / #f1c4a8）
 // 与 v2.7.48 token 升级对齐，不再是冷玫瑰 #f43f5e，整体更"暖"
-const ROSE = ['#d34c14', '#df7f55', '#eda984', '#f4cbb4'];
+const ROSE = ['#e8561d', '#eb9058', '#f2b894', '#f8d6c2'];
 
 // 普通完成：鼓励文案随机池（无进度型，保持温度感）
 const COMPLETE_PHRASES = [
@@ -112,9 +112,9 @@ export function celebrateCompletion(todo, isRemote = false) {
 
   // 配色：mint 主色 + rose 情感色，两套色在完成时刻和谐共舞
   const rootStyle = getComputedStyle(document.documentElement);
-  const primary = rootStyle.getPropertyValue('--color-primary').trim() || '#d34c14';
+  const primary = rootStyle.getPropertyValue('--color-primary').trim() || '#e8561d';
   // v2.7.51 同步：第三档金黄从 #fbbf24（鲜橙黄）→ #d9774b（焦糖橙），与暖玫瑰系更协调
-  const colors = [primary, ...ROSE, '#df7f55'];
+  const colors = [primary, ...ROSE, '#eb9058'];
 
   const shape = getHeartShape();
   const baseOpts = {

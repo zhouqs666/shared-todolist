@@ -34,12 +34,12 @@ input, textarea, [contenteditable] {
      v2.7.59 色系提亮：整体从「深焦糖」提亮到「暖珊瑚」，消除护眼模式般的暗黄感 */
   --color-primary: var(--rose-500);
   --color-primary-dark: var(--rose-600);
-  --color-primary-rgb: 211, 76, 20;
+  --color-primary-rgb: 232, 86, 29;
   /* 文字/边框用暖灰（stone 系）而非冷灰，与玫瑰氛围协调 */
   --color-text: var(--stone-900);
   --color-text-muted: var(--stone-500);
   --color-border: var(--stone-200);
-  --color-bg: #fdfaf6;
+  --color-bg: #fefdfb;
   --color-surface: #ffffff;
   --color-danger: #ef4444;
   /* 圆角体系：4 档语义化（sm 胶囊小件 / md 输入与按钮 / lg 卡片 / xl 弹层）。
@@ -62,26 +62,26 @@ input, textarea, [contenteditable] {
   /* 情感色（玫红系）：爱 / 纪念日 / 心里话 / 完成庆祝专属。
      与 mint 功能色各司其职：mint=日常操作，rose=情感表达。
      v2.7.59 提亮：全阶提亮一档（深焦糖 → 暖珊瑚），亮度提升但保持暖调不回冷粉 */
-  --rose-50: #fff8f4;
-  --rose-100: #fce7da;
-  --rose-200: #f4cbb4;
-  --rose-300: #eda984;
-  --rose-400: #df7f55;
-  --rose-500: #d34c14;
-  --rose-600: #bb3a0e;
-  --rose-700: #9d330f;
+  --rose-50: #fffbf8;
+  --rose-100: #fdeee3;
+  --rose-200: #f8d6c2;
+  --rose-300: #f2b894;
+  --rose-400: #eb9058;
+  --rose-500: #e8561d;
+  --rose-600: #d4460f;
+  --rose-700: #b23a10;
 
   /* 暖灰色阶（stone，文字/边框/中性面，与玫瑰氛围协调，非冷灰）
-     v2.7.59 边框提亮减黄：#e8dcc6 → #ece0cd */
-  --stone-200: #ece0cd;
+     v2.7.59 边框提亮减黄：#e8dcc6 → #f0e6d6 */
+  --stone-200: #f0e6d6;
   --stone-500: #6b6051;
   --stone-900: #2f2820;
 
   /* 米杏白（cream）：纸质卡片底色 / 选中态填充 / 暖白顶栏背景。
      v2.7.59 提亮去黄：黄感减弱，更接近白但仍是暖白 */
-  --cream-50: #fdfaf6;
-  --cream-100: #f8f3ea;
-  --cream-200: #ece0cd;
+  --cream-50: #fefdfb;
+  --cream-100: #fbf8f1;
+  --cream-200: #f0e6d6;
   --cream-300: #ddcdae;
 
   /* v2.7.51 P3.2 隐藏款稀有度语义色（Semantic · 二级 token）
@@ -169,7 +169,7 @@ body {
      fixed 让渐变随滚动固定，卡片在"光"上滑动，像午后阳光洒在纸面。 */
   background:
     radial-gradient(1100px 480px at 50% -12%, rgba(232, 158, 118, 0.20), transparent 62%),
-    linear-gradient(180deg, #fdfaf6 0%, #fefdfa 42%, #fdfaf6 100%);
+    linear-gradient(180deg, #fefdfb 0%, #fefefd 42%, #fefdfb 100%);
   background-attachment: fixed;
   color: var(--color-text);
   font-size: 16px;
@@ -226,7 +226,7 @@ input {
   align-items: center;
   line-height: 0;
   position: relative; /* 给光晕伪元素 ::after 定位 */
-  filter: drop-shadow(0 2px 4px rgba(211, 76, 20, 0.25));
+  filter: drop-shadow(0 2px 4px rgba(232, 86, 29, 0.25));
   /* 持续心跳：克制的心跳节奏（咚-咚...呼吸...），仿真心跳 */
   animation: heart-beat 2.4s ease-in-out infinite;
 }
@@ -732,7 +732,7 @@ input {
 }
 .todo-list__empty-heart svg {
   position: relative;
-  filter: drop-shadow(0 6px 16px rgba(211, 76, 20, 0.22));
+  filter: drop-shadow(0 6px 16px rgba(232, 86, 29, 0.22));
 }
 /* v2.7.53 A9 改用设计原型期望的 float（translateY(-8px)）替代原 scale breath */
 @keyframes empty-heart-float {
@@ -1365,7 +1365,7 @@ input {
   color: var(--rose-500);
 }
 .action-sheet__icon-btn--danger:hover {
-  background: rgba(211, 76, 20, 0.1);
+  background: rgba(232, 86, 29, 0.1);
   color: var(--rose-600);
 }
 
@@ -1417,8 +1417,8 @@ input {
   padding: 28px 24px;
   border-radius: 24px;
   background: linear-gradient(160deg, var(--rose-50) 0%, var(--rose-100) 55%, var(--rose-200) 100%);
-  border: 1px solid rgba(211, 76, 20, 0.15);
-  box-shadow: 0 12px 40px rgba(211, 76, 20, 0.18);
+  border: 1px solid rgba(232, 86, 29, 0.15);
+  box-shadow: 0 12px 40px rgba(232, 86, 29, 0.18);
   text-align: center;
   width: calc(100% - 40px);
   max-width: 360px;
@@ -1484,11 +1484,11 @@ input {
    （animation 已在上文 .anni-panel__heart / .anni-panel__heart--intro 中定义） */
 
 @keyframes anni-panel-heart-glow {
-  0%, 100% { filter: drop-shadow(0 0 6px rgba(211, 76, 20, 0.18)); }
-  10% { filter: drop-shadow(0 0 14px rgba(211, 76, 20, 0.38)); }  /* 第一跳扩散 */
-  22% { filter: drop-shadow(0 0 10px rgba(211, 76, 20, 0.26)); }
-  30% { filter: drop-shadow(0 0 13px rgba(211, 76, 20, 0.32)); }  /* 第二跳 */
-  44% { filter: drop-shadow(0 0 7px rgba(211, 76, 20, 0.20)); }
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(232, 86, 29, 0.18)); }
+  10% { filter: drop-shadow(0 0 14px rgba(232, 86, 29, 0.38)); }  /* 第一跳扩散 */
+  22% { filter: drop-shadow(0 0 10px rgba(232, 86, 29, 0.26)); }
+  30% { filter: drop-shadow(0 0 13px rgba(232, 86, 29, 0.32)); }  /* 第二跳 */
+  44% { filter: drop-shadow(0 0 7px rgba(232, 86, 29, 0.20)); }
 }
 
 /* 飘落入场：从上方坠落 → 回弹 → 落定，带弹性曲线 */
@@ -1533,7 +1533,7 @@ input {
 /* 分隔线（主区与倒计时之间） */
 .anni-panel__divider {
   height: 1px;
-  background: rgba(211, 76, 20, 0.15);
+  background: rgba(232, 86, 29, 0.15);
   margin: 22px 0 8px;
 }
 
@@ -1550,7 +1550,7 @@ input {
   align-items: center;
   gap: 10px;
   padding: 10px 10px;
-  border-bottom: 1px solid rgba(211, 76, 20, 0.08);
+  border-bottom: 1px solid rgba(232, 86, 29, 0.08);
   border-radius: 10px;
   transition: background 0.15s var(--ease);
 }
@@ -1641,7 +1641,7 @@ input {
   position: absolute;
   inset: 4px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(211, 76, 20, 0.3), transparent 70%);
+  background: radial-gradient(circle, rgba(232, 86, 29, 0.3), transparent 70%);
   animation: note-glow-ring 1.8s ease-in-out infinite;
   pointer-events: none;
 }
@@ -1654,7 +1654,7 @@ input {
   0%, 100% { opacity: 0.4; transform: scale(0.9); }
   50%      { opacity: 0.8; transform: scale(1.15); }
 }
-.note-bell:hover { background: rgba(211, 76, 20, 0.1); }
+.note-bell:hover { background: rgba(232, 86, 29, 0.1); }
 .note-bell:focus-visible {
   outline: 2px solid var(--rose-500);
   outline-offset: 2px;
@@ -1756,8 +1756,8 @@ input {
     to bottom,
     transparent 0,
     transparent 29.6px,
-    rgba(211, 76, 20, 0.15) 29.6px,
-    rgba(211, 76, 20, 0.15) 30.6px
+    rgba(232, 86, 29, 0.15) 29.6px,
+    rgba(232, 86, 29, 0.15) 30.6px
   );
   /* 让横线落在文字基线下沿（字"坐"在横线上，像作业本）：
      textarea 有 padding-top 14px，基线下沿 = 14 + 25 ≈ 39px，
@@ -1775,7 +1775,7 @@ input {
   background: linear-gradient(90deg,
     transparent 0%,
     rgba(232, 158, 118, 0.65) 18%,
-    rgba(211, 76, 20, 0.5) 50%,
+    rgba(232, 86, 29, 0.5) 50%,
     rgba(232, 158, 118, 0.65) 82%,
     transparent 100%);
   pointer-events: none;
@@ -1861,12 +1861,12 @@ input {
   color: #fff;
   font-size: 16px;
   font-weight: 600;
-  box-shadow: 0 6px 20px rgba(211, 76, 20, 0.35);
+  box-shadow: 0 6px 20px rgba(232, 86, 29, 0.35);
   transition: filter 0.15s var(--ease), transform 0.1s var(--ease), box-shadow 0.15s var(--ease);
 }
 .note-write__send:hover {
   filter: brightness(1.06);
-  box-shadow: 0 8px 26px rgba(211, 76, 20, 0.42);
+  box-shadow: 0 8px 26px rgba(232, 86, 29, 0.42);
 }
 /* 字距 + 尾距补偿：letter-spacing 会在末字后多出 3px，往回收正视觉中心 */
 .note-write__send-text { letter-spacing: 3px; margin-right: -3px; }
@@ -2019,7 +2019,7 @@ input {
 /* 黄昏（18-22点）：v2.7.51 P3.3 暮色蜜桃调（v2.7.59 提亮一档）
    v2.7.53 A7 CTA → v2.7.55 调整 → v2.7.59 提亮去黄 */
 .note-read--dusk {
-  background: linear-gradient(165deg, #fef5ec 0%, #fdebd8 50%, #fbe3c8 100%);
+  background: linear-gradient(165deg, #fff9f2 0%, #fef0e0 50%, #fce8d2 100%);
 }
 .note-read--dusk .note-read__seal {
   box-shadow: 0 0 0 6px rgba(168, 52, 10, 0.10);
@@ -2046,7 +2046,7 @@ input {
 }
 .note-read--night .note-read__seal {
   background: rgba(255, 255, 255, 0.08);
-  color: #eda984;
+  color: #f2b894;
   box-shadow: 0 0 0 6px rgba(232, 158, 118, 0.1);
 }
 
@@ -2067,8 +2067,8 @@ input {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 235, 240, 1) 0%, var(--rose-400) 45%, rgba(211, 76, 20, 0.4) 75%, transparent 100%);
-  box-shadow: 0 0 12px 3px rgba(211, 76, 20, 0.35);
+  background: radial-gradient(circle, rgba(255, 235, 240, 1) 0%, var(--rose-400) 45%, rgba(232, 86, 29, 0.4) 75%, transparent 100%);
+  box-shadow: 0 0 12px 3px rgba(232, 86, 29, 0.35);
   transform: translate(-50%, -50%) scale(0.4);
   opacity: 0;
   pointer-events: none;
@@ -2130,14 +2130,14 @@ input {
   color: var(--rose-700);
   opacity: 0.55;
   font-size: 13px;
-  border-top: 1px solid rgba(211, 76, 20, 0.12);
+  border-top: 1px solid rgba(232, 86, 29, 0.12);
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   transition: color 0.15s var(--ease), background 0.15s var(--ease), opacity 0.15s;
   cursor: pointer;
 }
 .anni-panel__writenote:hover {
   opacity: 0.85;
-  background: rgba(211, 76, 20, 0.05);
+  background: rgba(232, 86, 29, 0.05);
 }
 
 /* ===== 待办「有图」徽标（小相纸图标，紧跟主文案后边）=====
@@ -2352,11 +2352,11 @@ input {
 }
 .img-lightbox__act:active { transform: scale(0.96); }
 .img-lightbox__act--del {
-  background: #bb3a0e;
+  background: #d4460f;
   box-shadow: 0 4px 16px rgba(168, 52, 10, 0.4);
 }
 .img-lightbox__act--confirm {
-  background: #9d330f;
+  background: #b23a10;
   box-shadow: 0 4px 16px rgba(159, 18, 57, 0.5);
   animation: del-confirm-pulse 0.6s var(--ease);
 }
@@ -2386,8 +2386,8 @@ input {
   gap: 3px;
   padding: 2px 7px;
   border-radius: 10px;
-  background: rgba(211, 76, 20, 0.08);
-  border: 1px solid rgba(211, 76, 20, 0.14);
+  background: rgba(232, 86, 29, 0.08);
+  border: 1px solid rgba(232, 86, 29, 0.14);
   color: var(--rose-500);
   pointer-events: none;
   animation: reactions-enter 0.3s var(--ease);
@@ -2398,8 +2398,8 @@ input {
   display: block;
 }
 .todo__reaction--mine {
-  background: rgba(211, 76, 20, 0.16);
-  border-color: rgba(211, 76, 20, 0.3);
+  background: rgba(232, 86, 29, 0.16);
+  border-color: rgba(232, 86, 29, 0.3);
   color: var(--rose-600);
 }
 .todo__reaction-count {
@@ -2519,10 +2519,10 @@ input {
   width: 44px;
   height: 5px;
   border-radius: 3px;
-  background: linear-gradient(90deg, rgba(232, 158, 118, 0.45) 0%, rgba(211, 76, 20, 0.65) 50%, rgba(232, 158, 118, 0.45) 100%);
+  background: linear-gradient(90deg, rgba(232, 158, 118, 0.45) 0%, rgba(232, 86, 29, 0.65) 50%, rgba(232, 158, 118, 0.45) 100%);
   transition: width 0.18s var(--ease), background 0.18s var(--ease);
 }
-.add-panel:active .add-panel__handle { width: 56px; background: linear-gradient(90deg, rgba(232, 158, 118, 0.65) 0%, rgba(211, 76, 20, 0.85) 50%, rgba(232, 158, 118, 0.65) 100%); }
+.add-panel:active .add-panel__handle { width: 56px; background: linear-gradient(90deg, rgba(232, 158, 118, 0.65) 0%, rgba(232, 86, 29, 0.85) 50%, rgba(232, 158, 118, 0.65) 100%); }
 
 .add-panel__input {
   flex: 1;
@@ -2724,7 +2724,7 @@ input {
   width: 44px;
   height: 5px;
   border-radius: 3px;
-  background: linear-gradient(90deg, rgba(232, 158, 118, 0.45) 0%, rgba(211, 76, 20, 0.65) 50%, rgba(232, 158, 118, 0.45) 100%);
+  background: linear-gradient(90deg, rgba(232, 158, 118, 0.45) 0%, rgba(232, 86, 29, 0.65) 50%, rgba(232, 158, 118, 0.45) 100%);
   margin: 0 auto 14px;
 }
 
@@ -2842,7 +2842,7 @@ input {
   position: absolute;
   inset: -2px;
   border-radius: inherit;
-  border: 2px solid var(--burst-color, #eda984);
+  border: 2px solid var(--burst-color, #f2b894);
   pointer-events: none;
   opacity: 0;
   z-index: 5;
@@ -2996,8 +2996,8 @@ input {
   gap: 12px;
   padding: 12px 16px;
   border-radius: 16px;
-  border: 1px solid rgba(211, 76, 20, 0.2);
-  background: linear-gradient(150deg, rgba(232, 158, 118, 0.2), rgba(211, 76, 20, 0.1));
+  border: 1px solid rgba(232, 86, 29, 0.2);
+  background: linear-gradient(150deg, rgba(232, 158, 118, 0.2), rgba(232, 86, 29, 0.1));
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   box-shadow: 0 8px 24px rgba(135, 42, 8, 0.14);
@@ -3013,8 +3013,8 @@ input {
 }
 /* 稀有度渐变底 */
 .sticker-modal__flavor--rare {
-  background: linear-gradient(150deg, rgba(232, 158, 118, 0.22), rgba(211, 76, 20, 0.1));
-  border-color: rgba(211, 76, 20, 0.22);
+  background: linear-gradient(150deg, rgba(232, 158, 118, 0.22), rgba(232, 86, 29, 0.1));
+  border-color: rgba(232, 86, 29, 0.22);
 }
 .sticker-modal__flavor--epic {
   background: linear-gradient(150deg, rgba(196, 181, 253, 0.24), rgba(139, 92, 246, 0.12));
@@ -3371,7 +3371,7 @@ input {
 .apk-entry:hover,
 .apk-entry:focus-visible {
   color: var(--rose-500);
-  background: rgba(211, 76, 20, 0.08);
+  background: rgba(232, 86, 29, 0.08);
   outline: none;
 }
 .apk-entry:active { transform: scale(0.92); }
@@ -3511,14 +3511,14 @@ input {
   font-size: 14px;
   font-weight: 500;
   color: var(--rose-600);
-  background: rgba(211, 76, 20, 0.08);
+  background: rgba(232, 86, 29, 0.08);
   border: none;
   border-radius: 10px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: background 0.18s ease, transform 0.12s ease, opacity 0.15s ease;
 }
-.apk-panel__btn:active { transform: scale(0.97); background: rgba(211, 76, 20, 0.14); }
+.apk-panel__btn:active { transform: scale(0.97); background: rgba(232, 86, 29, 0.14); }
 .apk-panel__btn:disabled { opacity: 0.5; cursor: default; }
 
 /* No.X 淡化印记 */
@@ -3723,7 +3723,7 @@ input {
   color: var(--color-primary);
 }
 .trash-item__btn--purge {
-  background: rgba(211, 76, 20, 0.08);
+  background: rgba(232, 86, 29, 0.08);
   color: var(--rose-500);
 }
 .trash-item__btn--armed {
