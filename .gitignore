@@ -50,6 +50,7 @@ keystore.properties
 # 发布临时产物
 .release-tmp/
 
-# 调试探针脚本（临时排查用）
-scripts/_debug-*.mjs
+# 临时调试探针（任何下划线开头的临时脚本；_lib-* 是发布脚本依赖的内部库，例外）
+scripts/_*.mjs
+!scripts/_lib-*.mjs
 
