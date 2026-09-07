@@ -930,7 +930,7 @@ input {
   transition: background 0.25s var(--ease);
 }
 .action-sheet__overlay--show {
-  background: rgba(24, 20, 22, 0.42);
+  background: rgba(168, 52, 10, 0.42);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
 }
@@ -2260,7 +2260,7 @@ input {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 14px;
-  box-shadow: 0 6px 24px rgba(24, 20, 22, 0.16);
+  box-shadow: 0 6px 24px rgba(168, 52, 10, 0.16);
   animation: add-preview-in 0.22s var(--ease);
 }
 @keyframes add-preview-in {
@@ -2285,7 +2285,7 @@ input {
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: rgba(41, 37, 36, 0.82);
+  background: rgba(47, 40, 32, 0.82);
   color: #fff;
   display: flex;
   align-items: center;
@@ -2301,12 +2301,12 @@ input {
   position: fixed;
   inset: 0;
   z-index: 55;
-  background: rgba(24, 20, 22, 0);
+  background: rgba(168, 52, 10, 0);
   visibility: hidden;
   transition: background 0.25s var(--ease), visibility 0s 0.25s;
 }
 .add-overlay--show {
-  background: rgba(24, 20, 22, 0.38);
+  background: rgba(168, 52, 10, 0.38);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   visibility: visible;
