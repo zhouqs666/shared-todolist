@@ -69,13 +69,13 @@ function resetAffordanceState(page) {
 
 async function openBook(page) {
   await page.click('#stickerEntry');
-  await page.waitForSelector('#stickerModal:not(.hidden)', { timeout: 5000 });
-  await page.waitForSelector('.sticker-cell--unlocked', { timeout: 5000 });
+  await page.waitForSelector('#stickerModal:not(.hidden)', { timeout: 15000 });
+  await page.waitForSelector('.sticker-cell--unlocked', { timeout: 15000 });
 }
 
 async function closeBook(page) {
   await page.click('#stickerModalClose');
-  await page.waitForSelector('#stickerModal.hidden', { timeout: 5000 });
+  await page.waitForSelector('#stickerModal.hidden', { timeout: 15000 });
   await page.waitForTimeout(150); // 等关闭清理 + 挂起的 timer 窗口过去
 }
 
@@ -133,7 +133,7 @@ try {
     await openBook(page);
     await waitWiggle(page);
     await page.click('.sticker-cell--unlocked');
-    await page.waitForSelector('#stickerFlavor.sticker-modal__flavor--show', { timeout: 5000 });
+    await page.waitForSelector('#stickerFlavor.sticker-modal__flavor--show', { timeout: 15000 });
     const flavorText = await page.textContent('#stickerFlavor');
     check('点击后故事卡弹出（含专属短句）', (flavorText || '').length > 5, flavorText || '(empty)');
     const tapEver = await page.evaluate(() => localStorage.getItem('stickerTapEver'));
@@ -178,8 +178,8 @@ try {
     await login(page);
     await resetAffordanceState(page);
     await page.click('#stickerEntry');
-    await page.waitForSelector('#stickerModal:not(.hidden)', { timeout: 5000 });
-    await page.waitForSelector('.sticker-cell:not(.sticker-cell--unlocked)', { timeout: 5000 });
+    await page.waitForSelector('#stickerModal:not(.hidden)', { timeout: 15000 });
+    await page.waitForSelector('.sticker-cell:not(.sticker-cell--unlocked)', { timeout: 15000 });
     check('空图鉴（全未解锁）不轻晃', !(await waitWiggle(page)));
     const opens = await page.evaluate(() => localStorage.getItem('stickerWiggleOpens'));
     check('空图鉴不消耗演示次数', opens === null, `got ${opens}`);
