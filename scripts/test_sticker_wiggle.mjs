@@ -36,6 +36,14 @@ const MOCK_STICKERS = [
   { id: 'e2e-3', sticker_key: 'legendary_3', rarity: 'legendary', unlocked_by: 'e2e', todo_id: null, unlocked_at: '2026-08-03T10:00:00+00:00' },
 ];
 
+/** 全局页面错误监听，确保登录/打开阶段抛出的 JS 错误也能被捕获 */
+function attachPageListeners(page) {
+  page.on('pageerror', (e) => console.error('[pageerror]', e.message));
+  page.on('console', (m) => {
+    if (m.type() === 'error') console.error('[console.error]', m.text());
+  });
+}
+
 /** 拦截 stickers 查询（GET → mock 数组），其余请求放行 */
 async function mockStickers(page, rows = MOCK_STICKERS) {
   await page.route('**/rest/v1/stickers**', (route) => {
@@ -52,11 +60,11 @@ async function mockStickers(page, rows = MOCK_STICKERS) {
 /** 登录（固定测试账号，项目既有双账号之一） */
 async function login(page) {
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#username', { timeout: 15000 });
+  await page.locator('#username').waitFor({ timeout: 15000 });
   await page.fill('#username', '小宝宝');
   await page.fill('#password', '5201314');
   await page.click('#submitBtn');
-  await page.waitForSelector('#stickerEntry', { state: 'visible', timeout: 20000 });
+  await page.locator('#stickerEntry').waitFor({ state: 'visible', timeout: 20000 });
 }
 
 /** 清空引导相关 localStorage */
@@ -67,22 +75,42 @@ function resetAffordanceState(page) {
   });
 }
 
-async function openBook(page) {
-  await page.click('#stickerEntry');
-  await page.waitForSelector('#stickerModal:not(.hidden)', { timeout: 15000 });
-  await page.waitForSelector('.sticker-cell--unlocked', { timeout: 15000 });
+async function openBook(page, ctx = '') {
+  try {
+    // locator.click() 会自动等待元素可见、稳定、可点击后再点，比 page.click() 更稳
+    await page.locator('#stickerEntry').click();
+    await page.locator('#stickerModal:not(.hidden)').waitFor({ state: 'visible', timeout: 15000 });
+    await page.locator('.sticker-cell--unlocked').waitFor({ state: 'visible', timeout: 15000 });
+  } catch (e) {
+    console.error(`=== openBook debug${ctx ? ' (' + ctx + ')' : ''} ===`);
+    console.error('stickerEntry visible:', await page.locator('#stickerEntry').isVisible().catch(() => 'error'));
+    console.error('stickerModal count:', await page.locator('#stickerModal').count());
+    console.error('stickerModal class:', await page.evaluate(() => {
+      const el = document.querySelector('#stickerModal');
+      return el ? el.className : '(not found)';
+    }));
+    console.error('stickerModal display:', await page.evaluate(() => {
+      const el = document.querySelector('#stickerModal');
+      return el ? getComputedStyle(el).display : '(not found)';
+    }));
+    console.error('stickerModal opacity:', await page.evaluate(() => {
+      const el = document.querySelector('#stickerModal');
+      return el ? getComputedStyle(el).opacity : '(not found)';
+    }));
+    throw e;
+  }
 }
 
 async function closeBook(page) {
-  await page.click('#stickerModalClose');
-  await page.waitForSelector('#stickerModal.hidden', { timeout: 15000 });
+  await page.locator('#stickerModalClose').click();
+  await page.locator('#stickerModal.hidden').waitFor({ timeout: 15000 });
   await page.waitForTimeout(150); // 等关闭清理 + 挂起的 timer 窗口过去
 }
 
 /** 等待 --wiggle 类出现（出现=true）或超时（false） */
 async function waitWiggle(page, timeout = 2600) {
   try {
-    await page.waitForSelector('.sticker-cell--wiggle', { timeout });
+    await page.locator('.sticker-cell--wiggle').waitFor({ timeout });
     return true;
   } catch { return false; }
 }
@@ -92,6 +120,7 @@ try {
   // ===== 场景 1-4：首次用户完整流程 =====
   {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    attachPageListeners(page);
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await mockStickers(page);
@@ -99,7 +128,7 @@ try {
     await resetAffordanceState(page);
 
     // 1. 首次打开 → 轻晃出现
-    await openBook(page);
+    await openBook(page, '场景1');
     const wiggled = await waitWiggle(page);
     check('首次打开：第一张已解锁贴纸轻晃出现', wiggled);
     const wiggleCellIsFirst = await page.evaluate(() => {
@@ -125,15 +154,15 @@ try {
     await closeBook(page);
 
     // 3. 重开（仍未点过，计数=1 < 3）→ 再晃一次
-    await openBook(page);
+    await openBook(page, '场景3');
     check('第 2 次打开（未点过）仍会演示', await waitWiggle(page));
     await closeBook(page);
 
     // 4. 点贴纸 → 故事卡 + 永久退场
-    await openBook(page);
+    await openBook(page, '场景4');
     await waitWiggle(page);
-    await page.click('.sticker-cell--unlocked');
-    await page.waitForSelector('#stickerFlavor.sticker-modal__flavor--show', { timeout: 15000 });
+    await page.locator('.sticker-cell--unlocked').first().click();
+    await page.locator('#stickerFlavor.sticker-modal__flavor--show').waitFor({ timeout: 15000 });
     const flavorText = await page.textContent('#stickerFlavor');
     check('点击后故事卡弹出（含专属短句）', (flavorText || '').length > 5, flavorText || '(empty)');
     const tapEver = await page.evaluate(() => localStorage.getItem('stickerTapEver'));
@@ -144,7 +173,7 @@ try {
     await closeBook(page);
 
     // 5. 点过后重开 → 永不再晃
-    await openBook(page);
+    await openBook(page, '场景5');
     check('点过后重开：不再轻晃（永久退场）', !(await waitWiggle(page)));
     const opensUnchanged = await page.evaluate(() => localStorage.getItem('stickerWiggleOpens'));
     check('退场后计数不再累加', opensUnchanged === '3', `got ${opensUnchanged}`);
@@ -154,16 +183,17 @@ try {
     await page.close();
   }
 
-  // ===== 场景 5：从未点过但次数达上限 =====
+  // ===== 场景 6：从未点过但次数达上限 =====
   {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    attachPageListeners(page);
     await mockStickers(page);
     await login(page);
     await page.evaluate(() => {
       localStorage.removeItem('stickerTapEver');
       localStorage.setItem('stickerWiggleOpens', '3');
     });
-    await openBook(page);
+    await openBook(page, '场景6-达上限');
     check('达上限（3 次）后不再轻晃', !(await waitWiggle(page)));
     const opensStill3 = await page.evaluate(() => localStorage.getItem('stickerWiggleOpens'));
     check('达上限后计数不再 +1', opensStill3 === '3', `got ${opensStill3}`);
@@ -171,15 +201,16 @@ try {
     await page.close();
   }
 
-  // ===== 场景 6：空图鉴（无已解锁）不演示不计数 =====
+  // ===== 场景 7：空图鉴（无已解锁）不演示不计数 =====
   {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    attachPageListeners(page);
     await mockStickers(page, []);
     await login(page);
     await resetAffordanceState(page);
-    await page.click('#stickerEntry');
-    await page.waitForSelector('#stickerModal:not(.hidden)', { timeout: 15000 });
-    await page.waitForSelector('.sticker-cell:not(.sticker-cell--unlocked)', { timeout: 15000 });
+    await page.locator('#stickerEntry').click();
+    await page.locator('#stickerModal:not(.hidden)').waitFor({ state: 'visible', timeout: 15000 });
+    await page.locator('.sticker-cell:not(.sticker-cell--unlocked)').waitFor({ state: 'visible', timeout: 15000 });
     check('空图鉴（全未解锁）不轻晃', !(await waitWiggle(page)));
     const opens = await page.evaluate(() => localStorage.getItem('stickerWiggleOpens'));
     check('空图鉴不消耗演示次数', opens === null, `got ${opens}`);
@@ -187,13 +218,14 @@ try {
     await page.close();
   }
 
-  // ===== 场景 7：prefers-reduced-motion → 类照加、动画被禁 =====
+  // ===== 场景 8：prefers-reduced-motion → 类照加、动画被禁 =====
   {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+    attachPageListeners(page);
     await mockStickers(page);
     await login(page);
     await resetAffordanceState(page);
-    await openBook(page);
+    await openBook(page, '场景8-reduced-motion');
     const classAdded = await waitWiggle(page);
     check('reduced-motion 下类逻辑照常', classAdded);
     const animName = await page.evaluate(() => {
