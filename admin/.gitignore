@@ -7,6 +7,13 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.env.test
+
+# 测试产物（Playwright / Allure，本地生成，不提交）
+allure-results
+allure-report
+test-results
+playwright-report
 
 # 日志与系统文件
 *.log

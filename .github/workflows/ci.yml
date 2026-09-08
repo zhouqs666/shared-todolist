@@ -87,3 +87,72 @@ jobs:
             exit 1
           fi
           echo "Version $VERSION is valid semver"
+
+  e2e-admin:
+    name: Admin E2E (Playwright + Allure)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # E2E 跑在 admin/ 子项目（被测对象），依赖「独立 Supabase 测试项目」凭据（GitHub Secrets）
+    defaults:
+      run:
+        working-directory: admin
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: admin/package-lock.json
+
+      - name: Setup Java (Allure 报告依赖 JRE)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        env:
+          E2E_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+          E2E_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+          E2E_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
+          E2E_TEST_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
+          E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
+        run: |
+          if [ -z "$E2E_SUPABASE_URL" ] || [ -z "$E2E_SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::warning::E2E secrets 未配置，跳过 E2E 测试（配好 GitHub Secrets 后自动启用）"
+            exit 0
+          fi
+          npm run test:e2e
+
+      - name: Generate Allure report
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -d allure-results ]; then
+            npx allure generate allure-results --clean -o allure-report
+          fi
+
+      - name: Upload Allure report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: admin/allure-report
+          retention-days: 14
+
+      - name: Upload Playwright traces (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: admin/test-results
+          retention-days: 7
