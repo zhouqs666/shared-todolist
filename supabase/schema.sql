@@ -89,8 +89,16 @@ CREATE POLICY "todos_delete_auth" ON todos
   FOR DELETE TO authenticated USING (true);
 
 -- ===== 3. 启用 Realtime 推送（INSERT/UPDATE/DELETE 全事件）=====
-ALTER PUBLICATION supabase_realtime ADD TABLE todos;
-ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
+-- 幂等写法：表已在 publication 里时跳过，避免重复执行报 already member
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'todos') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE todos;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'profiles') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
+  END IF;
+END $$;
 
 -- ===== 5. daily_notes 表：悄悄留言（阅后即焚）=====
 CREATE TABLE IF NOT EXISTS daily_notes (
@@ -141,8 +149,15 @@ CREATE POLICY "reactions_delete_auth" ON reactions
   FOR DELETE TO authenticated USING (user_id = auth.uid());
 
 -- ===== 7. 启用新表的 Realtime 推送 =====
-ALTER PUBLICATION supabase_realtime ADD TABLE daily_notes;
-ALTER PUBLICATION supabase_realtime ADD TABLE reactions;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'daily_notes') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE daily_notes;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'reactions') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE reactions;
+  END IF;
+END $$;
 
 -- ===== 4. 账号创建参考（不在此处运行，使用 scripts/init-users.mjs）=====
 -- 见 scripts/init-users.mjs：用 service_role 调 auth.admin.createUser 创建

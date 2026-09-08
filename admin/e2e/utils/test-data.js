@@ -36,7 +36,7 @@ export async function getTestUserId(client, email) {
   const user = data.users.find((u) => u.email === email);
   if (!user) {
     throw new Error(
-      `测试账号不存在：${email}，请先在 admin/ 下运行 npm run init:test-users`
+      `测试账号不存在：${email}，请先在 admin/ 下运行 npm run init:test-env`
     );
   }
   return user.id;

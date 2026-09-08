@@ -132,6 +132,7 @@ jobs:
             echo "::warning::E2E secrets 未配置，跳过 E2E 测试（配好 GitHub Secrets 后自动启用）"
             exit 0
           fi
+          npm run init:test-env
           npm run test:e2e
 
       - name: Generate Allure report
