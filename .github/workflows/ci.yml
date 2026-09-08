@@ -1,0 +1,82 @@
+name: CI
+
+# 触发条件：
+# - push 到 main：每次合并后验证
+# - pull_request 到 main：PR 评审时验证（合并前阻断）
+# - workflow_dispatch：手动触发（紧急重跑 / 调试）
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# 取消旧 run：同一分支上有新 push 时，旧 run 自动取消（行业最佳实践，省 CI 资源）
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Node Regression + Version Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        # playwright 浏览器约 150MB，系统依赖约 300MB，第一次慢，CI 缓存后续会快
+        run: npx playwright install --with-deps chromium
+
+      - name: Start dev server (background)
+        # test_*.mjs 依赖 localhost:3000，需要先把本地服务跑起来
+        run: |
+          nohup npm start > /tmp/server.log 2>&1 &
+          echo "Server PID: $!"
+          # 轮询等待服务就绪（最多 30 秒）
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+              echo "Server is up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Server failed to start within 30s"
+          cat /tmp/server.log
+          exit 1
+
+      - name: Run Node regression tests
+        # test_*.mjs 是本地回归脚本，可独立验证纯逻辑；不连 Supabase 生产数据
+        # 任何脚本退出码非 0 立即阻断整个 job
+        run: |
+          set -e
+          for f in scripts/test_*.mjs; do
+            echo "================================================"
+            echo "Running: $f"
+            echo "================================================"
+            node "$f"
+          done
+          echo "All Node regression tests passed"
+
+      - name: Version format check (semver)
+        # 只校验格式 X.Y.Z，不查线上版本（避免 CI 调用 Supabase 凭据，遵循铁律一）
+        # 线上版本比对留给 release.mjs 在 CD 阶段做
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "package.json version: $VERSION"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version $VERSION is not valid semver (X.Y.Z)"
+            exit 1
+          fi
+          echo "Version $VERSION is valid semver"
