@@ -63,7 +63,7 @@ export async function createTestUsers(client, password) {
     });
 
     if (error) {
-      if (/already exists|duplicate|23505/i.test(error.message)) {
+      if (/already|duplicate|23505/i.test(error.message)) {
         console.log(`  ✓ 已存在，跳过：${u.email}`);
         continue;
       }
