@@ -31,7 +31,7 @@ CREATE POLICY "profiles_update_self" ON profiles FOR UPDATE USING (auth.uid() = 
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO profiles (id, username, display_name)
+  INSERT INTO public.profiles (id, username, display_name)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'username', split_part(NEW.email, '@', 1)),

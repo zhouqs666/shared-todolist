@@ -48,24 +48,26 @@ export const TEST_USERS = [
 
 /**
  * 幂等创建测试账号（已存在则跳过）。返回 { failed }。
- * email_confirm: true 跳过邮件验证，创建后即可登录。
+ *
+ * 使用 Auth API（auth.admin.createUser）创建用户，trigger 自动建 profile。
+ * 已存在时跳过（catch duplicate error）。
  */
 export async function createTestUsers(client, password) {
   let failed = false;
   for (const u of TEST_USERS) {
     const { data, error } = await client.auth.admin.createUser({
       email: u.email,
-      password,
+      password: password,
       email_confirm: true,
       user_metadata: { username: u.username, display_name: u.display_name },
     });
+
     if (error) {
-      // 幂等：已存在则跳过（不同 Supabase 版本文案略有差异，统一按「已注册」处理）
-      if (/(already|duplicate|been registered|already exists)/i.test(error.message)) {
+      if (/already exists|duplicate|23505/i.test(error.message)) {
         console.log(`  ✓ 已存在，跳过：${u.email}`);
         continue;
       }
-      console.error(`  ✗ 创建失败 ${u.email}：${error.message}`);
+      console.error(`   创建失败 ${u.email}：${error.message}`);
       failed = true;
       continue;
     }
