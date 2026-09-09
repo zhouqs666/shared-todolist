@@ -165,6 +165,8 @@
 
 ### 阶段 3：APP 自动化最小闭环
 
+> **状态：✅ 已完成（2026-09-09）**——app-e2e 工程（WebdriverIO + POM + 5 个 E2E 用例）本地 Mac 两轮全绿，Allure 报告可看；CI workflow（e2e-app.yml）已搭好待首次 push 验证。关键收获：测试 APK 隔离机制（build-test-apk.mjs + release-apk 生产 URL 门禁）、WebView 输入陷阱（addValue 替代 setValue）、元素定位校准（getPageSource 实测）。
+
 - **目标**：用 Appium 跑通 1~2 个核心 APP 用例，**本地 Mac 跑通**为最低门槛，CI 兜底为加分项。
 - **内容**：
   1. **本地 Mac 环境搭建**：Android Studio（模拟器）+ Appium Server + Appium Inspector（元素查看）+ Java + Maven/Gradle 测试工程。

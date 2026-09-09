@@ -121,6 +121,23 @@ async function main() {
     '  血泪教训 2026-08-07：壳版本号低，App 判定无更新，用户永远收不到。');
   // 后续会用 onlineLatest.version_code（L257）做 versionCode 校验；首发时为 null，逻辑已处理
 
+  // 1.5【铁律一门禁】assets 里的 supabase.js 必须指向生产库。
+  // build-test-apk.mjs 会把 assets 临时换成测试库，若还原步骤没跑，正式包就会带上测试库
+  // （用户视角 = 账号登不上、待办"全丢"），发布前在这里硬性拦截。
+  const assetsSupabasePath = resolve(ROOT, 'android', 'app', 'src', 'main', 'assets', 'public', 'js', 'supabase.js');
+  if (existsSync(assetsSupabasePath)) {
+    const assetsSupabase = readFileSync(assetsSupabasePath, 'utf8');
+    const embeddedUrl = assetsSupabase.match(/const SUPABASE_URL = '([^']*)'/)?.[1];
+    if (embeddedUrl !== SUPABASE_URL) {
+      console.error('✗ android assets 的 supabase.js 未指向生产库（疑似测试构建残留），中止发布。');
+      console.error(`   assets 内是：${embeddedUrl ?? '(未检出)'}`);
+      console.error(`   生产库是：  ${SUPABASE_URL}`);
+      console.error('   修复：npx cap sync android 后重试。');
+      process.exit(1);
+    }
+    console.log('  ✓ android assets supabase.js 指向生产库');
+  }
+
   // 2. 先检查 android assets 旧 meta 值（判断是否需要 gradle rebuild）
   const androidIndexPath = resolve(ROOT, 'android', 'app', 'src', 'main', 'assets', 'public', 'index.html');
   let oldAndroidMeta = null;

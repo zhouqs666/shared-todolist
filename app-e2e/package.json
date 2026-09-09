@@ -1,0 +1,21 @@
+{
+  "name": "app-e2e",
+  "version": "1.0.0",
+  "description": "APP 自动化测试（Appium + WebdriverIO）",
+  "type": "module",
+  "scripts": {
+    "test": "wdio run ./wdio.conf.js",
+    "test:local": "wdio run ./wdio.conf.js"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "@wdio/allure-reporter": "^9.0.0",
+    "@wdio/cli": "^9.0.0",
+    "@wdio/local-runner": "^9.0.0",
+    "@wdio/mocha-framework": "^9.0.0",
+    "@wdio/spec-reporter": "^9.0.0",
+    "allure-commandline": "^2.32.0",
+    "dotenv": "^17.4.2",
+    "webdriverio": "^9.0.0"
+  }
+}

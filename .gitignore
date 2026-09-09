@@ -5,6 +5,16 @@ node_modules/
 .env
 .env.local
 .env.*.local
+app-e2e/.env.test
+admin/.env.test
+
+# APP E2E 产物（CI 生成，不提交）
+app-e2e/allure-results/
+app-e2e/allure-report/
+app-e2e/allure-history/
+app-e2e/screenshots/
+app-e2e/login-after-*.png
+app-e2e/*-source.xml
 
 # 本地运行时数据
 data/*.json

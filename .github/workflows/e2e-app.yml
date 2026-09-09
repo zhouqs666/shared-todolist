@@ -1,0 +1,105 @@
+name: APP E2E Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/**'
+      - 'app-e2e/**'
+      - '.github/workflows/e2e-app.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'public/**'
+      - 'app-e2e/**'
+
+jobs:
+  e2e-app:
+    name: APP E2E (Appium)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: app-e2e/package-lock.json
+
+      - name: Install app-e2e dependencies
+        run: cd app-e2e && npm ci
+
+      - name: Sync web assets to Android
+        run: npx cap sync android
+
+      - name: Build debug APK (no keystore required)
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon
+          echo "APK: $(find app/build/outputs/apk/debug -name '*.apk' | head -1)"
+
+      - name: Start Appium server
+        run: |
+          npm install -g appium
+          appium driver install uiautomator2
+          appium driver list --installed
+          appium &>/tmp/appium.log &
+          sleep 15
+          curl -s http://127.0.0.1:4723/status || { echo "Appium failed to start"; cat /tmp/appium.log; exit 1; }
+          echo "✓ Appium ready"
+
+      - name: Run tests with emulator
+        env:
+          E2E_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+          E2E_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+          E2E_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
+          E2E_TEST_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
+          E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: Medium_Phone
+          script: |
+            adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
+            adb shell settings put global window_animation_scale 0
+            adb shell settings put global transition_animation_scale 0
+            adb shell settings put global animator_duration_scale 0
+            echo "✓ Emulator ready, running tests..."
+            cd app-e2e
+            npx wdio run ./wdio.conf.js
+
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-app-results
+          path: app-e2e/allure-results
+          retention-days: 14
+
+      - name: Generate Allure report
+        if: always()
+        uses: simple-elf/allure-report-action@master
+        with:
+          gh_pages_branch: gh-pages
+          allure_results: app-e2e/allure-results
+          allure_report: app-e2e/allure-report
+          allure_history: app-e2e/allure-history
+
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-e2e-screenshots
+          path: app-e2e/screenshots
+          retention-days: 14
