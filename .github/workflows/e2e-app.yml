@@ -38,6 +38,9 @@ jobs:
       - name: Install app-e2e dependencies
         run: cd app-e2e && npm ci
 
+      - name: Install root dependencies (for cap sync)
+        run: npm ci
+
       - name: Sync web assets to Android
         run: npx cap sync android
 
@@ -45,7 +48,7 @@ jobs:
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon
-          echo "APK: $(find app/build/outputs/apk/debug -name '*.apk' | head -1)"
+          ls -la app/build/outputs/apk/debug/*.apk || echo "WARNING: no debug APK found"
 
       - name: Start Appium server
         run: |

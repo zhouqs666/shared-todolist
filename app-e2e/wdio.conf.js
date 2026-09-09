@@ -15,6 +15,15 @@ const releasePath = path.resolve(__dirname, '../android/app/build/outputs/apk/re
 const debugPath = path.resolve(__dirname, '../android/app/build/outputs/apk/debug/app-debug.apk');
 const apkPath = existsSync(releasePath) ? releasePath : debugPath;
 
+// 诊断日志：帮 CI 排查 APK 路径问题
+console.log('[wdio] release exists:', existsSync(releasePath));
+console.log('[wdio] debug exists:', existsSync(debugPath));
+console.log('[wdio] apkPath:', apkPath);
+
+if (!existsSync(apkPath)) {
+  throw new Error(`APK 不存在: ${apkPath}（本地用 build-test-apk.mjs 构建，CI 用 assembleDebug）`);
+}
+
 export const config = {
   runner: 'local',
 
@@ -40,6 +49,7 @@ export const config = {
       'appium:newCommandTimeout': 180,
       'appium:uiautomator2ServerLaunchTimeout': 60000,
       'appium:adbExecTimeout': 60000,
+      'appium:androidHome': process.env.ANDROID_HOME || path.join(process.env.HOME, 'Library/Android/sdk'),
     },
   ],
 
