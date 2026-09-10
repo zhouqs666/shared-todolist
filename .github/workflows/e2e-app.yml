@@ -38,11 +38,8 @@ jobs:
       - name: Install app-e2e dependencies
         run: cd app-e2e && npm ci
 
-      - name: Install root dependencies (for cap sync)
-        run: npm install
-
       - name: Sync web assets to Android
-        run: npx cap sync android
+        run: npx @capacitor/cli sync android
 
       - name: Build debug APK (no keystore required)
         run: |
