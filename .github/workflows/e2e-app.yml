@@ -39,7 +39,7 @@ jobs:
         run: cd app-e2e && npm ci
 
       - name: Install root dependencies (for cap sync)
-        run: npm ci
+        run: npm install
 
       - name: Sync web assets to Android
         run: npx cap sync android
