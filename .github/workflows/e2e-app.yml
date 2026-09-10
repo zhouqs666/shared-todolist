@@ -57,27 +57,28 @@ jobs:
           curl -s http://127.0.0.1:4723/status || { echo "Appium failed to start"; cat /tmp/appium.log; exit 1; }
           echo "✓ Appium ready"
 
-      - name: Run tests with emulator
+      - name: Start Android emulator
+        run: |
+          export ANDROID_HOME=$ANDROID_HOME
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "system-images;android-35;google_apis;x86_64"
+          echo "no" | $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd -n test -k "system-images;android-35;google_apis;x86_64" -d "pixel_6" --force
+          $ANDROID_HOME/emulator/emulator -avd test -no-window -no-audio -gpu swiftshader_indirect -no-snapshot-load &
+          adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 2; done'
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          echo "✓ Emulator ready"
+
+      - name: Run APP E2E tests
         env:
           E2E_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
           E2E_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
           E2E_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
           E2E_TEST_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
           E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: Medium_Phone
-          script: |
-            adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
-            adb shell settings put global window_animation_scale 0
-            adb shell settings put global transition_animation_scale 0
-            adb shell settings put global animator_duration_scale 0
-            echo "✓ Emulator ready, running tests..."
-            cd app-e2e
-            npx wdio run ./wdio.conf.js
+        run: |
+          cd app-e2e
+          npx wdio run ./wdio.conf.js
 
       - name: Upload Allure results
         if: always()
