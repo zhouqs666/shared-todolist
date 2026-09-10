@@ -47,8 +47,7 @@ jobs:
       - name: Build debug APK (no keystore required)
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
-          ls -la app/build/outputs/apk/debug/*.apk || echo "WARNING: no debug APK found"
+          ./gradlew assembleDebug --no-daemon -Dorg.gradle.java.home=$JAVA_HOME
 
       - name: Start Appium server
         run: |
