@@ -38,8 +38,11 @@ jobs:
       - name: Install app-e2e dependencies
         run: cd app-e2e && npm ci
 
+      - name: Install root dependencies (for cap sync)
+        run: npm install --ignore-scripts
+
       - name: Sync web assets to Android
-        run: npx @capacitor/cli sync android
+        run: npx cap sync android
 
       - name: Build debug APK (no keystore required)
         run: |
@@ -90,12 +93,9 @@ jobs:
 
       - name: Generate Allure report
         if: always()
-        uses: simple-elf/allure-report-action@master
-        with:
-          gh_pages_branch: gh-pages
-          allure_results: app-e2e/allure-results
-          allure_report: app-e2e/allure-report
-          allure_history: app-e2e/allure-history
+        run: |
+          npm install -g allure-commandline
+          allure generate app-e2e/allure-results --clean -o app-e2e/allure-report || true
 
       - name: Upload failure screenshots
         if: failure()
