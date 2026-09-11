@@ -75,9 +75,12 @@ jobs:
 
       - name: Start Android emulator
         run: |
+          set -e
           export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$PATH"
           echo "y" | sdkmanager --install "system-images;android-35;google_apis;x86_64"
           echo "no" | avdmanager create avd -n test -k "system-images;android-35;google_apis;x86_64" -d "pixel_6" --force
+          echo "✓ AVD created"
+          avdmanager list avd
           emulator -avd test -no-window -no-audio -gpu swiftshader_indirect -no-snapshot-load &
           adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 2; done'
           adb shell settings put global window_animation_scale 0
