@@ -18,6 +18,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# 阶段 3.5：只验证 CI 环境能构建 APK（不含模拟器 + 测试）
+# 阶段 3.6：构建验证通过后，再逐步加回 Appium + 模拟器 + 测试
+
 jobs:
   e2e-app:
     name: APP E2E (Appium)
@@ -63,60 +66,10 @@ jobs:
           cd android
           ./gradlew assembleDebug --no-daemon -Dorg.gradle.java.home=$JAVA_HOME
 
-      - name: Start Appium server
-        run: |
-          npm install -g appium
-          appium driver install uiautomator2
-          appium driver list --installed
-          appium &>/tmp/appium.log &
-          sleep 15
-          curl -s http://127.0.0.1:4723/status || { echo "Appium failed to start"; cat /tmp/appium.log; exit 1; }
-          echo "✓ Appium ready"
-
-      - name: Start Android emulator
-        run: |
-          set -e
-          export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$PATH"
-          echo "y" | sdkmanager --install "system-images;android-35;google_apis;x86_64"
-          echo "no" | avdmanager create avd -n test -k "system-images;android-35;google_apis;x86_64" -d "pixel_6" --force
-          echo "✓ AVD created"
-          avdmanager list avd
-          emulator -avd test -no-window -no-audio -gpu swiftshader_indirect -no-snapshot-load &
-          adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 2; done'
-          adb shell settings put global window_animation_scale 0
-          adb shell settings put global transition_animation_scale 0
-          adb shell settings put global animator_duration_scale 0
-          echo "✓ Emulator ready"
-
-      - name: Run APP E2E tests
-        env:
-          E2E_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
-          E2E_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
-          E2E_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
-          E2E_TEST_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
-          E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
-        run: |
-          cd app-e2e
-          npx wdio run ./wdio.conf.js
-
-      - name: Upload Allure results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-app-results
-          path: app-e2e/allure-results
-          retention-days: 14
-
-      - name: Generate Allure report
-        if: always()
-        run: |
-          npm install -g allure-commandline
-          allure generate app-e2e/allure-results --clean -o app-e2e/allure-report || true
-
-      - name: Upload failure screenshots
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-e2e-screenshots
-          path: app-e2e/screenshots
-          retention-days: 14
+      # ===== 阶段 3.6 启用（构建验证通过后取消注释）=====
+      # - name: Start Appium server
+      # - name: Start Android emulator
+      # - name: Run APP E2E tests
+      # - name: Upload Allure results
+      # - name: Generate Allure report
+      # - name: Upload failure screenshots
