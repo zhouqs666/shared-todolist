@@ -165,7 +165,7 @@
 
 ### 阶段 3：APP 自动化最小闭环
 
-> **状态：🔄 大部分完成（2026-09-10）**——app-e2e 工程（WebdriverIO + POM + 5 个 E2E 用例）本地 Mac 两轮全绿，Allure 报告可看；CI 构建验证通过（e2e-app.yml：Java 21 + Node 22 + cap sync + gradle assembleDebug，4m44s）；仓库已改 Public（Actions 免费）。模拟器+测试的 CI 集成留到阶段 3.6。关键收获：测试 APK 隔离机制（build-test-apk.mjs + release-apk 生产 URL 门禁）、WebView 输入陷阱（addValue 替代 setValue）、元素定位校准（getPageSource 实测）、CI 成本优化（公开仓库 + concurrency + Linux runner）。
+> **状态：🔄 阶段 3.6 workflow 已重写（2026-09-11）**——app-e2e 工程（WebdriverIO + POM + 5 个 E2E 用例）本地 Mac 两轮全绿，Allure 报告可看；CI 构建验证通过（e2e-app.yml：Java 21 + Node 22 + cap sync + gradle assembleDebug，4m44s）；仓库已改 Public（Actions 免费）。阶段 3.6 workflow 已重写为 build + test 双 job（模拟器 + Appium + E2E 测试），待首次 push 验证。关键收获：测试 APK 隔离机制（build-test-apk.mjs + release-apk 生产 URL 门禁）、WebView 输入陷阱（addValue 替代 setValue）、元素定位校准（getPageSource 实测）、CI 成本优化（公开仓库 + concurrency + Linux runner）。
 
 - **目标**：用 Appium 跑通 1~2 个核心 APP 用例，**本地 Mac 跑通**为最低门槛，CI 兜底为加分项。
 - **内容**：
