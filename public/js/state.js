@@ -115,10 +115,14 @@ export function notifyCompleted(todo) {
   dispatch(completeFns, todo);
 }
 
-/** PRD §4.2 Q2 排序：未完成在上、新的在上、完成的下沉 */
+/** PRD §4.2 Q2 排序：置顶在上 → 未完成在上 → 新的在上 → 完成的下沉 */
 export function sortTodos(list) {
   return [...list].sort((a, b) => {
+    // 第一优先级：置顶项在前
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    // 第二优先级：未完成在前
     if (a.completed !== b.completed) return a.completed ? 1 : -1;
+    // 第三优先级：新的在前
     return b.createdAt.localeCompare(a.createdAt);
   });
 }

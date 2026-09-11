@@ -843,6 +843,31 @@ input {
   filter: saturate(0.55);
 }
 
+/* 置顶态：淡金色渐变背景 + 左边框主色，视觉上与普通待办区分 */
+.todo--pinned {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.08), rgba(255, 182, 193, 0.08));
+  border-left: 3px solid var(--color-primary);
+}
+.todo--pinned:hover {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.12), rgba(255, 182, 193, 0.12));
+}
+
+/* 置顶图标：位于文字左侧，14px，主色调 */
+.todo__pin-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--color-primary);
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+.todo__pin-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* 自绘圆形复选框：统一退到右上角，18×18 小尺寸，不占布局空间。
    无论完成与否都在同一位置（右上角），文字始终铺满卡片成为主角。
    - 未完成：空心玫瑰小圆（点它完成），按下时点亮成心意的颜色

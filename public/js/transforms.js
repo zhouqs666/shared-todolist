@@ -29,6 +29,7 @@ export function toExternal(row) {
     imagePaths: imagePaths, // 图片附件 URL 数组（多图，null=无图）
     imagePath: imagePaths ? imagePaths[0] : null, // 兼容旧代码（取首张）
     completedNote: row.completed_note || null, // 备注（完成前后均可加，null=无备注）
+    pinned: !!row.pinned, // 是否置顶（true=置顶，显示在列表最上方）
     rarity: row.rarity || 'common', // 稀有度：common(普通)/rare/epic/legendary（隐藏款盲盒）
     raritySeen: row.rarity_seen !== false, // 隐藏款是否已被对方看过（false=对方端需播惊喜提示）
     deletedAt: row.deleted_at || null, // 软删除时间（null=正常，非null=已在回收站）

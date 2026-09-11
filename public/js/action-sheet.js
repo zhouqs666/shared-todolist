@@ -36,6 +36,10 @@ export const ICONS = {
   note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
   // 编辑：铅笔（编辑待办文案）
   edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>',
+  // 置顶：图钉（pin）
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 11l-4 4h14l-4-4"/><path d="M15 3.5a2 2 0 0 1 2 2V9l-5 5-5-5V5.5a2 2 0 0 1 2-2h6z"/></svg>',
+  // 取消置顶：图钉+斜线
+  unpin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 11l-4 4h14l-4-4"/><path d="M15 3.5a2 2 0 0 1 2 2V9l-5 5-5-5V5.5a2 2 0 0 1 2-2h6z"/><line x1="3" y1="3" x2="21" y2="21" stroke-width="2.5"/></svg>',
 };
 
 /** 构造一个图标按钮（纯图标，无文案） */
@@ -59,6 +63,7 @@ let currentActionSheet = null;
  * @param {()=>Array} handlers.getTodos 拿最新 todo 列表（菜单打开时取最新版本）
  * @param {(todo)=>void} [handlers.onEdit] 编辑文案
  * @param {(todo)=>void} [handlers.onNote] 编辑备注
+ * @param {(todo)=>void} [handlers.onTogglePin] 置顶/取消置顶
  * @param {(todoId:string, prevPaths:string[])=>void} [handlers.onAddImage] 配图/加图
  * @param {(todoId:string)=>void} [handlers.onDelete] 删除
  */
@@ -101,6 +106,21 @@ export function showTodoMenu(todo, handlers = {}) {
     if (handlers.onEdit) handlers.onEdit(todo);
   });
   actions.appendChild(editBtn);
+
+  // 置顶/取消置顶
+  {
+    const pinBtn = mkIconBtn(
+      todo.pinned ? ICONS.unpin : ICONS.pin,
+      todo.pinned ? '取消置顶' : '置顶',
+      todo.pinned ? 'action-sheet__icon-btn--active' : ''
+    );
+    pinBtn.addEventListener('click', () => {
+      if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+      closeTodoMenu();
+      if (handlers.onTogglePin) handlers.onTogglePin(todo);
+    });
+    actions.appendChild(pinBtn);
+  }
 
   // 备注（完成前后均可加：未完成时可留交代/叮嘱，完成后可留收尾说明）
   // 完成动作本身由复选框承担（点对勾=完成），菜单里不再放完成按钮，避免冗余入口

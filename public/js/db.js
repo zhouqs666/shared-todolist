@@ -40,12 +40,13 @@ function wrapError(err, fallbackCode = 'UNKNOWN') {
 }
 
 export const db = {
-  /** 拉取所有 todos（仅未删除的，按 completed ASC、created_at DESC 排序） */
+  /** 拉取所有 todos（仅未删除的，按 pinned DESC、completed ASC、created_at DESC 排序） */
   async listTodos() {
     const { data, error } = await supabase
       .from('todos')
       .select('*')
       .is('deleted_at', null)
+      .order('pinned', { ascending: false })
       .order('completed', { ascending: true })
       .order('created_at', { ascending: false });
     if (error) throw wrapError(error);
@@ -212,6 +213,24 @@ export const db = {
     const { data, error } = await supabase
       .from('todos')
       .update({ nudge_by: userId })
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+    if (error) throw wrapError(error);
+    if (!data) throw wrapError({ message: 'NOT_FOUND', code: 'NOT_FOUND' });
+    return toExternal(data);
+  },
+
+  /**
+   * 切换待办置顶状态。
+   * @param {string} id todo id
+   * @param {boolean} pinned 是否置顶
+   * @returns {Promise<Object>} 更新后的 todo 对象
+   */
+  async togglePin(id, pinned) {
+    const { data, error } = await supabase
+      .from('todos')
+      .update({ pinned })
       .eq('id', id)
       .select()
       .maybeSingle();

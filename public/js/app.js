@@ -946,6 +946,25 @@ async function deleteTodo(id) {
   }
 }
 
+/** 切换待办置顶状态 */
+async function togglePin(todo) {
+  const newPinned = !todo.pinned;
+  // 乐观更新：先改本地状态
+  setTodos(sortTodos(getTodos().map((t) =>
+    t.id === todo.id ? { ...t, pinned: newPinned } : t
+  )));
+  try {
+    await db.togglePin(todo.id, newPinned);
+    showToast(newPinned ? '已置顶' : '已取消置顶');
+  } catch (err) {
+    // 回滚
+    setTodos(sortTodos(getTodos().map((t) =>
+      t.id === todo.id ? { ...t, pinned: !newPinned } : t
+    )));
+    handleError(toAppError(err), '置顶操作失败');
+  }
+}
+
 // ===== 输入框 placeholder：随机文案 =====
 const PLACEHOLDERS = [
   '一只小喵在想喵妈妈～',
@@ -1353,7 +1372,10 @@ function renderImage(li, todo) {
 /** 渲染单条（用 DOM API 而非 innerHTML，天然防 XSS） */
 function renderItem(todo) {
   const li = document.createElement('li');
-  li.className = 'todo' + (todo.completed ? ' todo--done' : '') + (todo.pending ? ' todo--pending' : '');
+  li.className = 'todo'
+    + (todo.completed ? ' todo--done' : '')
+    + (todo.pending ? ' todo--pending' : '')
+    + (todo.pinned ? ' todo--pinned' : '');
   li.dataset.id = todo.id;
 
   // 自绘圆形复选框（取代原生方框，精致度核心）
@@ -1386,6 +1408,14 @@ function renderItem(todo) {
   // headline：主文案 + 图片徽标同一行（徽标紧跟文案后边，不单独占行撑高卡片）
   const headline = document.createElement('div');
   headline.className = 'todo__headline';
+
+  // 置顶图标（仅置顶项显示）
+  if (todo.pinned) {
+    const pinIcon = document.createElement('span');
+    pinIcon.className = 'todo__pin-icon';
+    pinIcon.innerHTML = ICONS.pin;
+    headline.appendChild(pinIcon);
+  }
 
   const textEl = document.createElement('div');
   textEl.className = 'todo__text';
@@ -1452,6 +1482,7 @@ function renderItem(todo) {
         getTodos,
         onEdit: openEditPanel,
         onNote: openNotePanel,
+        onTogglePin: togglePin,
         onAddImage: attachImageToTodo,
         onDelete: deleteTodo,
       });
@@ -1473,6 +1504,7 @@ function renderItem(todo) {
       getTodos,
       onEdit: openEditPanel,
       onNote: openNotePanel,
+      onTogglePin: togglePin,
       onAddImage: attachImageToTodo,
       onDelete: deleteTodo,
     });
@@ -1493,6 +1525,13 @@ function updateItem(li, todo) {
   } else if (!todo.completed && li.classList.contains(doneClass)) {
     li.classList.remove(doneClass);
   }
+  // 置顶态 class
+  const pinnedClass = 'todo--pinned';
+  if (todo.pinned && !li.classList.contains(pinnedClass)) {
+    li.classList.add(pinnedClass);
+  } else if (!todo.pinned && li.classList.contains(pinnedClass)) {
+    li.classList.remove(pinnedClass);
+  }
   // 主文案：编辑待办后 text 会变，原地更新（不重建 li，避免动画/状态抖动）
   const textEl = li.querySelector('.todo__text');
   if (textEl && textEl.textContent !== todo.text) {
@@ -1506,6 +1545,19 @@ function updateItem(li, todo) {
       check.classList.toggle('todo__check--done', todo.completed);
       check.setAttribute('aria-checked', String(todo.completed));
       check.setAttribute('aria-label', todo.completed ? '标为未完成' : '标为已完成');
+    }
+  }
+  // 置顶图标：置顶状态变化时增删图标
+  const headline = li.querySelector('.todo__headline');
+  if (headline) {
+    const existingPin = headline.querySelector('.todo__pin-icon');
+    if (todo.pinned && !existingPin) {
+      const pinIcon = document.createElement('span');
+      pinIcon.className = 'todo__pin-icon';
+      pinIcon.innerHTML = ICONS.pin;
+      headline.prepend(pinIcon);
+    } else if (!todo.pinned && existingPin) {
+      existingPin.remove();
     }
   }
   // 图片缩略图：配图/换图/删图时增删，绝不重建 li
