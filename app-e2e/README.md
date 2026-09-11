@@ -97,3 +97,4 @@ GitHub Actions（`.github/workflows/e2e-app.yml`）：
 - push/PR 自动触发
 - Mac runner：cap sync → assembleDebug → Appium → 模拟器内跑测试
 - Allure 报告归档 14 天，失败截图上传 artifact
+# 验证公开仓库 CI
