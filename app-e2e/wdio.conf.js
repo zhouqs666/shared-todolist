@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Set ANDROID_HOME for Appium UiAutomator2 driver
+// CI (ubuntu): ANDROID_HOME 由 GitHub Actions runner 预设
+// 本地 Mac: 手动 fallback 到 ~/Library/Android/sdk
 if (!process.env.ANDROID_HOME) {
   process.env.ANDROID_HOME = path.join(process.env.HOME, 'Library/Android/sdk');
 }
@@ -38,7 +40,8 @@ export const config = {
   capabilities: [
     {
       platformName: 'Android',
-      'appium:deviceName': 'Medium_Phone_API_36.1',
+      // 本地 Mac: Medium_Phone_API_36.1；CI: 由 emulator-runner 创建，通过环境变量注入
+      'appium:deviceName': process.env.DEVICE_NAME || 'Medium_Phone_API_36.1',
       'appium:automationName': 'UiAutomator2',
       'appium:app': apkPath,
       // noReset:false = 每次会话开始清应用数据（fastReset），

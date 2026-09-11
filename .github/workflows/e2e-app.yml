@@ -6,26 +6,27 @@ on:
     paths:
       - 'public/**'
       - 'app-e2e/**'
+      - 'android/**'
       - '.github/workflows/e2e-app.yml'
   pull_request:
     branches: [main]
     paths:
       - 'public/**'
       - 'app-e2e/**'
+      - 'android/**'
 
 # 同一分支/PR 只保留最新一次运行，避免重复触发浪费时间
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# 阶段 3.5：只验证 CI 环境能构建 APK（不含模拟器 + 测试）
-# 阶段 3.6：构建验证通过后，再逐步加回 Appium + 模拟器 + 测试
-
 jobs:
-  e2e-app:
-    name: APP E2E (Appium)
+  # ============================================================
+  # Job 1: 构建 APK（阶段 3.5 已验证，保持不变）
+  # ============================================================
+  build:
+    name: Build APK
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -41,7 +42,6 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: app-e2e/package-lock.json
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -52,10 +52,7 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle-wrapper.properties') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      - name: Install app-e2e dependencies
-        run: cd app-e2e && npm ci
-
-      - name: Install root dependencies (for cap sync)
+      - name: Install root dependencies
         run: npm install --ignore-scripts
 
       - name: Sync web assets to Android
@@ -66,10 +63,114 @@ jobs:
           cd android
           ./gradlew assembleDebug --no-daemon -Dorg.gradle.java.home=$JAVA_HOME
 
-      # ===== 阶段 3.6 启用（构建验证通过后取消注释）=====
-      # - name: Start Appium server
-      # - name: Start Android emulator
-      # - name: Run APP E2E tests
-      # - name: Upload Allure results
-      # - name: Generate Allure report
-      # - name: Upload failure screenshots
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
+
+  # ============================================================
+  # Job 2: APP E2E 测试（阶段 3.6：模拟器 + Appium + 测试）
+  # ============================================================
+  test:
+    name: APP E2E (Appium)
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: debug-apk
+          path: android/app/build/outputs/apk/debug/
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: app-e2e/package-lock.json
+
+      - name: Install app-e2e dependencies
+        run: cd app-e2e && npm ci
+
+      - name: Install Appium
+        run: |
+          npm install -g appium
+          appium driver install uiautomator2
+          appium driver list --installed
+
+      - name: Generate .env.test
+        run: |
+          printf '%s\n' \
+            "E2E_SUPABASE_URL=${{ secrets.E2E_SUPABASE_URL }}" \
+            "E2E_SUPABASE_ANON_KEY=${{ secrets.E2E_SUPABASE_ANON_KEY }}" \
+            "E2E_SUPABASE_SERVICE_ROLE_KEY=${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}" \
+            "E2E_TEST_EMAIL=${{ secrets.E2E_TEST_EMAIL }}" \
+            "E2E_TEST_PASSWORD=${{ secrets.E2E_TEST_PASSWORD }}" \
+            > app-e2e/.env.test
+
+      - name: Enable KVM for emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run tests on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: Pixel 6
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            # 设置测试环境变量（覆盖 wdio.conf.js 的默认设备名）
+            export DEVICE_NAME="emulator-5554"
+            export ANDROID_HOME="$ANDROID_HOME"
+
+            # 运行测试（脚本内部管理 Appium 生命周期）
+            bash app-e2e/scripts/ci-run.sh
+
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: app-e2e/allure-results/
+          retention-days: 7
+
+      - name: Generate Allure report
+        if: always()
+        run: |
+          cd app-e2e
+          npx allure generate allure-results --clean --report-dir allure-report || true
+
+      - name: Upload Allure report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: app-e2e/allure-report/
+          retention-days: 7
+
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-screenshots
+          path: |
+            app-e2e/allure-results/**/*.png
+          retention-days: 7
