@@ -13,6 +13,11 @@ on:
       - 'public/**'
       - 'app-e2e/**'
 
+# 同一分支/PR 只保留最新一次运行，避免重复触发浪费时间
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e-app:
     name: APP E2E (Appium)
@@ -22,7 +27,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
@@ -35,6 +40,15 @@ jobs:
           cache: 'npm'
           cache-dependency-path: app-e2e/package-lock.json
 
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
       - name: Install app-e2e dependencies
         run: cd app-e2e && npm ci
 
@@ -44,7 +58,7 @@ jobs:
       - name: Sync web assets to Android
         run: npx cap sync android
 
-      - name: Build debug APK (no keystore required)
+      - name: Build debug APK
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon -Dorg.gradle.java.home=$JAVA_HOME
@@ -61,7 +75,6 @@ jobs:
 
       - name: Start Android emulator
         run: |
-          export ANDROID_HOME=$ANDROID_HOME
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "system-images;android-35;google_apis;x86_64"
           echo "no" | $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd -n test -k "system-images;android-35;google_apis;x86_64" -d "pixel_6" --force
           $ANDROID_HOME/emulator/emulator -avd test -no-window -no-audio -gpu swiftshader_indirect -no-snapshot-load &
