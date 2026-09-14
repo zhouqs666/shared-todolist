@@ -4,23 +4,19 @@
 测试待办完成后的撤销功能：
   - H1: 完成→庆祝toast撤销按钮→点击→恢复未完成
   - H2: 完成→长按菜单→撤销完成→恢复未完成
-测试遵循 AGENTS.md：不碰生产数据，用 "E2E-测试-" 前缀，测后清理。
+测试遵循 AGENTS.md 铁律一：跑在独立测试库（scripts/serve-test.mjs + e2e_common 隔离校验）。
 """
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from playwright.sync_api import sync_playwright
+from e2e_common import resolve_base, load_test_creds, make_checker
 
-BASE = "http://localhost:3000"
+BASE = resolve_base()
+TEST_USER, TEST_PASSWORD = load_test_creds()
 errors = []
-results = {"pass": 0, "fail": 0}
-
-
-def check(name, cond, detail=""):
-    if cond:
-        results["pass"] += 1
-        print(f"  OK {name}", flush=True)
-    else:
-        results["fail"] += 1
-        print(f"  FAIL {name} {detail}", flush=True)
+check, results = make_checker()
 
 
 with sync_playwright() as p:
@@ -33,8 +29,8 @@ with sync_playwright() as p:
     print("== 1. 登录 ==", flush=True)
     page.goto(f"{BASE}/login.html", wait_until="domcontentloaded")
     page.wait_for_selector('#username', timeout=15000)
-    page.fill('#username', '小宝宝')
-    page.fill('#password', '5201314')
+    page.fill('#username', TEST_USER)
+    page.fill('#password', TEST_PASSWORD)
     page.click('#submitBtn')
     page.wait_for_selector('.topbar__avatar', timeout=15000)
     page.wait_for_timeout(1500)

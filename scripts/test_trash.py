@@ -1,24 +1,20 @@
 """
 回收站 + 删除撤销 E2E 测试（批1：H1 回收站 + H2 删除撤销）
 
-测试遵循 AGENTS.md：不碰生产数据。所有测试待办用 "E2E-测试-" 前缀，
-测后彻底清理。用 wait_for 精准等待，避免超时。
+测试遵循 AGENTS.md 铁律一：跑在独立测试库（scripts/serve-test.mjs + e2e_common 隔离校验）。
+所有测试待办用 "E2E-测试-" 前缀，测后彻底清理。用 wait_for 精准等待，避免超时。
 """
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from playwright.sync_api import sync_playwright
+from e2e_common import resolve_base, load_test_creds, make_checker
 
-BASE = "http://localhost:3000"
+BASE = resolve_base()
+TEST_USER, TEST_PASSWORD = load_test_creds()
 errors = []
-results = {"pass": 0, "fail": 0}
-
-
-def check(name, cond, detail=""):
-    if cond:
-        results["pass"] += 1
-        print(f"  OK {name}", flush=True)
-    else:
-        results["fail"] += 1
-        print(f"  FAIL {name} {detail}", flush=True)
+check, results = make_checker()
 
 
 with sync_playwright() as p:
@@ -31,8 +27,8 @@ with sync_playwright() as p:
     print("== 1. 登录 ==", flush=True)
     page.goto(f"{BASE}/login.html", wait_until="domcontentloaded")
     page.wait_for_selector('#username', timeout=15000)
-    page.fill('#username', '小宝宝')
-    page.fill('#password', '5201314')
+    page.fill('#username', TEST_USER)
+    page.fill('#password', TEST_PASSWORD)
     page.click('#submitBtn')
     # 等应用就绪：头像出现（renderMe 已执行）后再等一会，确保 bindEvents 完成
     page.wait_for_selector('.topbar__avatar', timeout=15000)

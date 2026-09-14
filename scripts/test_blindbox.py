@@ -5,13 +5,20 @@
 1. 纯前端逻辑测试（不依赖 DB）：rollRarity 概率分布、applyRarity 角标/背景、图鉴渲染
 2. 页面加载/登录测试：验证模块链无报错、登录后主页渲染、createTodo 降级容错
 
-测试遵循 AGENTS.md：不碰生产数据。添加的测试待办用 "E2E-测试-" 前缀，测后只删标记数据。
+测试遵循 AGENTS.md 铁律一：跑在独立测试库（scripts/serve-test.mjs + e2e_common 隔离校验）。
+添加的测试待办用 "E2E-测试-" 前缀，测后只删标记数据。
 """
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import re
 import json
 from playwright.sync_api import sync_playwright
+from e2e_common import resolve_base, load_test_creds
 
-BASE = "http://localhost:3000"
+BASE = resolve_base()
+TEST_USER, TEST_PASSWORD = load_test_creds()
 errors = []
 test_results = {"pass": 0, "fail": 0, "checks": []}
 
@@ -49,8 +56,8 @@ with sync_playwright() as p:
     print("=" * 60)
     print("2. 登录（小宝宝账号）")
     print("=" * 60)
-    page.fill('#username', '小宝宝')
-    page.fill('#password', '5201314')
+    page.fill('#username', TEST_USER)
+    page.fill('#password', TEST_PASSWORD)
     page.click('#submitBtn')
     page.wait_for_timeout(5000)
     on_home = "login" not in page.url

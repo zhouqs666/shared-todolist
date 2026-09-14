@@ -64,3 +64,10 @@ keystore.properties
 scripts/_*.mjs
 !scripts/_lib-*.mjs
 
+
+# 生产数据事故备份（含用户数据，绝不提交）
+backups/
+
+# Python 字节码缓存
+__pycache__/
+*.pyc

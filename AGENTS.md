@@ -26,10 +26,23 @@
 
 **所有功能开发完成、交付前，必须经过模拟器全面测试，不能凭想象宣布"完成"。**
 
-- ✅ 核心流程 / 双端同步：用 Playwright 跑真实业务流程（Python 脚本 `scripts/test_*.py`，双账号 E2E，登录 `小宝宝`/`大宝贝`）
+- ✅ **跑测试前必须先起测试专用服务器**（铁律一）：
+  ```bash
+  node scripts/serve-test.mjs     # 测试服务器，端口 3100，连独立测试库
+  python3 scripts/test_undo_complete.py   # 测试脚本自动连 3100 + 自证隔离
+  ```
+  测试脚本默认连 3100（测试库），**禁止指向 3000**（那是生产库）。指向生产会被 `e2e_common.py` 直接拦下、退出码 2。
+- ✅ 核心流程 / 双端同步：用 Playwright 跑真实业务流程（Python 脚本 `scripts/test_*.py`，双账号 E2E，测试账号来自 `app-e2e/.env.test`）
 - ✅ 局部回归：可用 Node 脚本 `scripts/test_*.mjs`（允许 mock Supabase，但**必须标注"未写生产"**）
 - ✅ 必须覆盖：核心功能、边界情况、错误处理、Realtime 双端同步
 - ✅ 测试要真实验证结果（截图、断言、状态检查），不能只看"没报错"就算过
+- ✅ **测试前跑 `node scripts/check-test-env.mjs`**：校验测试库隔离 + schema 与生产对齐。测试库缺列/缺表会导致"跑绿但没验证真实行为"（假阴性）
+
+**血泪教训（2026-09-14）：**
+Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `public/`（其中 `supabase.js` 硬编码生产库 URL），而 `test_*.py` 直连 `localhost:3000` = 生产库。调试撤销完成功能时，在生产库创建 27 条测试待办，并因盲盒开奖发生在「添加」瞬间，误解锁 `legendary_1` 传说贴纸 —— 清待办也撤不回贴纸。
+**根因**：隔离只做了 Android APK 通道（`build-test-apk.mjs`），Web 通道漏了。
+**修复**：`serve-test.mjs`（运行时改写 supabase.js，生产文件零改动）+ `e2e_common.py`（fail-closed 隔离断言）+ `check-test-env.mjs`（schema 漂移检测）。
+**关键认知**：「E2E- 前缀 + 测完清理」这种软约定挡不住事故 —— 必须是物理隔离，不是命名约定。
 
 **如果有硬限制导致无法完整验证：**
 - 必须在交付时**明确列出未验证的功能点**
@@ -177,6 +190,6 @@
 - **PWA**：`manifest.webmanifest` + `sw.js`（Service Worker v15，仅浏览器环境生效，原生环境 bypass）
 - **Capacitor 插件**：`SystemBars` / `LocalNotifications` / `SplashScreen` / `CapacitorUpdater`（热更）/ 自研 `ApkInstaller`（APK 自更）
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
-- **测试**：Playwright（Python 双账号 E2E）+ Node 局部回归（可 mock）
-- **本地服务**：`node scripts/serve.mjs`（端口 3000）
+- **测试**：Playwright（Python 双账号 E2E，连测试库）+ Node 局部回归（可 mock）
+- **本地服务**：`node scripts/serve.mjs`（端口 3000，**生产库**，仅手动自测）／`node scripts/serve-test.mjs`（端口 3100，**测试库**，跑 E2E 必须用这个）
 - **埋点状态**：⚠️ 目前零埋点，无法回答"哪个功能最常用""两人一天互动几次"。补基础埋点（北极星 = 双端同日活跃天数）在路线图 P0。

@@ -4,24 +4,21 @@
 验证：断网添加待办 → 本地半透明 pending 显示 + 「待同步」小标
       → 恢复网络 → 自动补发 → pending 被真实待办替换（变实色、标移除、队列清空）。
 
-遵循 AGENTS.md：不碰生产数据。测试待办用 "E2E-测试-" 前缀，测后软删除 + 回收站彻底删除。
+遵循 AGENTS.md 铁律一：跑在独立测试库（scripts/serve-test.mjs + e2e_common 隔离校验）。
+测试待办用 "E2E-测试-" 前缀，测后软删除 + 回收站彻底删除。
 用 wait_for 精准等待，避免固定 sleep 超时。
 """
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from playwright.sync_api import sync_playwright
+from e2e_common import resolve_base, load_test_creds, make_checker
 
-BASE = "http://localhost:3000"
+BASE = resolve_base()
+TEST_USER, TEST_PASSWORD = load_test_creds()
 errors = []
-results = {"pass": 0, "fail": 0}
-
-
-def check(name, cond, detail=""):
-    if cond:
-        results["pass"] += 1
-        print(f"  OK {name}", flush=True)
-    else:
-        results["fail"] += 1
-        print(f"  FAIL {name} {detail}", flush=True)
+check, results = make_checker()
 
 
 with sync_playwright() as p:
@@ -35,8 +32,8 @@ with sync_playwright() as p:
     print("== 1. 登录 ==", flush=True)
     page.goto(f"{BASE}/login.html", wait_until="domcontentloaded")
     page.wait_for_selector('#username', timeout=15000)
-    page.fill('#username', '小宝宝')
-    page.fill('#password', '5201314')
+    page.fill('#username', TEST_USER)
+    page.fill('#password', TEST_PASSWORD)
     page.click('#submitBtn')
     page.wait_for_selector('.topbar__avatar', timeout=15000)
     page.wait_for_timeout(1500)
