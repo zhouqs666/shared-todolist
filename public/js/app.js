@@ -1490,6 +1490,7 @@ function renderItem(todo) {
         onTogglePin: togglePin,
         onAddImage: attachImageToTodo,
         onDelete: deleteTodo,
+        onUncomplete: (t) => toggleComplete(t.id, false),
       });
     }, 350); // 350ms 更跟手（原 500ms 偏长）
   };
@@ -1512,6 +1513,7 @@ function renderItem(todo) {
       onTogglePin: togglePin,
       onAddImage: attachImageToTodo,
       onDelete: deleteTodo,
+      onUncomplete: (t) => toggleComplete(t.id, false),
     });
   });
 

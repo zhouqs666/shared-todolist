@@ -135,6 +135,17 @@ export function showTodoMenu(todo, handlers = {}) {
     actions.appendChild(noteBtn);
   }
 
+  // 撤销完成（仅已完成：将待办恢复为未完成状态）
+  if (todo.completed) {
+    const uncompleteBtn = mkIconBtn(ICONS.undone, '撤销完成');
+    uncompleteBtn.addEventListener('click', () => {
+      if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+      closeTodoMenu();
+      if (handlers.onUncomplete) handlers.onUncomplete(todo);
+    });
+    actions.appendChild(uncompleteBtn);
+  }
+
   // 表情回应（仅已完成：三个表情，可连点）
   if (todo.completed) {
     REACTION_EMOJIS.forEach((key) => {
