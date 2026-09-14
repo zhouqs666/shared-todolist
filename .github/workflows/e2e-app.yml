@@ -68,6 +68,12 @@ jobs:
           sed -i 's/^          //' android/keystore.properties
           echo "✓ keystore.properties 已生成"
 
+      - name: Fix Java home for CI
+        run: |
+          # gradle.properties 硬编码了本地 Mac 的 Java 路径，CI 上不存在
+          sed -i "s|org.gradle.java.home=.*|org.gradle.java.home=$JAVA_HOME|" android/gradle.properties
+          echo "✓ Java home 已设为 $JAVA_HOME"
+
       - name: Generate .env.test
         run: |
           printf '%s\n' \
