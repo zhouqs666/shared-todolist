@@ -70,6 +70,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # 铁律三：发布必须从 main 出包。workflow_dispatch 允许指定 --ref，在分支上跑
+      # 会把**未合并的代码**发到线上，并让 main 落后于线上（制造出「仓库 meta 与线上 bundle
+      # 不一致」那个隐患）。这条规则用守卫固化，不靠记性。
+      - name: 强制从 main 发布
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "${REF_NAME}" != "main" ]; then
+            echo "::error::发布必须从 main 出包（当前 ref：${REF_NAME}）。请先把改动合并到 main 再发。"
+            exit 1
+          fi
+          echo "✓ 在 main 上发布"
+
       - name: 校验输入
         env:
           VERSION: ${{ inputs.version }}

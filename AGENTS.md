@@ -14,9 +14,17 @@
 
 **正确的做法：**
 - 测试用**隔离的测试数据**：插入时打标记（如 text 前缀 "E2E-测试-"），验证完只删带标记的
-- 任何删除操作前，**必须先备份**（`SELECT * INTO` 导出，或先查再删）
+- 任何删除操作前，**必须先备份**：`node scripts/backup-tables.mjs --reason "<原因>"`
+  （只读导出到 `backups/`，与 `backups/incident-*.json` 同格式、存**完整行**、可恢复；
+  注意不含 Storage 图片对象）
 - 批量删除（如 `.neq('id', '全零')` 这种"删全部"的模式）**绝对禁止**，必须显式指定要删的 id
 - 模拟器/真机测试时，用独立的测试账号或测试项目，不碰真实用户数据
+
+**适用范围（2026-09-14 明确，避免两种误用）：**
+- 本律约束的是**「为了验证而改生产数据」**：测试、演示、截图、排查。
+- **发布（铁律三）与回滚**本身就要写生产表（`app_versions` / Storage），属**产品业务动作**，
+  不属本律禁止范围 —— 但必须走审批门（见铁律三 CD 章节）。
+- 判据一句话：**这个写操作是产品功能的一部分，还是为了「验证一下」？** 后者一律禁止。
 
 **血泪教训：** 2026-07-31，为验证空状态 UI，对生产库执行 `supabase.from('todos').delete().neq(...)` 删全部，导致用户所有待办永久丢失，Free 套餐无备份，无法恢复。从此这条列为最高铁律。
 
@@ -36,8 +44,12 @@
 - ✅ **测试库必须归零**：`tests` 末尾会自动调 `reset-test-db.mjs` 硬删；`E2E_KEEP_DATA=1` 可保留现场排查。
   **为什么不能只靠测试内部的删除**：那是**软删除**（`deleted_at` 打时间戳），行永远留在表里 —— 看着清了，其实越跑越脏。贴纸更麻烦：`sticker_key` 有 UNIQUE 约束、解锁幂等，一旦解锁就再也测不了「首次解锁」路径（开奖弹窗/庆祝动画/图鉴+1），盲盒的核心卖点在测试环境里失效。
 - ✅ 核心流程 / 双端同步：用 Playwright 跑真实业务流程（Python 脚本 `scripts/test_*.py`，双账号 E2E，测试账号来自 `app-e2e/.env.test`）
-- ✅ 局部回归：Node 脚本 `scripts/test_*.mjs` 跑在生产服务（:3000）上，**只读** —— 已由 `_lib-readonly-guard.mjs` 在网络层阻断写请求（不是靠自觉，也不是靠 token 恰好无效）
+- ✅ 局部回归：Node 脚本 `scripts/test_*.mjs` 跑在生产服务（:3000）上，**只读** —— 已由 `_lib-readonly-guard.mjs` 在网络层阻断写请求（不是靠自觉，也不是靠 token 恰好无效）；并由 `scripts/check-test-guards.mjs` 在 CI 里做**结构性检查**（漏挂守卫直接红），不靠记忆
 - ✅ 必须覆盖：核心功能、边界情况、错误处理、Realtime 双端同步
+- ✅ **合并前置门 = CI required checks 全绿**（`ci.yml` 三个 job；main 已开分支保护，红灯合不进去）。
+  ⚠️ 但**门禁覆盖 ≠ 测试全覆盖**：4 个双账号 Playwright E2E（`scripts/test_blindbox.py` / `test_offline.py` /
+  `test_trash.py` / `test_undo_complete.py`）**尚未进 CI** —— 本地不跑就等于没覆盖（补进 CI 见批次 C）。
+  另注意：**CI 绿灯 ≠ 交付物可用** —— 制品/发布结果要单独回读验证（见铁律三 `verify-release.mjs`）
 - ✅ 测试要真实验证结果（截图、断言、状态检查），不能只看"没报错"就算过
 - ✅ **测试前跑两个 preflight**：
   - `node scripts/check-test-env.mjs` —— Web 通道隔离（测试库 ≠ 生产库）
@@ -73,18 +85,27 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 - ✅ 告知用户：杀掉 App 重开两次（首次后台下载，二次生效）
 
 **执行环境二选一（同一套脚本，不是两条通道）：**
+- **发布前置（2026-09-14 明确）：目标改动必须已合并到 main。**
+  CD 的 `workflow_dispatch` 在默认分支上出包（工作流内已加 dev 守卫：非 main 直接失败）；
+  本地发布也应在 main 上、工作区干净时执行。在 feature 分支上发布 = **把没合并的代码发到线上**，
+  并让 main 落后于线上（制造出「仓库 meta 与线上 bundle 不一致」那个隐患）。
 - 本地直跑：`node scripts/release.mjs <版本号> --notes "<说明>"`
 - 远程跑（CD）：GitHub Actions → `CD · Web 热更新发布` → 填版本号，先 `dry_run=true` 看预演报告，
   确认后 `dry_run=false` + `confirm=<版本号>`，在 `production` 环境点 Approve 才真正写生产
 - ✅ 发布后必须回读校验：`node scripts/verify-release.mjs [版本号]`（只读，验证版本行 enabled /
   Storage 对象可下载 / 包内 meta 一致）。**写成功 ≠ 客户端拿得到**，脚本没报错不等于交付完成
-- ⚠️ 远程发布后仓库 `public/index.html` 的 meta 会落后线上 bundle（CI 运行器一次性），
-  工作流会 warning 提示，需人工把制品里的 `index.html` 补提交，否则下次打 APK 多重启一次
+- ⚠️ **已知限制：远程发布后仓库 `public/index.html` 的 meta 会落后线上 bundle**（CI 运行器是一次性的，
+  `release.mjs` 对 meta 的改写随运行器销毁）。工作流会 `::warning::` 提示并上传 `index-html-<版本>` 制品。
+  补救要走 **PR**（main 已保护，不能直推），而 `public/**` 命中 `e2e-app.yml` 的 paths →
+  **这个 PR 会跑完整模拟器 CI（约 11 分钟）**。根治方案（未做，优先级高于反复补救）：
+  ① APK 构建时注入 meta（把版本真相从 index.html 移到构建期）；② 流水线自动开该 PR
 
 **⚠️ 版本号必须比线上高（血泪教训）：**
-- 发布前**必须先查线上最新版本**：`supabase.from('app_versions').select('version').eq('enabled',true).order('released_at',{ascending:false}).limit(1)`
+- 发布前**必须先查线上最新版本**：`node scripts/query-latest-version.mjs`（只读）
 - 新版本号必须**语义化大于**线上最新（如线上 2.2.4，新发要 ≥ 2.2.5）
-- ❌ 禁止拍脑袋猜版本号（如看 `index.html` 里的 meta 值——那是源码默认值，和线上脱节）
+- ❌ 禁止拍脑袋猜版本号。**`index.html` 的 meta 不是权威**（2026-09-14 更正原措辞）：本地发布后
+  它会被同步成最新版本，但 CI 发布后它会滞后 —— 唯一权威是 `app_versions` 表。
+  好在这步已自动化：`release.mjs` 内置 `assertNewerThanLatest()`，版本号不够高会直接拒绝发布
 - **血泪教训：** 2026-08-07，没查线上版本直接发 2.0.1，但线上已经 2.2.4，版本号低导致 App 判定"无更新"，用户连开几次都没变化。从此发布前必查线上版本。
 
 ### 通道 B：打 APK（原生层改动走这条）
@@ -122,14 +143,16 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 - ❌ 禁止只创建 `.sql` 文件然后说"见某某文件"，用户得自己打开文件复制
 - **血泪教训：** 图片功能交付时 SQL 只写进了 `migration-add-todo-images.sql`，用户没看到可复制版本，差点漏执行，导致功能装上用不了。
 
-### 发布前 5 步自检（每次发布都要走一遍）
+### 发布前自检（每次发布都要走一遍）
 
-1. 查线上 `app_versions` 最新版本号，新版本必须语义化更大
-2. 跑回归测试（`scripts/test_*.py` + `scripts/test_*.mjs`），截图/断言确认
-3. 涉及 SQL 改动 → 对话里贴可复制完整 SQL（不是只放 `.sql` 文件）
-4. 涉及 APK 改动 → `apksigner verify` + 检查构建时间 + unzip 确认改动入包
-5. 发布后回读校验 `node scripts/verify-release.mjs`（版本行 / Storage 对象 / 包内 meta），
-   并 `git commit` 同步 `index.html` 的 meta；交付回复列明"已做 X / 已验证 Y / 未验证 Z"（铁律二的硬限制要标）
+1. **确认在 main 上、改动已合并、工作区干净**（CD 只从 main 出包；工作流内有 dev 守卫）
+2. 查线上 `app_versions` 最新版本号（`node scripts/query-latest-version.mjs`），新版本必须语义化更大
+3. 跑回归测试（`scripts/test_*.py` + `scripts/test_*.mjs`），截图/断言确认；**PR 的 required checks 必须全绿**
+4. 涉及 SQL 改动 → 对话里贴可复制完整 SQL（不是只放 `.sql` 文件）
+5. 涉及 APK 改动 → `apksigner verify` + 检查构建时间 + unzip 确认改动入包
+6. 发布后回读校验 `node scripts/verify-release.mjs`（版本行 / Storage 对象 / 包内 meta）；
+   若走 CI 发布，另外把 `index.html` 的 meta 通过 **PR** 补回（见通道 A 的「已知限制」）；
+   交付回复列明"已做 X / 已验证 Y / 未验证 Z"（铁律二的硬限制要标）
 
 ---
 
@@ -184,7 +207,10 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 
 ### commit message 规范（Conventional Commits，中文描述）
 - `feat:` 新功能 / `fix:` 修复 / `refactor:` 重构 / `docs:` 文档 / `chore:` 杂项
-- 一个功能一个 commit，说清"做了什么"；一次发布版本 = 一个原子提交
+- **一个功能 = 一个 PR**（2026-09-14 对齐 squash merge）：分支内可以自由拆多个 commit 方便回溯，
+  合并时 `gh pr merge --squash` 在 main 上合成 1 个 commit —— 所以「一个功能一个 commit」
+  现在是指 **main 上的粒度**，不是分支内的粒度
+- 一次发布版本 = 一个原子提交（发布相关的改动不要混进功能 PR）
 
 ### 例外（遇到必须停下询问）
 - 改动中混入不属于本次任务的修改 → 先确认范围再提交
@@ -197,7 +223,7 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 
 **代码质量参差不齐的根源是「没有第二双眼睛」。一人公司没有 reviewer，就用 AI 审查 + Checklist 兜底。**
 
-- 功能开发完成、回归测试通过后、`git commit` 之前，必须按 `CODE-REVIEW.md` 的六维度 Checklist 审查本次改动
+- 功能开发完成、回归测试通过后、**合并 PR 之前**（不是 `git commit` 之前 —— 现在提交到分支不产生 main 变更，真正的门是合并），必须按 `CODE-REVIEW.md` 的六维度 Checklist 审查本次改动
 - 审查结论分 🔴 阻断 / 🟡 建议 / 💭 建议：🔴 必须清零才能 commit；🟡 修复或豁免留注释
 - 审查优先级：数据安全（铁律一）> 正确性 > 安全 > 可维护性 > 性能 > 测试（铁律二）
 - 发布后发生事故 / 疑难 bug → 复盘根因，反哺进 `CODE-REVIEW.md` 的 Checklist（防同类问题再犯）
@@ -210,16 +236,37 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 鉴于数据丢失的惨痛教训，所有数据的"删除"操作都采用**软删除**：
 - ✅ **数据层已实现**：`todos.deleted_at`、`daily_notes.deleted_at` 字段，删除只打时间戳，不物理移除
 - ✅ **UI 层已实现**：回收站入口 + 恢复 / 永久删除（H1）、删除撤销 Toast（H2）
-- ⏳ **定期物理清理：未实现**（2026-09-14 核对）。
-  本节原先写「30 天后物理清理（`scripts/cleanup-deleted.mjs` 占位，可手动跑）」，但**该脚本从来不存在** ——
-  文档描述了一个不存在的机制，违反了铁律四（不留"已死代码"的文档）。现按事实改为「未实现」。
-  若将来要做，硬约束（否则与铁律一直接冲突）：
-  1. **默认 dry-run**，必须显式 `--apply` 才真删；先打印将要删除的行数与 id 清单
-  2. **先备份再删**：沿用 `backups/incident-*.json` 的形状（`{incident, backed_up_at, reason, counts, todo_ids, tables}`，
-     其中 `tables` 存**完整行**、可恢复），备份文件落 `backups/`（已在 .gitignore）
-  3. **禁止按谓词批量删**（铁律一）：先 SELECT 出 id 列表 → 落备份 → 再按**显式 id 列表**删
-  4. 只处理 `deleted_at` 超过保留期的行，并支持 `--keep-days N` 覆盖
 - 这是防止误删/恶意删除的最后保障
+
+### 保留策略：**决定不实现自动物理清理**（2026-09-14 决策，非遗漏）
+
+**先纠正一处文档错误**：本节原写「30 天后物理清理（`scripts/cleanup-deleted.mjs` 占位，可手动跑）」，
+但**该脚本从来不存在** —— 属铁律四禁止的「已死代码的文档」。现已按事实改正。
+
+**决策：不做自动清理。** 理由（按重要性）：
+
+1. **用户已经有了显式的物理删除入口**（回收站 → 永久删除）。自动清理会让系统**删掉用户没要求删的数据** ——
+   对一个双人私密应用，这是纯粹的负价值。
+2. **收益接近零**：软删除行只有 2 个用户产生，体量可忽略；不存在存储或性能压力。
+3. **风险是本项目历史上最严重的那一类**：按时间谓词批量物理删真实数据。2026-07-31 的事故就是这个形状。
+   「收益≈0、风险=历史最坏事故」的改动，正确做法是不做。
+4. **行业实践并不要求它**：数据保留策略的要义是「**有意决定**保留多久」，而不是「默认必须清」。
+   本项目的有意决定 = **无限期保留软删除数据，由用户在回收站自行永久删除**。
+
+**触发重新评估的条件**（满足其一再考虑）：软删除数据量级增长到影响查询/存储；或出现隐私合规要求；
+或用户明确想要「回收站 30 天自动过期」的产品行为。
+
+**若将来要实现，硬约束如下**（不可削减）：
+1. **默认 dry-run**，必须显式 `--apply` 才真删；先打印将要删除的行数与 id 清单
+2. **先备份再删**：用 `node scripts/backup-tables.mjs --reason "..."`（与 `backups/incident-*.json` 同格式、
+   存完整行、可恢复；不含 Storage 图片）
+3. **禁止按谓词批量删**（铁律一）：先 SELECT 出 id 列表 → 落备份 → 再按**显式 id 列表**删
+4. 只处理 `deleted_at` 超过保留期的行，并支持 `--keep-days N` 覆盖
+5. **上线形态是「计划任务」要格外小心**：`schedule`（cron）触发 = **无人值守**，没有人在旁边看报告。
+   因此必须：默认 dry-run → 先跑一段只报告不删 → 真要删时把删除与告警/报告一起上，
+   且失败要能被看见（job 失败通知 / 制品留痕）
+6. **在测试库上验证**（这正是独立测试项目的价值）：测试库有 `deleted_at` 数据且
+   `scripts/reset-test-db.mjs` 会硬删——清理逻辑可以在这里跑通全流程，再碰生产
 
 ---
 
