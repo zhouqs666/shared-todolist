@@ -678,6 +678,10 @@ node scripts/release.mjs <版本号> --dry-run     # 只打包校验，不上传
 # 发布后回读校验（只读：版本行 enabled + Storage 对象可下载 + 包内 meta 一致）
 node scripts/verify-release.mjs [版本号]        # 不传版本号 = 校验线上最新
 
+# 生产数据备份（只读导出到 backups/，含完整行可恢复；铁律一：删除前必须先备份）
+node scripts/backup-tables.mjs --reason "<原因>"
+node scripts/backup-tables.mjs --reason "<原因>" --dry-run   # 只报告行数，不落盘
+
 # 远程发布（GitHub Actions CD：预演 → 审批 → 发布 → 回读校验）
 gh workflow run release-web.yml -f version=<版本号> -f notes="<说明>" -f dry_run=true
 # 预演通过后正式发：-f dry_run=false -f confirm=<版本号>
