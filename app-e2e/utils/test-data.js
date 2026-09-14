@@ -14,9 +14,6 @@ config({ path: path.resolve(__dirname, '../.env.test') });
 
 const URL = process.env.E2E_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY;
-// 支持两种命名：本地用 E2E_TEST_USERNAME（中文），CI 用 E2E_TEST_EMAIL（邮箱）
-const TEST_USERNAME = process.env.E2E_TEST_USERNAME || emailToUsername(process.env.E2E_TEST_EMAIL);
-const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD;
 
 export const E2E_PREFIX = 'E2E-APP-';
 
@@ -29,6 +26,10 @@ function emailToUsername(email) {
   if (!email) return undefined;
   return EMAIL_TO_USERNAME[email] || email.split('@')[0];
 }
+
+// 支持两种命名：本地用 E2E_TEST_USERNAME（中文），CI 用 E2E_TEST_EMAIL（邮箱）
+const TEST_USERNAME = process.env.E2E_TEST_USERNAME || emailToUsername(process.env.E2E_TEST_EMAIL);
+const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD;
 
 // 与 public/js/auth.js 的 usernameToEmail 保持一致（中文用户名 toLowerCase 不变，
 // 必须走拼音映射，否则在测试库里查不到用户）
