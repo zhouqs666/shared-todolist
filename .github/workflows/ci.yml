@@ -88,6 +88,41 @@ jobs:
           fi
           echo "Version $VERSION is valid semver"
 
+  # ============================================================
+  # Job 3: 工作流静态检查（actionlint）
+  # ============================================================
+  # 把「本地手跑的 lint」变成 CI 门禁：workflow 写错（表达式/上下文/依赖关系/run 块
+  # shell 问题）在 PR 阶段就拦住，而不是等到某次发布才炸。
+  # 本 job 也被设为 main 的 required check（见 .workbuddy/memory/cicd-handoff.md「批次 B」）。
+  workflow-lint:
+    name: Workflow Lint (actionlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # actionlint 会自动调用 shellcheck 来 lint `run:` 块；缺了它只查 YAML/表达式，
+      # 而且只在 -verbose 里提一句 `Rule "shellcheck" was disabled` —— 极易被误当成「已全查」。
+      # 这一步保证「run 块被 lint 了」这件事本身是可验证的（2026-09-14 本地踩过该坑）。
+      - name: 确认 shellcheck 可用
+        run: shellcheck --version || echo "::warning::shellcheck 不可用，run 块不会被 lint"
+
+      # 直接下 pinned 版本的二进制，而不是 `bash <(curl .../main/scripts/...)`
+      # —— 后者等于在 CI 里执行上游 main 分支的脚本，供应链上不可复现。
+      - name: 安装 actionlint 1.7.12
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          /tmp/actionlint --version
+
+      - name: Lint workflows
+        # 显式传文件列表：不传参时 actionlint 自己找目录，万一没找到会「零检查 + 退出码 0」，
+        # 那种绿灯是假的。
+        run: /tmp/actionlint -color .github/workflows/*.yml
+
   e2e-admin:
     name: Admin E2E (Playwright + Allure)
     runs-on: ubuntu-latest

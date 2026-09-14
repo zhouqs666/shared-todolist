@@ -214,6 +214,12 @@
 > `actionlint` 静态校验 0 错误；**CI 真实 run 待 push 后执行**（`workflow_dispatch` 要求 workflow 已在默认分支）。
 > 第 1、3、4 项（web 后台 SSH 部署 / APK 自动打 / secrets 分级）未开工；第 5 项**回滚演练已完成**（2026-09-14：
 > `rollback.mjs 2.7.65` → 客户端落到 2.7.64，并反向验证了回读校验能抓出已下线版本；生产终态与演练前一致）。
+>
+> **CI 侧已补（2026-09-14，批次 B）**：main 开**分支保护** + required checks（只取 `ci.yml` 三个 job），
+> 并把 `actionlint` 接进 CI（`Workflow Lint (actionlint)` job，pinned 1.7.12）。
+> **关键认知**：required checks 只能取「无 paths 过滤、PR 时必跑」的 workflow —— 取 `e2e-app.yml`
+> 那种带路径过滤的 job，会让不匹配路径的 PR 永远停在 "Expected" 而无法合并（这是 required checks 的经典坑）。
+> 在此之前 CI 只是「有记录」：红了也不影响合并。
 > 阶段 4 的一个认知修正：**并非所有 CD 都该 push 自动触发**——只读的验证环节可以 push 触发，
 > 但写生产（发布 APP、改线上数据）必须留人工门，两者风险等级不同（详见 `.workbuddy/memory/cicd-handoff.md`）。
 
