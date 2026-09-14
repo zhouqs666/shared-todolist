@@ -376,7 +376,7 @@
 
 | 通道 | 适用 | 机制 | 生效时机 |
 |------|------|------|---------|
-| **热更新**（默认） | 仅改 `public/` 下前端资源 | `scripts/release.mjs` → 打包 zip → 上传 Storage bucket `app_updates`（`releases/<ver>.zip`）→ 写 `app_versions` 表 → 客户端 @capgo `CapacitorUpdater` 下载并 reload | 下次冷启动 |
+| **热更新**（默认） | 仅改 `public/` 下前端资源 | `scripts/release.mjs` → 打包 zip → 上传 Storage bucket `app_updates`（`releases/<ver>.zip`）→ 写 `app_versions` 表 → 客户端 @capgo `CapacitorUpdater` 下载并 reload。触发方式二选一：本地直接跑脚本，或走 CD 工作流（见「关键细节」末条） | 下次冷启动 |
 | **APK 更新** | 改了原生层（插件/权限/配置） | `scripts/release-apk.mjs` → 上传 `apks/youai-<ver>.apk` → 写 `app_native_versions` 表（含 sha256）→ 客户端 `apk-update.js` 比对 → 原生 `ApkInstaller` 下载（sha256 校验）+ 唤起系统安装器 | 用户确认后安装 |
 
 **关键细节**：
@@ -386,6 +386,9 @@
 - 检查时机：冷启动 + 前台切回（60 秒节流）
 - 回滚：热更新把 `app_versions.enabled` 置 `false` 即下线；插件 `resetWhenUpdate:true` 连续崩溃 3 次自动回退
 - 桌面 APK **固定文件名** `~/Desktop/有爱.apk`，每次覆盖，不产生带时间戳的历史文件
+- **CD 通道**（`.github/workflows/release-web.yml`）：手动触发（`workflow_dispatch`），工序为「预演出报告 → 静默期 + `production` 环境审批 → 执行 `release.mjs` → `verify-release.mjs` 回读校验」。四道门：手动触发 + `confirm` 逐字确认版本号 + `assertNewerThanLatest` 版本守卫 + 环境审批人。写生产库属高风险动作，**刻意不做 push 自动发版**
+- **回读校验**（`scripts/verify-release.mjs`，只读）：发布后必须验证「交付物可用」而非「脚本没报错」——版本行 `enabled`、Storage 对象可下载、包内 `index.html` 的 meta 与版本号一致，三项缺一即视为发布失败
+- **已知限制**：CI 运行器是一次性的，`release.mjs` 对 `index.html` meta 的改动随运行器销毁，仓库 meta 会落后线上 bundle；工作流会 `::warning::` 提示并上传 `index.html` 制品，需人工补一次提交（否则下次打 APK 会多重启一次）
 
 > 📌 **血泪教训（已固化为流程）**：发布前必须先查线上最新版本号，新版本号必须语义化大于线上值。曾因未查版本直接发 2.0.1（线上已是 2.2.4）导致用户端判定"无更新"，白等半天。
 
@@ -670,6 +673,14 @@ node scripts/serve.mjs
 
 # 发布热更新（纯前端改动；发布前务必先查线上最新版本号）
 node scripts/release.mjs <版本号> --notes "<说明>"
+node scripts/release.mjs <版本号> --dry-run     # 只打包校验，不上传不写库
+
+# 发布后回读校验（只读：版本行 enabled + Storage 对象可下载 + 包内 meta 一致）
+node scripts/verify-release.mjs [版本号]        # 不传版本号 = 校验线上最新
+
+# 远程发布（GitHub Actions CD：预演 → 审批 → 发布 → 回读校验）
+gh workflow run release-web.yml -f version=<版本号> -f notes="<说明>" -f dry_run=true
+# 预演通过后正式发：-f dry_run=false -f confirm=<版本号>
 
 # 发布 APK（原生层改动；产物固定覆盖 ~/Desktop/有爱.apk）
 node scripts/release-apk.mjs <版本号>

@@ -1,0 +1,323 @@
+name: CD · Web 热更新发布
+
+# ============================================================
+# 这是什么
+# ============================================================
+# 把「人在本地敲 `node scripts/release.mjs <版本> --notes "..."`」搬到 CI 里点按钮执行。
+# 也就是 CI（只读验证）→ CD（写生产）的那一步：机制上两者没有区别，区别只在工序编排。
+#
+#   CI（ci.yml / e2e-app.yml）：push/PR 触发 → 只读验证 → 失败阻断合并
+#   CD（本文件）：           人工点按钮 → 预演报告 → 人工审批 → 写生产（Storage + 版本表）
+#
+# ⚠️ 绝不要给它加 push 触发器（铁律三）：本工作流写入生产 Storage 和 app_versions 表，
+#    push 自动触发 = 合并代码即上线，人工确认的机会被彻底抹掉。
+#
+# ============================================================
+# 四道门（任一不过就不会写生产）
+# ============================================================
+#   1. workflow_dispatch        手动触发 —— 只有仓库写权限的人点得动
+#   2. confirm 输入             必须逐字等于版本号 —— 防手滑（本想 dry-run 却点了正式发）
+#   3. assertNewerThanLatest    版本号必须 > 线上最新 —— 2026-08-07 事故固化的守卫
+#   4. environment: production  配好 required reviewers 后是真审批门（配置方法见 cicd-handoff.md）
+#
+# 工序：先跑「预演」出报告（打包 + 版本号守卫，不写生产），人看过报告再让「发布」作业
+# 进入审批 → 执行 → 回读校验。预演作业永远执行，所以 dry_run=true 时整条流水线只产出报告。
+# ============================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '发布版本号（x.y.z，必须语义化大于线上最新）'
+        required: true
+        type: string
+      notes:
+        description: '更新说明（写入 app_versions.notes）'
+        required: false
+        default: ''
+        type: string
+      min_app:
+        description: '最低兼容 App 壳版本（x.y.z，留空 = 不限制）'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: '预演模式（true = 只打包校验，不上传不写库）'
+        required: true
+        default: true
+        type: boolean
+      confirm:
+        description: '正式发布确认：逐字填入与 version 相同的版本号（dry_run=false 时必填）'
+        required: false
+        default: ''
+        type: string
+
+# 最小权限：本工作流只读代码，生产写入走 Supabase 凭据（Secrets），不需要仓库写权限
+permissions:
+  contents: read
+
+# 发布不能被新 run 打断：中断可能停在「已上传 Storage、未写版本表」的中间态
+concurrency:
+  group: release-web
+  cancel-in-progress: false
+
+jobs:
+  # ============================================================
+  # 作业 1：预演（只读/本地操作，不写生产）
+  # ============================================================
+  preflight:
+    name: 预演（打包 + 版本号守卫）
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 校验输入
+        env:
+          VERSION: ${{ inputs.version }}
+          MIN_APP: ${{ inputs.min_app }}
+          CONFIRM: ${{ inputs.confirm }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          # 变量一律用 ${VAR} 加花括号：$VAR 紧跟中文全角字符时，部分 bash（如 macOS 3.2）
+          # 会把多字节字符的首字节当成变量名的一部分，报 "unbound variable" 且信息乱码。
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::版本号格式错误：${VERSION}（应为 x.y.z）"
+            exit 1
+          fi
+          if [ -n "${MIN_APP}" ] && [[ ! "${MIN_APP}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::min_app 格式错误：${MIN_APP}（应为 x.y.z）"
+            exit 1
+          fi
+          # 防手滑门：正式发布必须逐字确认版本号，避免「本想 dry-run」变成真上线
+          if [ "${DRY_RUN}" = "false" ] && [ "${CONFIRM}" != "${VERSION}" ]; then
+            echo "::error::正式发布需在 confirm 里逐字填入版本号 ${VERSION}（当前填写：${CONFIRM:-空}）"
+            exit 1
+          fi
+          echo "✓ 输入校验通过：version=${VERSION} dry_run=${DRY_RUN}"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        # release.mjs 只用 @supabase/supabase-js（纯 JS），跳过 sharp/esbuild 等安装脚本加速
+        run: npm ci --ignore-scripts
+
+      # 缺凭据就 fail-closed，不学 ci.yml 的「缺 E2E secrets 就跳过」——
+      # 发布流水线静默跳过会让人误以为「发布成功了」。
+      - name: 检查发布凭据
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::缺少仓库 Secrets：SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY"
+            exit 1
+          fi
+          echo "✓ 发布凭据已配置（URL 长度 ${#SUPABASE_URL}，key 长度 ${#SUPABASE_KEY}）"
+
+      # 发布前自检第 1 步（铁律三）：先看线上最新版本，人工确认目标版本号确实更大
+      - name: 查询线上最新版本（只读）
+        id: online
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          out=$(node scripts/query-latest-version.mjs)
+          printf '%s\n' "$out"
+          online=$(printf '%s\n' "$out" | sed -n 's/^线上最新 enabled 版本: //p')
+          echo "version=${online:-（无）}" >> "$GITHUB_OUTPUT"
+
+      # 真正跑发布脚本，但带 --dry-run：打包 + 版本号守卫全走一遍，只是不上传不写库。
+      # 所以这一步失败 = 正式发布也一定会失败（版本号低、index.html 缺 meta、zip 不可用），
+      # 在唤醒审批人之前就把问题拦掉。
+      - name: 预演发布（release.mjs --dry-run）
+        id: dryrun
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+          MIN_APP: ${{ inputs.min_app }}
+        run: |
+          set -euo pipefail
+          args=("$VERSION" --dry-run)
+          # 用 if 而不是 `[ -n ... ] && ...`：后者在条件为假时返回 1，配合 set -e 会误判失败
+          if [ -n "$NOTES" ]; then args+=(--notes "$NOTES"); fi
+          if [ -n "$MIN_APP" ]; then args+=(--min-app "$MIN_APP"); fi
+          node scripts/release.mjs "${args[@]}"
+
+      - name: 上传预演制品（zip，供人工检查包结构）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dryrun-bundle-${{ inputs.version }}
+          path: .release-tmp/*.zip
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: 写入 Run Summary
+        if: always()
+        env:
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+          MIN_APP: ${{ inputs.min_app }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          ONLINE: ${{ steps.online.outputs.version }}
+          DRYRUN_OUTCOME: ${{ steps.dryrun.outcome }}
+        run: |
+          set -euo pipefail
+          zip_size="（未产出）"
+          if [ -f ".release-tmp/release-${VERSION}.zip" ]; then
+            # 用 wc -c 而不是 GNU 专属的 stat -c%s：本地（BSD/macOS）也能照着跑一遍同样的块
+            zip_size="$(wc -c < ".release-tmp/release-${VERSION}.zip" | awk '{printf "%.1f KB", $1/1024}')"
+          fi
+          {
+            echo "## 🧪 预演报告（dry-run，未写生产）"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "|---|---|"
+            echo "| 目标版本 | \`${VERSION}\` |"
+            echo "| 线上最新 | \`${ONLINE}\` |"
+            echo "| 版本号守卫 | $([ "$DRYRUN_OUTCOME" = "success" ] && echo '✓ 通过' || echo '✗ 失败') |"
+            echo "| 打包产物 | ${zip_size} |"
+            echo "| 最低壳版本 | ${MIN_APP:-（不限制）} |"
+            echo "| 更新说明 | ${NOTES:-（无）} |"
+            echo ""
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "**本次为预演模式，未写入生产。** 确认无误后，用 \`dry_run=false\` + \`confirm=${VERSION}\` 重跑即可正式发布。"
+            else
+              echo "**下一步：等「正式发布」作业的审批通过**（environment: production 的 required reviewers）。"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ============================================================
+  # 作业 2：正式发布（写生产 —— 审批门在这里）
+  # ============================================================
+  publish:
+    name: 正式发布（写生产）
+    needs: preflight
+    if: ${{ inputs.dry_run == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # 审批门：在仓库 Settings → Environments 建 production 并配 required reviewers 后，
+    # 本作业会停在「Waiting for review」等人点 Approve，之后才执行。
+    # 未配置时该字段只记录一次 deployment，不阻塞（配置方法见 .workbuddy/memory/cicd-handoff.md）。
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: 检查发布凭据
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::缺少仓库 Secrets：SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY"
+            exit 1
+          fi
+
+      - name: 正式发布（release.mjs：上传 Storage + 写版本表）
+        id: release
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+          MIN_APP: ${{ inputs.min_app }}
+        run: |
+          set -euo pipefail
+          args=("$VERSION")
+          if [ -n "$NOTES" ]; then args+=(--notes "$NOTES"); fi
+          if [ -n "$MIN_APP" ]; then args+=(--min-app "$MIN_APP"); fi
+          node scripts/release.mjs "${args[@]}"
+
+      # 写成功 ≠ 客户端拿得到。回读校验：版本行 enabled、Storage 对象可下载、
+      # 包内 index.html 的 meta 与版本号一致 —— 这三条才是「交付物可用」。
+      - name: 回读校验（verify-release.mjs）
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERSION: ${{ inputs.version }}
+          MIN_APP: ${{ inputs.min_app }}
+        run: |
+          set -euo pipefail
+          args=("$VERSION")
+          if [ -n "$MIN_APP" ]; then args+=(--min-app "$MIN_APP"); fi
+          node scripts/verify-release.mjs "${args[@]}"
+
+      # release.mjs 有意不还原 index.html 的 meta（本地发布时让改动随提交入库，保证下次打 APK
+      # 壳内置 meta 正确）。CI 的运行器是一次性的，这个改动随运行器销毁 —— 于是仓库里的 meta
+      # 会落后于线上 bundle。本步骤把这个「落后」显式暴露出来，并给出制品，避免悄悄埋雷。
+      - name: 检查仓库 meta 漂移（需人工补一次提交）
+        if: always()
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          {
+            echo ""
+            echo "## ⚠️ 需人工补一步：把 index.html 的版本 meta 提交回 main"
+            echo ""
+            if git diff --quiet -- public/index.html; then
+              echo "本运行器的 index.html 未被改动（发布可能未走到打包步骤），请人工确认仓库 meta 状态。"
+            else
+              echo "仓库里的 \`public/index.html\` 仍是发布前的 meta，线上 bundle 已是 \`${VERSION}\`。"
+              echo ""
+              echo "**为什么必须补**：下次打 APK 时，壳内置 meta 若与线上 bundle 不一致，"
+              echo "App 首次启动会多一次「下载→重启」（用户体验为多重启一次）；"
+              echo "反过来若仓库 meta 超前于线上 bundle，App 会判定「已是最新」而永远收不到更新。"
+              echo ""
+              echo "**怎么做**：下载本作业的 \`index-html-${VERSION}\` 制品覆盖 \`public/index.html\`，"
+              echo "或在本地执行 \`node scripts/release.mjs ${VERSION} --dry-run\` 后提交 meta 改动。"
+              echo "（真正的解法见 cicd-handoff.md「已知限制」：让流水线提交该改动，或让 APK 构建时注入 meta）"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if ! git diff --quiet -- public/index.html; then
+            echo "::warning::线上已发布 ${VERSION}，但仓库 public/index.html 的 meta 未同步，需人工补提交"
+          fi
+
+      - name: 上传发布后的 index.html（供人工提交回仓库）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: index-html-${{ inputs.version }}
+          path: public/index.html
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: 写入 Run Summary（发布结果）
+        if: success()
+        env:
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          {
+            echo ""
+            echo "## ✅ 发布完成：\`${VERSION}\`"
+            echo ""
+            echo "- 更新说明：${NOTES:-（无）}"
+            echo "- 生效时机：用户下次**冷启动** App 时后台下载，再启动一次加载新资源"
+            echo ""
+            echo "**如需回滚**：\`node scripts/rollback.mjs ${VERSION}\`"
+            echo "（把该版本置 enabled=false，App 会落到上一条 enabled 版本；详见 rollback.mjs）"
+          } >> "$GITHUB_STEP_SUMMARY"

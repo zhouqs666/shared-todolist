@@ -25,13 +25,14 @@
 
 import { createClient } from '@supabase/supabase-js';
 import {
-  existsSync, readFileSync, mkdirSync, unlinkSync, statSync,
+  existsSync, mkdirSync, unlinkSync, statSync,
 } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { assertNewerThanLatest } from './_lib-version-check.mjs';
+import { loadEnv, requireSupabaseEnv } from './_lib-env.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -77,39 +78,10 @@ for (let i = 1; i < args.length; i++) {
 }
 
 // ---------- 加载 .env ----------
-function loadEnv() {
-  const envPath = join(ROOT, '.env');
-  if (!existsSync(envPath)) {
-    console.error('✗ 找不到 .env 文件，请在项目根目录创建（参考 .env.example）');
-    process.exit(1);
-  }
-  const lines = readFileSync(envPath, 'utf8').split('\n');
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eq = trimmed.indexOf('=');
-    if (eq < 0) continue;
-    const k = trimmed.slice(0, eq).trim();
-    let v = trimmed.slice(eq + 1).trim();
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-      v = v.slice(1, -1);
-    }
-    if (!process.env[k]) process.env[k] = v;
-  }
-}
+// 解析 + 凭据校验统一在 _lib-env.mjs（另有 verify-release.mjs / query-latest-version.mjs 共用）：
+// CI 里没 .env 文件，改为环境变量注入，所以 loadEnv 在拿不到文件时会先看环境变量。
 loadEnv();
-
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SERVICE_KEY = process.env.SUPABASE_KEY;
-
-if (!SUPABASE_URL || !SERVICE_KEY) {
-  console.error('✗ .env 缺少 SUPABASE_URL 或 SUPABASE_KEY（service_role）');
-  process.exit(1);
-}
-if (SERVICE_KEY.length < 100) {
-  console.error('✗ SUPABASE_KEY 看起来是 anon key，需要 service_role key（更长）才能上传/写表');
-  process.exit(1);
-}
+const { url: SUPABASE_URL, key: SERVICE_KEY } = requireSupabaseEnv();
 
 // ---------- 主流程 ----------
 async function main() {

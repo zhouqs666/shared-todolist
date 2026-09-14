@@ -72,6 +72,15 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 - 用户下次**冷启动** App 时自动拉取，无需重装 APK
 - ✅ 告知用户：杀掉 App 重开两次（首次后台下载，二次生效）
 
+**执行环境二选一（同一套脚本，不是两条通道）：**
+- 本地直跑：`node scripts/release.mjs <版本号> --notes "<说明>"`
+- 远程跑（CD）：GitHub Actions → `CD · Web 热更新发布` → 填版本号，先 `dry_run=true` 看预演报告，
+  确认后 `dry_run=false` + `confirm=<版本号>`，在 `production` 环境点 Approve 才真正写生产
+- ✅ 发布后必须回读校验：`node scripts/verify-release.mjs [版本号]`（只读，验证版本行 enabled /
+  Storage 对象可下载 / 包内 meta 一致）。**写成功 ≠ 客户端拿得到**，脚本没报错不等于交付完成
+- ⚠️ 远程发布后仓库 `public/index.html` 的 meta 会落后线上 bundle（CI 运行器一次性），
+  工作流会 warning 提示，需人工把制品里的 `index.html` 补提交，否则下次打 APK 多重启一次
+
 **⚠️ 版本号必须比线上高（血泪教训）：**
 - 发布前**必须先查线上最新版本**：`supabase.from('app_versions').select('version').eq('enabled',true).order('released_at',{ascending:false}).limit(1)`
 - 新版本号必须**语义化大于**线上最新（如线上 2.2.4，新发要 ≥ 2.2.5）
@@ -119,7 +128,8 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 2. 跑回归测试（`scripts/test_*.py` + `scripts/test_*.mjs`），截图/断言确认
 3. 涉及 SQL 改动 → 对话里贴可复制完整 SQL（不是只放 `.sql` 文件）
 4. 涉及 APK 改动 → `apksigner verify` + 检查构建时间 + unzip 确认改动入包
-5. 交付回复列明"已做 X / 已验证 Y / 未验证 Z"（铁律二的硬限制要标）
+5. 发布后回读校验 `node scripts/verify-release.mjs`（版本行 / Storage 对象 / 包内 meta），
+   并 `git commit` 同步 `index.html` 的 meta；交付回复列明"已做 X / 已验证 Y / 未验证 Z"（铁律二的硬限制要标）
 
 ---
 
@@ -192,7 +202,7 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 - **前端**：原生 HTML/CSS/JS（无框架），ES Module
 - **后端**：Supabase（PostgreSQL + Auth + Realtime），无自建服务器
 - **打包**：Capacitor → Android APK（`com.love.todo`）
-- **发布**：热更新（`release.mjs`）+ APK（`release-apk.mjs`）+ App 内自更新（`apk-update.js` + `ApkInstaller`）
+- **发布**：热更新（`release.mjs`；本地直跑 或 GitHub Actions `release-web.yml` 审批门跑）+ APK（`release-apk.mjs`）+ App 内自更新（`apk-update.js` + `ApkInstaller`）；发布后回读校验 `verify-release.mjs`
 - **PWA**：`manifest.webmanifest` + `sw.js`（Service Worker v15，仅浏览器环境生效，原生环境 bypass）
 - **Capacitor 插件**：`SystemBars` / `LocalNotifications` / `SplashScreen` / `CapacitorUpdater`（热更）/ 自研 `ApkInstaller`（APK 自更）
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）

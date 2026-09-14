@@ -194,7 +194,7 @@
 - **目标**：自动构建 + 自动部署，走通「提交 → 上线」的后半段。
 - **内容**：
   1. **web 后台**：GitHub Actions 通过 SSH 自动部署到云服务器（Nginx + HTTPS + 域名）。本机预跑 SSH 流程验证，再上 CI。
-  2. **APP 热更新**：Mac 本地跑通 `release.mjs`（带 `--dry-run` 出报告），再上 GitHub Actions 自动跑（同样保留 dry-run 报告 + 人工审批门）。
+  2. ✅ **APP 热更新（已完成）**：Mac 本地跑通 `release.mjs`（带 `--dry-run` 出报告），再上 GitHub Actions 自动跑（同样保留 dry-run 报告 + 人工审批门）。
   3. **APK 自动打**：Mac 本地打 + CI ubuntu 兜底双轨（面试讲「CD 完整链路」用 CI 轨迹）。
   4. 接入 **secrets 分级**（GitHub Secrets + 云服务器环境变量）：
      - **Supabase service_role key**：绕过 RLS，仅 CI/部署脚本使用，绝不进前端代码
@@ -204,6 +204,17 @@
   5. **回滚演练**：`rollback.mjs` 验证；web 后台保留上一版本目录，CD 失败秒级切回。
 - **验收标准**：合并 main 后自动部署后台 + 自动发版 APP（dry-run + 人工审批），支持回滚。
 - **沉淀的面试知识点**：持续交付 vs 持续部署（见 §六易错点）；环境流转（test / staging / prod）；SSH 部署；回滚机制；secrets 分级与轮换；HTTPS 证书（Let's Encrypt）；Nginx 反向代理；artifact 归档。
+
+> **状态：🔄 进行中（2026-09-14）**——第 2 项「APP 热更新」已落地 `.github/workflows/release-web.yml`：
+> `workflow_dispatch` 手动触发（无 push 触发器）→ `preflight` 作业跑 `release.mjs --dry-run` 出预演报告并归档 zip 制品
+> → `publish` 作业挂在 `environment: production`（required reviewers）后正式发布 → `verify-release.mjs` 回读校验
+> （版本行 `enabled` / Storage 对象可下载 / 包内 `index.html` 的 meta 与版本号一致）。
+> 四道门：手动触发 + `confirm` 逐字确认版本号 + `assertNewerThanLatest` 版本守卫 + 环境审批人。
+> 本地已验证全部 `run` 块（含「无 `.env` 纯环境变量」这条 CI 特有路径）与 `verify-release.mjs` 正反用例，
+> `actionlint` 静态校验 0 错误；**CI 真实 run 待 push 后执行**（`workflow_dispatch` 要求 workflow 已在默认分支）。
+> 第 1、3、4、5 项（web 后台 SSH 部署 / APK 自动打 / secrets 分级 / 回滚演练）未开工。
+> 阶段 4 的一个认知修正：**并非所有 CD 都该 push 自动触发**——只读的验证环节可以 push 触发，
+> 但写生产（发布 APP、改线上数据）必须留人工门，两者风险等级不同（详见 `.workbuddy/memory/cicd-handoff.md`）。
 
 ### 阶段 5：全链路整合 + 面试准备
 
