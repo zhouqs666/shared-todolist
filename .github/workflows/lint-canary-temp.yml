@@ -1,0 +1,20 @@
+# ⚠️ 临时验证文件（不合并进 main）
+#
+# 用途：证明「required check 失败 → PR 无法合并」（批次 B 的验收证据）。
+# 故意写一段 shellcheck 会报 SC2086 的 run 块（变量未加引号），actionlint 会把它算作错误，
+# 于是 `Workflow Lint (actionlint)` job 失败 —— 验证完即关闭 PR 并删除本文件。
+#
+# 用 workflow_dispatch 而不是 pull_request：本文件的目的是让 *静态检查* 失败，
+# 不需要它自己跑一次（省 CI 时间，也避免多出一个无关的失败 run）。
+name: lint-canary-temp
+
+on:
+  workflow_dispatch:
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          name="a b"
+          echo $name
