@@ -55,6 +55,14 @@ jobs:
       - name: Install root dependencies
         run: npm install --ignore-scripts
 
+      - name: Inject test Supabase URL into APK
+        run: |
+          # 替换 public/js/supabase.js 里的生产 URL → 测试 URL（铁律一：测试库物理隔离）
+          sed -i "s|const SUPABASE_URL = '[^']*'|const SUPABASE_URL = '${{ secrets.E2E_SUPABASE_URL }}'|" public/js/supabase.js
+          sed -i "s|const SUPABASE_ANON_KEY = '[^']*'|const SUPABASE_ANON_KEY = '${{ secrets.E2E_SUPABASE_ANON_KEY }}'|" public/js/supabase.js
+          echo "✓ supabase.js 已指向测试库"
+          grep "SUPABASE_URL" public/js/supabase.js
+
       - name: Sync web assets to Android
         run: npx cap sync android
 
