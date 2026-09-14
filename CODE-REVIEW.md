@@ -67,7 +67,9 @@
 
 - 🟡 N+1 查询：循环里 `await supabase` 调用（应合并为一条 select / 批量）。
 - 🟡 Realtime 订阅泄漏：`subscribe` 后是否在页面销毁 / `beforeunload` 时 `unsubscribe`。
-- 🟡 Storage 孤儿文件：删 todo 后图片是否成孤儿（已接受「孤儿无害」，但要有意识，靠 `cleanup-deleted.mjs` 兜底）。
+- 🟡 Storage 孤儿文件：删 todo 后图片是否成孤儿（现状：**已接受「孤儿无害」，且无任何清理机制** ——
+  原先这里写「靠 `cleanup-deleted.mjs` 兜底」，但该脚本从不存在，2026-09-14 已按事实改正；
+  若将来引入物理清理，必须遵守 AGENTS.md「软删除」章节列出的四条硬约束）。
 
 ### 维度 F：测试（对应铁律二）
 
@@ -165,8 +167,11 @@
 
 ```
 [2026-09-07] forceDeleteTodo 重构：🔴0 🟡1（孤儿文件靠 cleanup-deleted 兜底）→ 通过
+  ⚠️ 事后更正（2026-09-14）：那次豁免所依赖的 `cleanup-deleted.mjs` 从未存在，"兜底"不成立 ——
+  该 🟡 实为未闭环（现状见维度 E：已接受孤儿无害 + 无清理机制）。
 [2026-09-14] 批次 A 热更新接入 CD：🔴1（.release-tmp 隐藏目录致制品静默未上传，真跑 CI 才暴露；已修）🟡2（actionlint 缺 shellcheck 静默跳过 / 抽 _lib-env 时残留 2 个脚本未迁移，已留注释豁免）→ 通过
 [2026-09-14] 批次 B actionlint 进 CI + 分支保护：🔴0 🟡0（新增 F2 工作流专项 8 条，把批次 A/B 的坑固化成检查项）→ 通过
+[2026-09-14] 铁律审计第一批（两条 🔴）：🔴2（① `test_sticker_wiggle.mjs` 缺只读守卫，实测会向生产库发 PATCH profiles + 两个 RPC 写请求；② 文档引用了从不存在的 `cleanup-deleted.mjs`）→ 已修，🟡1（该脚本长期被记为「CI flaky」，真因是竞态 + 3 处从没跑到过的测试代码 bug；已修但仍有残余时序敏感，未并入 CI，留待批次 C 治理）
 ```
 
 ---
