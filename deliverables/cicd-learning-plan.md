@@ -165,7 +165,17 @@
 
 ### 阶段 3：APP 自动化最小闭环
 
-> **状态：🔄 阶段 3.6 CI 机制已跑通（2026-09-14）**——app-e2e 工程（WebdriverIO + POM + 5 个 E2E 用例）本地 Mac 两轮全绿；CI 双 job 打通（build 用 `build-test-apk.mjs` 产出测试 APK + test 用模拟器跑 Appium），`login.spec` 已在 CI 全绿。关键收获：测试 APK 隔离机制、build-test-apk.mjs 复用、release 签名密钥进 Secrets、Java home 需在 CI 覆盖、WebView 输入陷阱（addValue）、**系统 ANR 弹窗劫持 a11y 树**（`hide_error_dialogs=1`）、**测试库 schema 契约检查**（迁移漏执行会让 App 查询静默失败→E2E 假失败）、CI 成本优化（公开仓库 + concurrency + Linux runner）。
+> **状态：✅ 已完成（2026-09-14）**——本地 Mac 两轮全绿 + **CI 5/5 全绿**（run 34819456715：`login.spec` 2/2、`todo.spec` 3/3；build 1m41s + test 9m12s）。CI 形态：build job 用 `scripts/build-test-apk.mjs` 产出指向独立测试库的 APK（release 签名密钥走 GitHub Secrets），test job 先用 `check-test-schema.mjs` 做测试库 schema 契约检查（快速失败），再起 Android 模拟器（API 33 + KVM）跑 Appium WebdriverIO 用例，Allure 结果/报告/失败截图归档为 artifact。
+>
+> **四个真实坑（面试可直接讲，均是「日志说元素找不到、真因在测试代码之外」）**：
+> 1. **系统 ANR 弹窗劫持 a11y 树**：`reloadSession()` 让 App 切后台，2 核模拟器上桌面启动器 ANR，系统弹窗盖住 App 并劫持 UiAutomator2 无障碍树 → 表现为「第一个用例通过、其余全挂」。修复：`settings put global hide_error_dialogs 1` + 兜底点掉弹窗。
+> 2. **测试库 schema 漂移致 App 查询静默失败**：测试库 `todos` 缺 `pinned` 列，App 的 `listTodos()` 带 `.order('pinned')` → PostgREST 42703 → 列表请求整体失败 → 界面静默显示空列表。修复：`check-test-schema.mjs` 契约检查（从迁移 SQL 自动推导期望 schema，漂移即打印修复 SQL 快速失败）。
+> 3. **软键盘遮挡下半屏元素**：输入后键盘盖住页面下半部分，登录按钮 / FAB / 错误提示在 DOM 中存在却判定 `displayed=false`；且 App 打开面板时会 `focus()` 输入框、面板 `position: fixed; bottom: 0` 被键盘整个压住。修复：点击下半屏元素前统一 `dismissKeyboard()`（BACK，键盘展开时由输入法消费）。
+> 4. **超时按本地手感设置，CI 上不够**：`waitForLoaded` 只等列表容器出现（空态也满足），数据异步加载，CI 首次冷启动 >10s。修复：按「命中即返回」的思路放大超时（60s/30s），不影响正常速度。
+>
+> **方法论沉淀**：E2E 报「元素找不到」时，第一动作是**看失败截图**，第二动作是**复现被测应用的原始请求**（跑同一条 select/order 看真实报错），第三动作才是**查环境契约**。只盯着 `waitForDisplayed` 加超时/改定位表达式会一直在错误方向上打转。
+>
+> 关键机制：测试 APK 隔离（`build-test-apk.mjs` 复用，与本地同一套）、release 签名密钥进 Secrets、CI 需覆盖 `gradle.properties` 里本地 Mac 的 Java home、WebView 输入陷阱（addValue）、CI 成本优化（公开仓库 + concurrency + Linux runner）。
 
 - **目标**：用 Appium 跑通 1~2 个核心 APP 用例，**本地 Mac 跑通**为最低门槛，CI 兜底为加分项。
 - **内容**：
