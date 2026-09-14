@@ -160,9 +160,27 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 3. 确认无调试残留（`scripts/_debug-*.mjs`、`.release-tmp/`、`.probe/`）
 
 ### 提交边界（安全红线）
-- **只 commit，不 push**（push 到 GitHub 需单独指令，绝不自动）
+- **不直推 main**（`git push` 到 main 会被分支保护拒绝；直推一律不做）
+- **合并 PR 等同于改 main**，只在**用户明确授权的任务范围内**执行（例：「做批次 B」即含完成该批次所需的分支、PR 与合并）；
+  超出授权范围、或不确定是否属于当前任务 → 先问，不自动合并
+- **push 功能分支 + 开 PR 属常规流程**（不直接改 main，且必须过 CI 才能合并），可自动执行
 - 永不提交：`.workbuddy/`（本机记忆）、调试探针、临时产物
 - 用 `git add` 指定文件/目录，不用裸 `git add -A` 一把梭
+
+### main 分支保护（2026-09-14 起，流程变化必读）
+main 现在是 protected，**直接 `git push` 到 main 会被拒**（GH013）。改代码走：
+```bash
+git switch -c <type>/<简短说明>     # 例如 fix/undo-toast-keyboard
+git commit ...                      # 铁律五照旧：改完即提交
+git push -u origin HEAD             # 推功能分支
+gh pr create --fill                 # 开 PR；CI 必过（required checks）才能合
+gh pr merge --squash --delete-branch  # 合并需用户明确指令
+```
+- **required checks 只含 `ci.yml` 的三个 job**（`Node Regression + Version Check` /
+  `Admin E2E (Playwright + Allure)` / `Workflow Lint (actionlint)`）
+- ⚠️ **不要把 `e2e-app.yml` / `release-web.yml` 的 job 设为 required**：前者有 `paths` 过滤、
+  后者只在手动触发 → 它们在不匹配的 PR 上**永远不会运行**，check 会一直停在 "Expected"，把 PR 永久卡死
+- 为什么这是唯一让 CI 有牙齿的方式：required checks 生效前，CI 跑得再红也不影响合并
 
 ### commit message 规范（Conventional Commits，中文描述）
 - `feat:` 新功能 / `fix:` 修复 / `refactor:` 重构 / `docs:` 文档 / `chore:` 杂项
@@ -207,6 +225,9 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 - **Capacitor 插件**：`SystemBars` / `LocalNotifications` / `SplashScreen` / `CapacitorUpdater`（热更）/ 自研 `ApkInstaller`（APK 自更）
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
 - **测试**：Playwright（Python 双账号 E2E，连测试库）+ Node 局部回归（可 mock）
+- **CI/CD**：GitHub Actions 三个 workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint**）、
+  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，有 `paths` 过滤）、`release-web.yml`（热更新 CD，仅手动触发）。
+  main 已开**分支保护**，required checks 取 `ci.yml` 三个 job；改代码走分支 + PR（见「铁律五 → main 分支保护」）
 - **本地服务**：`node scripts/serve.mjs`（端口 3000，**生产库**，仅手动自测）／`node scripts/serve-test.mjs`（端口 3100，**测试库**，跑 E2E 必须用这个）
 - **测试库维护**：`node scripts/reset-test-db.mjs`（归零，硬删 E2E 残留 + 贴纸）／`node scripts/check-test-env.mjs`（隔离自检）／`node app-e2e/scripts/check-test-schema.mjs`（schema 契约）
 - **埋点状态**：⚠️ 目前零埋点，无法回答"哪个功能最常用""两人一天互动几次"。补基础埋点（北极星 = 双端同日活跃天数）在路线图 P0。
