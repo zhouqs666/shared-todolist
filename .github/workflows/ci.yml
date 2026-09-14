@@ -32,6 +32,13 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Check readonly guards on test scripts
+        # 结构性检查（铁律二）：连数据库的 scripts/test_*.mjs 必须挂 _lib-readonly-guard，
+        # 否则那些「本意只读」的脚本会把写请求真打到生产库（2026-09-14 实测
+        # test_sticker_wiggle.mjs 就没有守卫）。这条保证不能只靠记忆与自觉。
+        # 不依赖任何依赖，纯静态扫描 → 放在最前面，秒级失败，别浪费后面的安装时间。
+        run: node scripts/check-test-guards.mjs
+
       - name: Install dependencies
         run: npm ci
 

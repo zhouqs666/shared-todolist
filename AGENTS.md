@@ -210,7 +210,15 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 鉴于数据丢失的惨痛教训，所有数据的"删除"操作都采用**软删除**：
 - ✅ **数据层已实现**：`todos.deleted_at`、`daily_notes.deleted_at` 字段，删除只打时间戳，不物理移除
 - ✅ **UI 层已实现**：回收站入口 + 恢复 / 永久删除（H1）、删除撤销 Toast（H2）
-- ⏳ **定期清理**：30 天后真正物理清理（`scripts/cleanup-deleted.mjs` 占位，可手动跑）
+- ⏳ **定期物理清理：未实现**（2026-09-14 核对）。
+  本节原先写「30 天后物理清理（`scripts/cleanup-deleted.mjs` 占位，可手动跑）」，但**该脚本从来不存在** ——
+  文档描述了一个不存在的机制，违反了铁律四（不留"已死代码"的文档）。现按事实改为「未实现」。
+  若将来要做，硬约束（否则与铁律一直接冲突）：
+  1. **默认 dry-run**，必须显式 `--apply` 才真删；先打印将要删除的行数与 id 清单
+  2. **先备份再删**：沿用 `backups/incident-*.json` 的形状（`{incident, backed_up_at, reason, counts, todo_ids, tables}`，
+     其中 `tables` 存**完整行**、可恢复），备份文件落 `backups/`（已在 .gitignore）
+  3. **禁止按谓词批量删**（铁律一）：先 SELECT 出 id 列表 → 落备份 → 再按**显式 id 列表**删
+  4. 只处理 `deleted_at` 超过保留期的行，并支持 `--keep-days N` 覆盖
 - 这是防止误删/恶意删除的最后保障
 
 ---
