@@ -33,12 +33,14 @@ export class DashboardPage {
   /**
    * 点击 FAB 打开底部添加面板
    *
-   * 两个真实陷阱（CI 实测，均有失败截图佐证）：
+   * 三个真实陷阱（CI 实测，均有失败截图佐证）：
    *   1. 软键盘盖住右下角 FAB → 元素在 DOM 中却判定不可见，先收键盘。
-   *   2. **面板其实已经打开、但 a11y 树刷新滞后**：第 1 轮点开面板后
-   *      todoInput 一时探测不到，进入第 2 轮时 FAB 已被面板遮住，
-   *      若此处直接 waitForDisplayed 抛错就会整例失败——而面板明明是开的。
-   *      所以 FAB 不可见不是错误信号：继续等 todoInput（它才是唯一判据）。
+   *   2. **面板已打开却被键盘盖住**：add 面板贴在屏幕底部，打开后输入框
+   *      自动聚焦、键盘弹出，整个面板被压住 → todoInput 落不进无障碍树。
+   *      截图特征：背景已模糊（=面板已开）却怎么也探测不到输入框。
+   *      所以点完 FAB 必须立刻再收一次键盘。
+   *   3. a11y 树刷新滞后：FAB 不可见不是错误信号（面板可能已经开了），
+   *      唯一判据是 todoInput 是否真的「可见」，3 轮都不行才失败。
    */
   async openAddPanel(timeout = 15000) {
     await dismissKeyboard(this.driver);
@@ -46,28 +48,36 @@ export class DashboardPage {
     // FAB 只等一小会儿：正常秒出；被已打开的面板遮住时不值得久等
     const FAB_WAIT = 5000;
     const input = await this.driver.$(this.todoInput);
+    const isVisible = (el, t) =>
+      el.waitForDisplayed({ timeout: t }).then(() => true).catch(() => false);
 
     for (let attempt = 1; attempt <= 3; attempt++) {
-      if (await input.isExisting()) {
-        await input.waitForDisplayed({ timeout }).catch(() => {});
-        return;
-      }
+      if (await isVisible(input, 1000)) return;
 
       const fab = await this.driver.$(this.fabBtn);
-      const fabReady = await fab
-        .waitForDisplayed({ timeout: FAB_WAIT })
-        .then(() => true)
-        .catch(() => false);
-      if (fabReady) {
+      if (await isVisible(fab, FAB_WAIT)) {
         await fab.click().catch(() => {});
+        await this.driver.pause(500); // 等底部面板弹出动画
       }
 
-      // 无论是否点到 FAB，都等一轮 todoInput：面板可能已打开但树未刷新
-      if (await input.waitForExist({ timeout }).catch(() => false)) {
-        await input.waitForDisplayed({ timeout }).catch(() => {});
-        return;
-      }
+      await dismissKeyboard(this.driver); // 面板内输入框聚焦会弹键盘，收掉它
+      if (await isVisible(input, timeout)) return;
     }
+
+    // 失败时输出设备侧实况：键盘状态 + 页面上真实存在的 resource-id 清单。
+    // 若面板输入框的实际 id 与 todoInput 不符，这里会直接暴露出来。
+    const diag = {
+      keyboardShown: await this.driver.isKeyboardShown().catch(() => 'unknown'),
+      pageSourceIds: 'unavailable',
+    };
+    try {
+      const src = await this.driver.getPageSource();
+      diag.pageSourceIds = [...new Set([...src.matchAll(/resource-id="([^"]+)"/g)].map((m) => m[1]))].join(', ');
+    } catch (e) {
+      diag.pageSourceIds = 'getPageSource 失败: ' + (e && e.message);
+    }
+    console.error('[DashboardPage] openAddPanel 失败诊断:', JSON.stringify(diag, null, 2));
+
     throw new Error('添加面板未能打开：todoInput 3 轮重试后仍不可见');
   }
 
