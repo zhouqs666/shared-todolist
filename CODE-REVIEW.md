@@ -76,6 +76,27 @@
 - 🟡 边界 + 错误处理是否覆盖。
 - 🔴 无法验证的硬限制，交付时必须明确列出「未验证 X / 原因 Y」，禁止把「没测」说成「已验证」。
 
+#### F2. 工作流 / CI 改动专项（2026-09-14 批次 A/B 复盘新增）
+
+> 触发条件：本次改动碰了 `.github/workflows/**` 或 `scripts/release*.mjs`（发布/CD 类脚本）。
+
+- 🔴 **新增/修改 workflow 后，是否真跑过一次？** 静态检查（`actionlint`）与本地逐块演练都查不出
+  「runner 才有的行为」。血泪：`.release-tmp` 是点开头的隐藏目录 → `upload-artifact` 默认
+  `include-hidden-files: false` → 制品静默没上传，而 **job 依然绿灯**（只有真跑一次才暴露）。
+- 🔴 **产出类步骤是否「宽容」到能吞掉失败？** `if-no-files-found: warn` 会把「没产出」伪装成成功。
+  自问：这一步有没有**验证产出确实存在**？
+- 🔴 **设为 required check 的 job，是否每次 PR 都必然运行？** 带 `paths` 过滤或仅 `workflow_dispatch`
+  的 workflow，在不匹配的 PR 上**永远不会运行** → check 停在 "Expected" → **PR 永久无法合并**。
+  本项目只把 `ci.yml` 的三个 job 设为 required（它无路径过滤）。
+- 🔴 **CD 类改动是否守住了「写生产必须有人工门」？** 见铁律三；`workflow_dispatch` + `confirm` 逐字确认
+  + 版本守卫 + 环境评审人，任何一条都不要为了「自动化得更彻底」而拆掉。
+- 🟡 上传制品路径含隐藏目录（点开头）时，是否显式 `include-hidden-files: true`？
+- 🟡 是否在 CI 里执行上游脚本（`bash <(curl .../main/scripts/...`）？应改为下 pinned 版本的二进制/产物。
+- 🟡 静态检查工具「某条规则被静默跳过」是否被察觉？`actionlint` 缺 `shellcheck` 时只在 `-verbose` 里
+  说一句 `Rule "shellcheck" was disabled` —— 不看 verbose 会误以为已经全查过。
+- 💭 失败诊断是否可从 CLI 读到？Run Summary 用 `tee -a "$GITHUB_STEP_SUMMARY"` 同时进日志，
+  `gh run view --log` 即可核查，不必开浏览器。
+
 ---
 
 ## 三、审查流程（一人公司四时点）
@@ -144,6 +165,8 @@
 
 ```
 [2026-09-07] forceDeleteTodo 重构：🔴0 🟡1（孤儿文件靠 cleanup-deleted 兜底）→ 通过
+[2026-09-14] 批次 A 热更新接入 CD：🔴1（.release-tmp 隐藏目录致制品静默未上传，真跑 CI 才暴露；已修）🟡2（actionlint 缺 shellcheck 静默跳过 / 抽 _lib-env 时残留 2 个脚本未迁移，已留注释豁免）→ 通过
+[2026-09-14] 批次 B actionlint 进 CI + 分支保护：🔴0 🟡0（新增 F2 工作流专项 8 条，把批次 A/B 的坑固化成检查项）→ 通过
 ```
 
 ---
