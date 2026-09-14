@@ -70,9 +70,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      # 铁律三：发布必须从 main 出包。workflow_dispatch 允许指定 --ref，在分支上跑
-      # 会把**未合并的代码**发到线上，并让 main 落后于线上（制造出「仓库 meta 与线上 bundle
-      # 不一致」那个隐患）。这条规则用守卫固化，不靠记性。
+      # 铁律三：发布必须从 main 出包。workflow_dispatch 允许指定 --ref，在分支上跑会把
+      # **未合并的代码**发到线上，并让 main 的 web 内容落后于线上。这条规则用守卫固化，不靠记性。
       - name: 强制从 main 发布
         env:
           REF_NAME: ${{ github.ref_name }}
@@ -281,45 +280,10 @@ jobs:
           if [ -n "$MIN_APP" ]; then args+=(--min-app "$MIN_APP"); fi
           node scripts/verify-release.mjs "${args[@]}"
 
-      # release.mjs 有意不还原 index.html 的 meta（本地发布时让改动随提交入库，保证下次打 APK
-      # 壳内置 meta 正确）。CI 的运行器是一次性的，这个改动随运行器销毁 —— 于是仓库里的 meta
-      # 会落后于线上 bundle。本步骤把这个「落后」显式暴露出来，并给出制品，避免悄悄埋雷。
-      - name: 检查仓库 meta 漂移（需人工补一次提交）
-        if: always()
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          {
-            echo ""
-            echo "## ⚠️ 需人工补一步：把 index.html 的版本 meta 提交回 main"
-            echo ""
-            if git diff --quiet -- public/index.html; then
-              echo "本运行器的 index.html 未被改动（发布可能未走到打包步骤），请人工确认仓库 meta 状态。"
-            else
-              echo "仓库里的 \`public/index.html\` 仍是发布前的 meta，线上 bundle 已是 \`${VERSION}\`。"
-              echo ""
-              echo "**为什么必须补**：下次打 APK 时，壳内置 meta 若与线上 bundle 不一致，"
-              echo "App 首次启动会多一次「下载→重启」（用户体验为多重启一次）；"
-              echo "反过来若仓库 meta 超前于线上 bundle，App 会判定「已是最新」而永远收不到更新。"
-              echo ""
-              echo "**怎么做**：下载本作业的 \`index-html-${VERSION}\` 制品覆盖 \`public/index.html\`，"
-              echo "或在本地执行 \`node scripts/release.mjs ${VERSION} --dry-run\` 后提交 meta 改动。"
-              echo "（真正的解法见 cicd-handoff.md「已知限制」：让流水线提交该改动，或让 APK 构建时注入 meta）"
-            fi
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          if ! git diff --quiet -- public/index.html; then
-            echo "::warning::线上已发布 ${VERSION}，但仓库 public/index.html 的 meta 未同步，需人工补提交"
-          fi
-
-      - name: 上传发布后的 index.html（供人工提交回仓库）
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: index-html-${{ inputs.version }}
-          path: public/index.html
-          retention-days: 7
-          if-no-files-found: warn
+      # 【2026-09-14 删】原先这里有「检查仓库 meta 漂移 + 上传 index-html 制品」两步，
+      # 用来提醒人工把 index.html 的版本 meta 补提交回 main —— 那是「仓库持有版本真相」旧设计的补丁。
+      # 现在 `release.mjs` 改为在**暂存副本**上注入版本号，发布对仓库工作区零改动，
+      # 漂移在结构上不可能发生，因此那两步连同制品一起删除（少一步人工、也不再有 11 分钟 PR 成本）。
 
       - name: 写入 Run Summary（发布结果）
         if: success()

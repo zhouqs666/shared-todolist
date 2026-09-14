@@ -5,8 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
   <meta name="theme-color" content="#fffbfc" />
   <meta name="description" content="双人共享待办清单" />
-  <meta name="app-version" content="2.7.64" />
-  <meta name="shell-version" content="2.1.28" /><!-- 壳版本：release-apk.mjs 每次发布自动更新 -->
+  <!-- ⚠️ 版本 meta 是「构建期注入点」，仓库里恒为占位值 0.0.0 —— 不要手工维护，也不要拿它当权威。
+       注入位置：
+         · 热更新：release.mjs 打包 zip 时，在**暂存副本**上注入 app-version = 本次发布版本
+         · APK：release-apk.mjs 在 cap sync 之后、gradle 之前，给 android assets 注入
+                app-version（= 线上最新 web 版本）+ shell-version（= 本次壳版本）
+       为什么不让仓库持有版本真相（2026-09-14 改）：那样每次发布都会产生一笔「必须提交回 main」的
+       meta 变更 —— 分支保护下要走 PR（还触发约 11 分钟模拟器 CI），且极易漏提交，造成壳内置 meta
+       与线上 bundle 不一致。占位值 0.0.0 是 fail-safe：万一某个包漏了注入，App 只会多重启一次
+       （local 0.0.0 < server），不会出现「local 偏高 → 永远收不到更新」那个危险方向。 -->
+  <meta name="app-version" content="0.0.0" />
+  <meta name="shell-version" content="0.0.0" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />

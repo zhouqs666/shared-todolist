@@ -121,7 +121,23 @@ async function main() {
     '  血泪教训 2026-08-07：壳版本号低，App 判定无更新，用户永远收不到。');
   // 后续会用 onlineLatest.version_code（L257）做 versionCode 校验；首发时为 null，逻辑已处理
 
-  // 1.5【铁律一门禁】assets 里的 supabase.js 必须指向生产库。
+  // 1.5【必需前置】cap sync：把 public/ 同步进 android assets。
+  // 为什么这里必须先同步（2026-09-14 加）：下面按「构建期注入」给 assets 盖版本号，
+  // 而 app-version 要盖成「线上最新 web 版本」—— 这个 stamp 只有在 **assets 内容确实来自当前
+  // public/** 时才成立。若 assets 是旧快照却盖上新版本号，App 会认为「我已是最新」而
+  // **永远不下载**那份更新的 bundle（这正是最危险的方向，与 2.8.0 那类事故同源）；
+  // 反之若漏同步导致 stamp 偏低，App 只会多重启一次即可自愈。所以宁可不盖章，也要先同步。
+  console.log('  → cap sync（public/ → android assets）...');
+  {
+    const { spawnSync } = await import('node:child_process');
+    const r = spawnSync('npx', ['cap', 'sync', 'android'], { cwd: ROOT, stdio: 'inherit', shell: true });
+    if (r.status !== 0) {
+      console.error('✗ cap sync 失败，中止发布（避免把过期 web 资源打进 APK）');
+      process.exit(1);
+    }
+  }
+
+  // 1.6【铁律一门禁】assets 里的 supabase.js 必须指向生产库。
   // build-test-apk.mjs 会把 assets 临时换成测试库，若还原步骤没跑，正式包就会带上测试库
   // （用户视角 = 账号登不上、待办"全丢"），发布前在这里硬性拦截。
   const assetsSupabasePath = resolve(ROOT, 'android', 'app', 'src', 'main', 'assets', 'public', 'js', 'supabase.js');
@@ -138,7 +154,7 @@ async function main() {
     console.log('  ✓ android assets supabase.js 指向生产库');
   }
 
-  // 2. 先检查 android assets 旧 meta 值（判断是否需要 gradle rebuild）
+  // 2. 读 assets 旧 shell-version（判断是否需要 gradle rebuild）
   const androidIndexPath = resolve(ROOT, 'android', 'app', 'src', 'main', 'assets', 'public', 'index.html');
   let oldAndroidMeta = null;
   if (existsSync(androidIndexPath)) {
@@ -148,34 +164,36 @@ async function main() {
   }
   const needRebuild = (oldAndroidMeta !== VERSION);
 
-  // 3. 更新两份 index.html shell-version meta（写在 gradle build 之前）
-  const indexPath = resolve(ROOT, 'public/index.html');
-  let indexHtml = readFileSync(indexPath, 'utf8');
-  const oldMeta = indexHtml.match(/<meta name="shell-version" content="([^"]*)"/)?.[1] || '(无)';
-  indexHtml = indexHtml.replace(
-    /<meta name="shell-version" content="[^"]*"/,
-    `<meta name="shell-version" content="${VERSION}"`
-  );
-  writeFileSync(indexPath, indexHtml);
-  console.log(`  ✓ shell-version meta（public/）：${oldMeta} → ${VERSION}`);
-
-  // 同步更新 android assets（build 前写，APK 壳才能打包进去）
-  if (existsSync(androidIndexPath)) {
-    let androidHtml = readFileSync(androidIndexPath, 'utf8');
-    if (androidHtml.includes('shell-version')) {
-      androidHtml = androidHtml.replace(
-        /<meta name="shell-version" content="[^"]*"/,
-        `<meta name="shell-version" content="${VERSION}"`
-      );
-    } else {
-      androidHtml = androidHtml.replace(
-        /<meta name="app-version" content="[^"]*" \/>/,
-        `<meta name="app-version" content="2.4.6" />\n  <meta name="shell-version" content="${VERSION}" />`
-      );
-    }
-    writeFileSync(androidIndexPath, androidHtml);
-    console.log(`  ✓ shell-version meta（android assets/）同步为 ${VERSION}`);
+  // 3. 构建期注入版本 meta —— **只写 android assets**（真正会被打进 APK 的那份副本），
+  //    不再写 public/index.html：那是「仓库持有版本真相」的旧设计，会让每次打 APK 都欠一笔
+  //    meta 提交（分支保护下要走 PR）。仓库里那两份 meta 恒为占位值 0.0.0。
+  //    · app-version   = 线上最新启用的 web 版本（cap sync 刚把 assets 对齐到 public/，
+  //                      而发布只从 main 出包 → 这个 stamp 是如实的）；查不到就退回 0.0.0（偏低安全）
+  //    · shell-version = 本次壳版本（apk-update.js 首选 App.getInfo()，meta 只是兜底）
+  const { data: latestWeb, error: webErr } = await sb
+    .from('app_versions').select('version')
+    .eq('enabled', true).order('released_at', { ascending: false })
+    .limit(1).maybeSingle();
+  if (webErr) {
+    console.error(`✗ 查询线上最新 web 版本失败：${webErr.message}`);
+    process.exit(1);
   }
+  const webVersion = latestWeb?.version ?? '0.0.0';
+  if (!existsSync(androidIndexPath)) {
+    console.error('✗ 找不到 android assets 的 index.html（cap sync 没产出？）');
+    process.exit(1);
+  }
+  let androidHtml = readFileSync(androidIndexPath, 'utf8');
+  if (!/<meta name="app-version" content="[^"]*" \/>/.test(androidHtml) ||
+      !/<meta name="shell-version" content="[^"]*" \/>/.test(androidHtml)) {
+    console.error('✗ assets index.html 缺少 app-version / shell-version meta，无法注入');
+    process.exit(1);
+  }
+  androidHtml = androidHtml
+    .replace(/<meta name="app-version" content="[^"]*" \/>/, `<meta name="app-version" content="${webVersion}" />`)
+    .replace(/<meta name="shell-version" content="[^"]*" \/>/, `<meta name="shell-version" content="${VERSION}" />`);
+  writeFileSync(androidIndexPath, androidHtml);
+  console.log(`  ✓ 已注入 assets：app-version=${webVersion}（线上最新 web）· shell-version=${VERSION}（本次壳）`);
 
   // 4. 自动 gradle build（旧 meta != 新版本 → rebuild）
   if (needRebuild && !dryRun) {
@@ -222,7 +240,15 @@ ${candidates.map((p) => '   - ' + p).join('\n')}
   排查：npx cap sync android 后重跑 gradlew assembleRelease，或删掉 android/app/build 再 build。`);
       process.exit(1);
     }
-    console.log(`  ✓ APK 内 shell-version meta = ${VERSION}（防旧包校验通过）`);
+    // 连 app-version 一起校验：它是热更新「本地版本」的来源，盖错方向会导致
+    // 「声称比实际内容新 → App 永远不下载」（比多重启一次严重得多）。
+    const apkWebMeta = apkIndexHtml.match(/<meta name="app-version" content="([^"]*)"/)?.[1];
+    if (apkWebMeta !== webVersion) {
+      console.error(`✗ APK 内 app-version meta 是 ${apkWebMeta ?? '(无)'}，不等于注入值 ${webVersion}！
+  说明 gradle 打的不是刚注入过 meta 的那份 assets。`);
+      process.exit(1);
+    }
+    console.log(`  ✓ APK 内 meta：shell-version=${VERSION} · app-version=${apkWebMeta}（防旧包校验通过）`);
   }
 
   // 6. versionCode：显式指定 > build.gradle 读取
