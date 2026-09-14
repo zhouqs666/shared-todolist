@@ -162,6 +162,9 @@ jobs:
           path: .release-tmp/*.zip
           retention-days: 7
           if-no-files-found: warn
+          # .release-tmp 是点开头的隐藏目录，upload-artifact@v4 默认跳过隐藏文件，
+          # 不显式打开的话这一步会静默「找不到文件」（2026-09-14 首跑实测踩到）
+          include-hidden-files: true
 
       - name: 写入 Run Summary
         if: always()
@@ -196,7 +199,7 @@ jobs:
             else
               echo "**下一步：等「正式发布」作业的审批通过**（environment: production 的 required reviewers）。"
             fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
   # ============================================================
   # 作业 2：正式发布（写生产 —— 审批门在这里）
@@ -290,7 +293,7 @@ jobs:
               echo "或在本地执行 \`node scripts/release.mjs ${VERSION} --dry-run\` 后提交 meta 改动。"
               echo "（真正的解法见 cicd-handoff.md「已知限制」：让流水线提交该改动，或让 APK 构建时注入 meta）"
             fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
           if ! git diff --quiet -- public/index.html; then
             echo "::warning::线上已发布 ${VERSION}，但仓库 public/index.html 的 meta 未同步，需人工补提交"
           fi
@@ -320,4 +323,4 @@ jobs:
             echo ""
             echo "**如需回滚**：\`node scripts/rollback.mjs ${VERSION}\`"
             echo "（把该版本置 enabled=false，App 会落到上一条 enabled 版本；详见 rollback.mjs）"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
