@@ -632,8 +632,13 @@ async function toggleComplete(id, nextCompleted) {
     completedAt: nextCompleted ? new Date().toISOString() : null,
   });
   setTodos(sortTodos(getTodos()));
-  // 本端完成 → 庆祝动画（彩带/震动，特效开关默认常开）
-  if (nextCompleted) celebrateCompletion(current);
+  // 本端完成 → 庆祝动画（彩带/震动，特效开关默认常开），附撤销按钮
+  if (nextCompleted) {
+    celebrateCompletion(current, false, () => {
+      toggleComplete(id, false);
+      showToast('已撤销完成');
+    });
+  }
   try {
     const todo = await db.setCompleted(id, nextCompleted, currentUser.id);
     // 竞态保护：如果在 await 期间用户又改了意图，丢弃这个响应

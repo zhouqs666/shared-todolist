@@ -77,8 +77,9 @@ const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
  * 普通款 / 隐藏款分支：隐藏款用专属文案 + rarity 粒子 + 卡片光环。
  * @param {Object|string} todo 待办对象（或早期字符串入参，向后兼容）
  * @param {boolean} [isRemote=false] 是否远端完成（对方完成）；远端不发光环
+ * @param {Function} [undoAction] 撤销完成回调（本端完成时传入，远端不传）
  */
-export function celebrateCompletion(todo, isRemote = false) {
+export function celebrateCompletion(todo, isRemote = false, undoAction = null) {
   // 兼容旧的字符串入参（handleRemoteCompleted 早期传字符串）
   const obj = typeof todo === 'string' ? { text: todo } : (todo || {});
   const text = obj.text || '完成';
@@ -94,7 +95,9 @@ export function celebrateCompletion(todo, isRemote = false) {
       : `${basePhrase} 图鉴 ${getStickers().length}/${STICKERS_PER_RARITY * 3}`;
     // 贴纸图标作为 toast 图标（取该稀有度第一张贴纸）
     const icon = meta.stickerIcons ? meta.stickerIcons[0] : '';
-    showToast(phrase, { variant: 'rarity', accent: meta.colors[0], icon, duration: 3000 });
+    const toastOpts = { variant: 'rarity', accent: meta.colors[0], icon, duration: undoAction ? 4000 : 3000 };
+    if (undoAction) toastOpts.action = { label: '撤销', onClick: undoAction };
+    showToast(phrase, toastOpts);
     // 叠加 rarity 专属粒子（复用开奖配色：rare 克制不撒花 / epic 玫红 / legendary 金）
     celebrateRarity(rarity, text);
     // 卡片光环（仅本端完成时，卡片在视野内才发）
@@ -104,7 +107,12 @@ export function celebrateCompletion(todo, isRemote = false) {
 
   // ===== 普通完成：随机鼓励文案 + 品牌色 toast =====
   const phrase = COMPLETE_PHRASES[Math.floor(Math.random() * COMPLETE_PHRASES.length)];
-  showToast(phrase, { variant: 'success', icon: CHECK_ICON });
+  const toastOpts = { variant: 'success', icon: CHECK_ICON };
+  if (undoAction) {
+    toastOpts.action = { label: '撤销', onClick: undoAction };
+    toastOpts.duration = 4000;
+  }
+  showToast(phrase, toastOpts);
 
   if (!isFxEnabled()) return;
   // 尊重 prefers-reduced-motion：前庭敏感用户跳过粒子/音效/震动，只留 Toast
