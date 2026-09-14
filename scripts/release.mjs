@@ -12,11 +12,15 @@
  *
  * 流程：
  *   1. 校验版本号格式（x.y.z）
- *   2. 临时把 index.html 的 app-version meta 改成新版本号
- *   3. 用系统 zip 把 public/ 内容打包（zip 根目录即 web 内容，符合 updater 要求）
- *   4. 还原 index.html
- *   5. 上传 zip 到 Supabase Storage 的 app_updates bucket
- *   6. 在 app_versions 表插入版本记录
+ *   2. 把 public/ 复制到暂存目录，在**副本**上把 index.html 的 app-version 改成新版本号
+ *   3. 用系统 zip 打包暂存目录内容（zip 根目录即 web 内容，符合 updater 要求）
+ *   4. 上传 zip 到 Supabase Storage 的 app_updates bucket
+ *   5. 在 app_versions 表插入版本记录
+ *
+ * 【2026-09-14 改】版本号只注入**暂存副本**，发布对仓库工作区零改动。
+ *   旧做法是改 public/index.html 且不还原（靠 git 提交让壳内置 meta 跟上），
+ *   结果是每次发布都欠一笔提交 —— 分支保护下要走 PR 还触发模拟器 CI，漏提交就出「多重启一次」。
+ *   现在版本真相的唯一来源是发布命令传入的版本号（+ `app_versions` 表）。
  *
  * 安全：用 service_role key（.env 里的 SUPABASE_KEY），仅本地运行
  *
@@ -25,7 +29,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import {
-  existsSync, mkdirSync, unlinkSync, statSync,
+  existsSync, mkdirSync, unlinkSync, statSync, cpSync, rmSync,
 } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
@@ -38,7 +42,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = resolve(__dirname, '..');
 const PUBLIC_DIR = join(ROOT, 'public');
-const INDEX_HTML = join(PUBLIC_DIR, 'index.html');
 
 // ---------- 参数解析 ----------
 const args = process.argv.slice(2);
@@ -93,18 +96,9 @@ async function main() {
   await assertNewerThanLatest(sb, 'app_versions', 'version', VERSION,
     '  血泪教训 2026-08-07：热更新版本号低，App 判定无更新，用户连开几次都收不到。');
 
-  const originalHtml = await readFile(INDEX_HTML, 'utf8');
-  const versionedHtml = originalHtml.replace(
-    /<meta name="app-version" content="[^"]*" \/>/,
-    `<meta name="app-version" content="${VERSION}" />`
-  );
   // 用 regex.test 检测"是否找到 meta"，而非 strict equal —— V8 的 String.replace 优化
   // 在 replacement 与原文一致时会返回同一字符串引用，导致 strict equal 误判"未找到"。
-  // 场景：index.html 已是 VERSION（如上次发布的 meta 没还原），重发同一版本号会命中。
-  if (!/<meta name="app-version" content="[^"]*" \/>/.test(originalHtml)) {
-    console.error('✗ index.html 未找到 <meta name="app-version">，请确认已添加');
-    process.exit(1);
-  }
+  const META_RE = /<meta name="app-version" content="[^"]*" \/>/;
 
   const TMP_DIR = join(ROOT, '.release-tmp');
   if (!existsSync(TMP_DIR)) mkdirSync(TMP_DIR);
@@ -112,17 +106,34 @@ async function main() {
   // 每次重新生成前删旧 zip，避免 zip 命令追加
   if (existsSync(ZIP_PATH)) unlinkSync(ZIP_PATH);
 
-  try {
-    // 1. 注入版本号
-    console.log('  → 注入版本号到 index.html');
-    await writeFile(INDEX_HTML, versionedHtml, 'utf8');
+  // 暂存目录：把 public/ 复制一份，版本号只注入到**副本**上。
+  // 【2026-09-14 改】原先的做法是直接改 public/index.html 且打包后不还原 ——
+  // 那等于让仓库持有版本真相，于是每次发布都会留下一笔「必须提交回 main」的 meta 变更
+  // （分支保护下要走 PR，还会触发约 11 分钟模拟器 CI），且一旦漏提交就让壳内置 meta 与线上
+  // bundle 不一致。改成在暂存副本上注入后：**发布对工作区零改动**，也不再需要任何补提交。
+  const STAGE_DIR = join(TMP_DIR, 'stage');
 
-    // 2. 打包：在 public/ 内执行 zip，通配 * 让 zip 根目录直接是 web 内容
+  try {
+    // 1. 准备暂存副本 + 注入版本号（不动仓库里的任何文件）
+    console.log('  → 复制 public/ 到暂存目录并在副本上注入版本号 ...');
+    rmSync(STAGE_DIR, { recursive: true, force: true });
+    cpSync(PUBLIC_DIR, STAGE_DIR, { recursive: true });
+    const stagedIndex = join(STAGE_DIR, 'index.html');
+    const stagedHtml = await readFile(stagedIndex, 'utf8');
+    if (!META_RE.test(stagedHtml)) {
+      console.error('✗ index.html 未找到 <meta name="app-version">，请确认已添加');
+      process.exit(1);
+    }
+    await writeFile(stagedIndex, stagedHtml.replace(
+      META_RE, `<meta name="app-version" content="${VERSION}" />`
+    ), 'utf8');
+
+    // 2. 打包：在暂存目录内执行 zip，通配 * 让 zip 根目录直接是 web 内容
     //    （@capgo/capacitor-updater 要求 zip 解压后根目录即 index.html，不能有外层目录）
-    console.log('  → 打包 public/ 为 zip ...');
+    console.log('  → 打包为 zip ...');
     try {
       execFileSync('zip', ['-r', '-q', ZIP_PATH, '.', '-x', './.*'],
-        { cwd: PUBLIC_DIR, stdio: 'pipe' });
+        { cwd: STAGE_DIR, stdio: 'pipe' });
     } catch (e) {
       throw new Error(`zip 命令失败：${e.message}（请确认系统已安装 zip）`);
     }
@@ -131,21 +142,11 @@ async function main() {
     console.log(`  ✓ 已打包：${ZIP_PATH}（${(zipSize / 1024).toFixed(1)} KB）`);
 
     if (dryRun) {
-      console.log('\n🟡 --dry-run：跳过上传。index.html 已还原。zip 保留在 .release-tmp/ 供检查。');
-      await writeFile(INDEX_HTML, originalHtml, 'utf8');
+      console.log('\n🟡 --dry-run：跳过上传。zip 保留在 .release-tmp/ 供检查（仓库工作区未被改动）。');
       return;
     }
 
-    // 3. 还原 index.html —— 改为不还原，让 meta 保持最新版本号！
-    // 为什么：release.mjs 打包 zip 时会把 meta 注入新版本，但之前打包完立即还原了 public/index.html。
-    // 这导致下次 APK 构建时壳内置的 meta 还是旧值（如 2.4.6），getLocalVersion() 读旧值 →
-    // 服务器最新 bundle（如 2.7.31）> 旧值 → 壳更新装完新 APK 又重复拉一遍热更新（双重重启）。
-    // 修复：打包完不再还原，让 index.html 的 meta 和最新 bundle 版本同步，
-    // 确保下次 gradlew assembleRelease 时壳内置 meta 就是对的。
-    // 如果需要回退，手动改 index.html 即可（或 git checkout public/index.html）。
-    console.log('  ✓ index.html meta 已更新为 ' + VERSION + '（不再还原，确保下次 APK 构建壳内置 meta 正确）');
-
-    // 4. 上传（sb client 已在 main 顶部版本检查时创建）
+    // 3. 上传（sb client 已在 main 顶部版本检查时创建）
     const storagePath = `releases/${VERSION}.zip`;
     console.log(`  → 上传到 app_updates/${storagePath} ...`);
     const zipBuf = await readFile(ZIP_PATH);
@@ -155,7 +156,7 @@ async function main() {
     if (upErr) throw new Error(`上传失败：${upErr.message}`);
     console.log('  ✓ 上传成功');
 
-    // 5. 写版本表
+    // 4. 写版本表
     console.log('  → 写入 app_versions 表...');
     const { error: dbErr } = await sb.from('app_versions').upsert({
       version: VERSION,
@@ -174,9 +175,9 @@ async function main() {
     console.log(`\n   App 下次冷启动时自动检查并下载；下载完成后再次启动生效。\n`);
 
   } finally {
-    // 保底：index.html meta 不再还原（保持最新版本号，确保下次 APK 构建壳内置 meta 正确），
-    // 只清理临时 zip
+    // 清理：临时 zip（成功时）与暂存副本（始终）
     try {
+      rmSync(STAGE_DIR, { recursive: true, force: true });
       if (existsSync(ZIP_PATH) && !dryRun) unlinkSync(ZIP_PATH);
     } catch { /* ignore */ }
   }

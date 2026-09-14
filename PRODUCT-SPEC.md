@@ -380,15 +380,21 @@
 | **APK 更新** | 改了原生层（插件/权限/配置） | `scripts/release-apk.mjs` → 上传 `apks/youai-<ver>.apk` → 写 `app_native_versions` 表（含 sha256）→ 客户端 `apk-update.js` 比对 → 原生 `ApkInstaller` 下载（sha256 校验）+ 唤起系统安装器 | 用户确认后安装 |
 
 **关键细节**：
-- 热更新版本号写死在 `index.html` 的 `<meta name="app-version">`，发布时自动注入
-- APK 版本比对读 `App.getInfo()` 的**真实 versionName**，避免被热更新快照误导
+- **版本号是构建期注入的，仓库不持有它**（2026-09-14 改）：`public/index.html` 的
+  `<meta name="app-version">` / `<meta name="shell-version">` 恒为占位值 `0.0.0`；
+  热更新由 `release.mjs` 在**暂存副本**上注入（发布对工作区零改动），
+  APK 由 `release-apk.mjs` 在 cap sync 后注入（`app-version` = 线上最新 web 版本、`shell-version` = 本次壳版本）。
+  占位值是 fail-safe：漏注入只会让 App 多重启一次，不会造成「本地偏高 → 永远收不到更新」
+- APK 版本比对读 `App.getInfo()` 的**真实 versionName**，避免被热更新快照误导（meta 仅作浏览器/调试兜底）
 - 强更机制：`is_force_update=true` 或本地版本 < `min_supported_version` 时，更新面板不可关闭
 - 检查时机：冷启动 + 前台切回（60 秒节流）
 - 回滚：热更新把 `app_versions.enabled` 置 `false` 即下线；插件 `resetWhenUpdate:true` 连续崩溃 3 次自动回退
 - 桌面 APK **固定文件名** `~/Desktop/有爱.apk`，每次覆盖，不产生带时间戳的历史文件
 - **CD 通道**（`.github/workflows/release-web.yml`）：手动触发（`workflow_dispatch`），工序为「预演出报告 → 静默期 + `production` 环境审批 → 执行 `release.mjs` → `verify-release.mjs` 回读校验」。四道门：手动触发 + `confirm` 逐字确认版本号 + `assertNewerThanLatest` 版本守卫 + 环境审批人。写生产库属高风险动作，**刻意不做 push 自动发版**
 - **回读校验**（`scripts/verify-release.mjs`，只读）：发布后必须验证「交付物可用」而非「脚本没报错」——版本行 `enabled`、Storage 对象可下载、包内 `index.html` 的 meta 与版本号一致，三项缺一即视为发布失败
-- **已知限制**：CI 运行器是一次性的，`release.mjs` 对 `index.html` meta 的改动随运行器销毁，仓库 meta 会落后线上 bundle；工作流会 `::warning::` 提示并上传 `index.html` 制品，需人工补一次提交（否则下次打 APK 会多重启一次）
+- **仓库不欠任何 meta 提交**（2026-09-14 改）：版本注入只发生在打包产物上（热更新的暂存副本 / APK 的 android assets），
+  `release.mjs` 与 `release-apk.mjs` 都不再改写 `public/index.html`。旧设计下「CI 发布后仓库 meta 落后线上、
+  需要补一个 PR（还会触发约 11 分钟模拟器 CI）」的已知限制**已随设计消除**
 
 > 📌 **血泪教训（已固化为流程）**：发布前必须先查线上最新版本号，新版本号必须语义化大于线上值。曾因未查版本直接发 2.0.1（线上已是 2.2.4）导致用户端判定"无更新"，白等半天。
 

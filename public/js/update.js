@@ -18,11 +18,13 @@
  *   - 插件内置回滚：连续崩溃 3 次自动回上个版本（resetWhenUpdate:true）
  */
 
-// 当前前端版本（发布脚本会写入 index.html 的 meta）
+// 当前前端版本（**构建期注入** —— 仓库里的 index.html 恒为占位值 0.0.0，见其注释）
 // 注意：不要改成 async！之前试过读 Updater.getBuiltinVersion()，但该接口在某些状态下抛异常
 // 导致 fallback 到 meta 默认值 → 永远小于服务器版本 → 无限下载 reload 死循环（2026-09-05 血泪教训）。
-// 正确做法：release.mjs 打包 zip 时注入 meta + 同步更新 public/index.html 的 meta，
-// 确保下次 APK 构建时壳内置的 meta 和最新 bundle 版本一致。
+// 【2026-09-14】版本真相的唯一来源是发布命令传入的版本号（+ app_versions 表），仓库不再持有它：
+//   · release.mjs 打包 zip 时在**暂存副本**上注入 app-version（发布对仓库零改动）
+//   · release-apk.mjs 在 cap sync 后给 APK 的 assets 注入 app-version = 线上最新 web 版本
+// 占位值 0.0.0 是 fail-safe：漏注入只会「多重启一次」，不会变成「本地偏高 → 永远收不到更新」。
 function getLocalVersion() {
   const meta = document.querySelector('meta[name="app-version"]');
   return (meta && meta.content) || '0.0.0';

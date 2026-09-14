@@ -94,11 +94,12 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
   确认后 `dry_run=false` + `confirm=<版本号>`，在 `production` 环境点 Approve 才真正写生产
 - ✅ 发布后必须回读校验：`node scripts/verify-release.mjs [版本号]`（只读，验证版本行 enabled /
   Storage 对象可下载 / 包内 meta 一致）。**写成功 ≠ 客户端拿得到**，脚本没报错不等于交付完成
-- ⚠️ **已知限制：远程发布后仓库 `public/index.html` 的 meta 会落后线上 bundle**（CI 运行器是一次性的，
-  `release.mjs` 对 meta 的改写随运行器销毁）。工作流会 `::warning::` 提示并上传 `index-html-<版本>` 制品。
-  补救要走 **PR**（main 已保护，不能直推），而 `public/**` 命中 `e2e-app.yml` 的 paths →
-  **这个 PR 会跑完整模拟器 CI（约 11 分钟）**。根治方案（未做，优先级高于反复补救）：
-  ① APK 构建时注入 meta（把版本真相从 index.html 移到构建期）；② 流水线自动开该 PR
+- ✅ **版本真相 = 发布命令传入的版本号（+ `app_versions` 表），仓库不持有它**（2026-09-14 改）：
+  `public/index.html` 里那两个 meta 恒为**占位值 `0.0.0`**，由构建期注入 ——
+  热更新在 `release.mjs` 的**暂存副本**上注入（发布对工作区零改动），
+  APK 由 `release-apk.mjs` 在 cap sync 后注入（`app-version` = 线上最新 web 版本，`shell-version` = 本次壳版本）。
+  占位值是 fail-safe：万一漏注入，App 只会多重启一次，不会「本地偏高 → 永远收不到更新」。
+  ⚠️ 因此**发布后不再需要任何 meta 补提交**（旧设计下的「补 PR + 11 分钟模拟器 CI」已随设计一并消失）
 
 **⚠️ 版本号必须比线上高（血泪教训）：**
 - 发布前**必须先查线上最新版本**：`node scripts/query-latest-version.mjs`（只读）
@@ -112,7 +113,8 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 
 **适用**：改了 Capacitor 插件、Android 配置、`capacitor.config.json`、原生权限等，热更新覆盖不到的地方。
 
-- ✅ 跑 `node scripts/release-apk.mjs <版本号>`（自动：cap sync → gradle 打包 → 写 `app_native_versions` 表 → 上传 APK → 覆盖 `~/Desktop/有爱.apk`）
+- ✅ 跑 `node scripts/release-apk.mjs <版本号>`（自动：**cap sync** → 注入 assets 版本 meta →
+  gradle 打包 → 写 `app_native_versions` 表 → 上传 APK → 覆盖 `~/Desktop/有爱.apk`）
 - ✅ 打包后必须验证：构建时间（确认是最新）、签名通过（`apksigner verify`）、关键改动已入包（unzip 检查）
 - ✅ 告知用户明确的 APK 路径和构建时间
 
