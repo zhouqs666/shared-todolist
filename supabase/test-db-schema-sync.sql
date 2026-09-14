@@ -78,7 +78,46 @@ BEGIN
   END IF;
 END $$;
 
--- ===== 6. 验证 =====
+-- ===== 6. RPC 函数（migration-login-count-glow.sql）=====
+-- 遗漏后果：App 冷启动调用 increment_login_count 拿到 404，爱心光晕计数失效。
+-- 契约检查器原先只校验表/列，漏了这个（假绿），现已补上函数维度。
+CREATE OR REPLACE FUNCTION increment_login_count(target_uid UUID)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE profiles SET login_count_for_partner = login_count_for_partner + 1
+    WHERE id = target_uid;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION consume_login_count(target_uid UUID)
+RETURNS INT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  consumed INT;
+BEGIN
+  SELECT login_count_for_partner INTO consumed
+    FROM profiles WHERE id = target_uid;
+  IF consumed IS NULL THEN
+    RETURN 0;
+  END IF;
+  UPDATE profiles SET login_count_for_partner = 0 WHERE id = target_uid;
+  RETURN consumed;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION increment_login_count(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION consume_login_count(UUID) TO authenticated;
+
+-- ===== 7. 验证 =====
 -- SELECT column_name, data_type FROM information_schema.columns
 --   WHERE table_name = 'todos'
 --     AND column_name IN ('pinned','rarity','rarity_seen','image_paths');
+-- 函数是否就位：看 PostgREST OpenAPI 的 /rpc/* 路径清单
+--   curl -s "$E2E_SUPABASE_URL/rest/v1/" -H "apikey: $E2E_SUPABASE_ANON_KEY" | grep -o '/rpc/[a-z_]*'

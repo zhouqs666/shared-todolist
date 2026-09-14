@@ -50,6 +50,7 @@ if (!env.E2E_SUPABASE_URL || !env.E2E_SUPABASE_SERVICE_ROLE_KEY) {
 // 期望列：table -> { col -> { def, file } }；def 是 ADD COLUMN 之后的完整定义文本
 const expectedTables = new Map(); // table -> file
 const expectedColumns = new Map(); // table -> Map(col -> {def, file})
+const expectedFunctions = new Map(); // fn -> file
 
 if (!existsSync(SQL_DIR)) {
   console.error(`✗ 找不到迁移目录 ${SQL_DIR}`);
@@ -87,10 +88,21 @@ for (const file of readdirSync(SQL_DIR).filter((f) => f.endsWith('.sql')).sort()
       const def = mCol[3].replace(/\s+/g, ' ').trim();
       if (!expectedColumns.get(t).has(col)) expectedColumns.get(t).set(col, { def, file });
     }
+
+    // RPC 函数：只取函数名。函数体里有分号（$$ ... $$），会被 split(';') 切开，
+    // 但函数头（含 RETURNS 类型）总在第一个分块里，够用。
+    // 排除 RETURNS TRIGGER：触发器函数 PostgREST 不暴露为 /rpc/*，校验它必然误报。
+    const mFn = stmt.match(
+      /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:["']?public["']?\s*\.\s*)?["']?([a-z_][a-z0-9_]*)["']?\s*\([^)]*\)\s*RETURNS\s+([a-z_][a-z0-9_]*)/i
+    );
+    if (mFn && mFn[2].toLowerCase() !== 'trigger') {
+      const fn = mFn[1].toLowerCase();
+      if (!expectedFunctions.has(fn)) expectedFunctions.set(fn, file);
+    }
   }
 }
 
-console.log(`📋 契约来源：supabase/*.sql（${expectedTables.size} 张表，${[...expectedColumns.values()].reduce((n, m) => n + m.size, 0)} 个列）`);
+console.log(`📋 契约来源：supabase/*.sql（${expectedTables.size} 张表，${[...expectedColumns.values()].reduce((n, m) => n + m.size, 0)} 个列，${expectedFunctions.size} 个函数）`);
 
 // ---------- 2. 例子外：测试库刻意不建的表 ----------
 // 热更新相关的表。理由（铁律一）：App 冷启动会查 app_versions，若存在「启用」的版本，
@@ -137,6 +149,35 @@ for (const [table, cols] of expectedColumns) {
   }
 }
 
+// ---------- 3b. RPC 函数契约 ----------
+// 只读实现：读 PostgREST OpenAPI 的 /rest/v1/ 里 /rpc/* 路径清单，不调用函数。
+// （不用「调用函数探测是否存在」——increment/consume 都是写操作，preflight 必须只读。）
+// 背景：补齐 SQL 曾只加了 profiles 列、漏掉两个 RPC，检查器仍报「无漂移」（假绿），
+//       直到 E2E 冷启动调用 increment_login_count 拿到 404 才暴露。
+const missingFunctions = [];
+{
+  const base = env.E2E_SUPABASE_URL.replace(/\/$/, '');
+  const res = await fetch(`${base}/rest/v1/`, {
+    headers: {
+      apikey: env.E2E_SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.E2E_SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+  });
+  if (!res.ok) {
+    console.error(`⚠️ 读不到 PostgREST OpenAPI（HTTP ${res.status}），跳过函数契约检查`);
+  } else {
+    const spec = await res.json();
+    const rpcNames = new Set(
+      Object.keys(spec.paths || {})
+        .filter((p) => p.startsWith('/rpc/'))
+        .map((p) => p.slice('/rpc/'.length))
+    );
+    for (const [fn, file] of expectedFunctions) {
+      if (!rpcNames.has(fn)) missingFunctions.push({ fn, file });
+    }
+  }
+}
+
 // ---------- 4. 安全断言：测试库不得存在「启用」的已发布版本 ----------
 // 即使表是被手工建的，只要里面有启用行，App 就可能下载生产 bundle（铁律一）。
 const safetyProblems = [];
@@ -155,7 +196,7 @@ const safetyProblems = [];
 }
 
 // ---------- 5. 输出结果 ----------
-if (missingTables.length === 0 && missingColumns.length === 0 && safetyProblems.length === 0) {
+if (missingTables.length === 0 && missingColumns.length === 0 && missingFunctions.length === 0 && safetyProblems.length === 0) {
   console.log('✅ 测试库 schema 与迁移一致，无漂移');
   process.exit(0);
 }
@@ -165,7 +206,7 @@ if (safetyProblems.length > 0) {
   for (const p of safetyProblems) console.error(`  ${p}`);
 }
 
-if (missingTables.length > 0 || missingColumns.length > 0) {
+if (missingTables.length > 0 || missingColumns.length > 0 || missingFunctions.length > 0) {
   console.error('\n❌ 测试库 schema 落后于迁移（会导致 App 查询静默失败、E2E 假失败）\n');
 
   for (const { table, col, file } of missingColumns) {
@@ -173,6 +214,9 @@ if (missingTables.length > 0 || missingColumns.length > 0) {
   }
   for (const { table, file } of missingTables) {
     console.error(`  缺表：${table}   （请执行 supabase/${file}）`);
+  }
+  for (const { fn, file } of missingFunctions) {
+    console.error(`  缺函数：${fn}()   （请执行 supabase/${file}）`);
   }
 
   const fixSql = [
@@ -182,6 +226,9 @@ if (missingTables.length > 0 || missingColumns.length > 0) {
       (m) => `ALTER TABLE ${m.table} ADD COLUMN IF NOT EXISTS ${m.col} ${m.def};`
     ),
     ...missingTables.map((m) => `-- 缺表 ${m.table}：请执行仓库内 supabase/${m.file}`),
+    ...missingFunctions.map((m) => `-- 缺函数 ${m.fn}()：请执行仓库内 supabase/${m.file}`),
+    '',
+    '-- 完整版（含带注释的 RPC 定义）存档在 supabase/test-db-schema-sync.sql',
   ];
 
   console.error('\n--- 可复制的修复 SQL ---\n');
