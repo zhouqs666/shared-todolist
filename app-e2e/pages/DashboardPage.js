@@ -7,7 +7,12 @@
  * （WebView 里 div/button 映射出的 Android 类不稳定）。
  *
  * 输入方式同 LoginPage：只能 addValue 逐字键入，setValue 不回写 WebView DOM。
+ *
+ * 点击右下角 FAB 前必须收软键盘（键盘正好盖住 FAB 与底部操作区，
+ * 详见 utils/device.js 顶部说明）。
  */
+import { dismissKeyboard } from '../utils/device.js';
+
 export class DashboardPage {
   constructor(driver) {
     this.driver = driver;
@@ -27,12 +32,17 @@ export class DashboardPage {
 
   /**
    * 点击 FAB 打开底部添加面板
-   * 健壮性：登录跳转后立即点击，WebView a11y 树可能尚未刷新（元素被剪枝、
-   * existing=false）。用「探测输入框是否存在」判断面板状态，最多重试 3 轮
-   * （每轮：已存在则收工；不存在则点一次 FAB 再等）——即使某次点击因树
-   * 未刷新误判，后续轮次也能收敛到面板打开。
+   * 健壮性：
+   *   1. 先收软键盘——FAB 在主界面右下角，键盘展开时正好被盖住，
+   *      元素在 DOM 中却判定不可见（详见 utils/device.js 顶部说明）。
+   *   2. 登录跳转后立即点击，WebView a11y 树可能尚未刷新（元素被剪枝、
+   *      existing=false）。用「探测输入框是否存在」判断面板状态，最多重试 3 轮
+   *      （每轮：已存在则收工；不存在则点一次 FAB 再等）——即使某次点击因树
+   *      未刷新误判，后续轮次也能收敛到面板打开。
    */
   async openAddPanel(timeout = 8000) {
+    await dismissKeyboard(this.driver);
+
     const input = await this.driver.$(this.todoInput);
     for (let attempt = 1; attempt <= 3; attempt++) {
       if (await input.isExisting()) {
