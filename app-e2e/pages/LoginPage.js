@@ -30,15 +30,19 @@ export class LoginPage {
    * 输入用户名和密码并点击登录
    */
   async login(username, password) {
+    // CI 模拟器比本地慢，元素可能分批渲染——逐个等待，不要提前缓存句柄
     const usernameField = await this.driver.$(this.usernameInput);
-    const passwordField = await this.driver.$(this.passwordInput);
-    const submitBtn = await this.driver.$(this.submitButton);
+    await usernameField.waitForDisplayed({ timeout: 15000 });
 
-    // 全新会话从登录页起步，字段为空，直接逐字输入即可
-    await usernameField.waitForDisplayed({ timeout: 10000 });
+    const passwordField = await this.driver.$(this.passwordInput);
+    await passwordField.waitForDisplayed({ timeout: 5000 });
+
     await usernameField.addValue(username);
     await passwordField.addValue(password);
 
+    // submit 按钮在输入后才渲染（CI 时序差异），必须单独等待
+    const submitBtn = await this.driver.$(this.submitButton);
+    await submitBtn.waitForDisplayed({ timeout: 10000 });
     await submitBtn.click();
   }
 
