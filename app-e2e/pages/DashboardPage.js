@@ -32,52 +32,67 @@ export class DashboardPage {
 
   /**
    * 点击 FAB 打开底部添加面板
-   * 健壮性：
-   *   1. 先收软键盘——FAB 在主界面右下角，键盘展开时正好被盖住，
-   *      元素在 DOM 中却判定不可见（详见 utils/device.js 顶部说明）。
-   *   2. 登录跳转后立即点击，WebView a11y 树可能尚未刷新（元素被剪枝、
-   *      existing=false）。用「探测输入框是否存在」判断面板状态，最多重试 3 轮
-   *      （每轮：已存在则收工；不存在则点一次 FAB 再等）——即使某次点击因树
-   *      未刷新误判，后续轮次也能收敛到面板打开。
+   *
+   * 两个真实陷阱（CI 实测，均有失败截图佐证）：
+   *   1. 软键盘盖住右下角 FAB → 元素在 DOM 中却判定不可见，先收键盘。
+   *   2. **面板其实已经打开、但 a11y 树刷新滞后**：第 1 轮点开面板后
+   *      todoInput 一时探测不到，进入第 2 轮时 FAB 已被面板遮住，
+   *      若此处直接 waitForDisplayed 抛错就会整例失败——而面板明明是开的。
+   *      所以 FAB 不可见不是错误信号：继续等 todoInput（它才是唯一判据）。
    */
-  async openAddPanel(timeout = 8000) {
+  async openAddPanel(timeout = 15000) {
     await dismissKeyboard(this.driver);
 
+    // FAB 只等一小会儿：正常秒出；被已打开的面板遮住时不值得久等
+    const FAB_WAIT = 5000;
     const input = await this.driver.$(this.todoInput);
+
     for (let attempt = 1; attempt <= 3; attempt++) {
       if (await input.isExisting()) {
-        await input.waitForDisplayed({ timeout });
+        await input.waitForDisplayed({ timeout }).catch(() => {});
         return;
       }
+
       const fab = await this.driver.$(this.fabBtn);
-      await fab.waitForDisplayed({ timeout });
-      await fab.click();
-      await input.waitForExist({ timeout }).catch(() => {});
+      const fabReady = await fab
+        .waitForDisplayed({ timeout: FAB_WAIT })
+        .then(() => true)
+        .catch(() => false);
+      if (fabReady) {
+        await fab.click().catch(() => {});
+      }
+
+      // 无论是否点到 FAB，都等一轮 todoInput：面板可能已打开但树未刷新
+      if (await input.waitForExist({ timeout }).catch(() => false)) {
+        await input.waitForDisplayed({ timeout }).catch(() => {});
+        return;
+      }
     }
     throw new Error('添加面板未能打开：todoInput 3 轮重试后仍不可见');
   }
 
   /**
    * 在添加面板输入待办内容并点击添加
+   *
    * 注意：不调用 hideKeyboard()——它在 WebView 上会抛错并让 a11y 树卡在
-   * 过渡态，后续元素查询全部超时（实测）。软键盘不遮挡 ✓ 按钮，无需收起；
-   * 万一键盘真挡住，BACK 键收起并触发窗口事件刷新树。
+   * 过渡态，后续元素查询全部超时（实测）。统一用 dismissKeyboard()（BACK，
+   * 键盘展开时由输入法消费），并把「收键盘」放在等 ✓ 按钮**之前**——
+   * 否则要先白等 8s 超时才发现是被键盘挡住。
    */
   async addTodo(text) {
     const input = await this.driver.$(this.todoInput);
     await input.addValue(text);
     await this.driver.pause(500);
 
+    // ✓ 按钮在面板底部，键盘展开时会盖住它
+    await dismissKeyboard(this.driver);
+
     const addBtn = await this.driver.$(this.addBtn);
-    try {
-      await addBtn.waitForDisplayed({ timeout: 8000 });
-    } catch {
-      // 树未刷新：BACK 收起键盘（若有）触发 a11y 事件，再等一轮
-      if (await this.driver.isKeyboardShown().catch(() => false)) {
-        await this.driver.pressKeyCode(4).catch(() => {});
-      }
-      await addBtn.waitForDisplayed({ timeout: 10000 });
-    }
+    await addBtn.waitForDisplayed({ timeout: 15000 }).catch(async () => {
+      // 兜底：再收一次键盘（树可能刚刷新）后重等
+      await dismissKeyboard(this.driver);
+      await addBtn.waitForDisplayed({ timeout: 15000 });
+    });
     await addBtn.click();
   }
 
