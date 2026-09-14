@@ -2,7 +2,7 @@ import { expect } from '@wdio/globals';
 import { LoginPage } from '../pages/LoginPage.js';
 import { DashboardPage } from '../pages/DashboardPage.js';
 import { getTestCredentials } from '../utils/test-data.js';
-import { dismissAnrDialogIfPresent } from '../utils/device.js';
+import { dismissAnrDialogIfPresent, dismissKeyboard } from '../utils/device.js';
 
 let credentials;
 let loginPage;
@@ -45,6 +45,9 @@ describe('APP 登录', () => {
     expect(errorMsg).toContain('错误');
 
     // 仍停留在登录页：登录按钮依旧可见
+    // 先收键盘——「登录」按钮在页面下半部分，键盘展开时会被盖住（视觉上可见、
+    // 无障碍树里判定为不可见）；失败后密码框会重新聚焦并弹出键盘，必须再收一次。
+    await dismissKeyboard(browser);
     const submitBtn = await browser.$(loginPage.submitButton);
     await expect(submitBtn).toBeDisplayed();
   });

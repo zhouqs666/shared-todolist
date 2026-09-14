@@ -85,8 +85,12 @@ export class DashboardPage {
    * 列表中是否存在包含指定文本的待办
    * 用单条 XPath 存在性探测，不用 $$ 迭代句柄——列表重渲染（新待办插入）
    * 会让句柄瞬间陈旧，getText 逐个读时就会 Index out of bounds。
+   *
+   * 超时 30s：waitForLoaded() 只等列表「容器」出现（空态也满足），容器之后
+   * 待办数据是异步拉的。CI 上首次冷启动（WebView 冷、网络冷）实测可能 >10s
+   * 才拉回来，给足余量；命中即返回，正常情况不会变慢。
    */
-  async hasTodo(text, timeout = 10000) {
+  async hasTodo(text, timeout = 30000) {
     const el = await this.driver.$(
       `//*[@resource-id="todoList"]//*[contains(@text,"${text}")]`
     );

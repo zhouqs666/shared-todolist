@@ -69,12 +69,21 @@ export class LoginPage {
 
   /**
    * 获取错误消息文本（未显示时返回 null）
+   *
+   * 关键：错误提示在 DOM 里位于密码框与「登录」按钮之间，正好落在软键盘覆盖区。
+   * 登录失败后密码框会重新获得焦点、键盘再次弹出，此时提示「在页面上但不可见」，
+   * isDisplayed() 恒为 false。所以每轮先收键盘再判断，否则永远是 null
+   * （血泪教训：截图看到提示就躺在键盘底下）。
    */
-  async getErrorMessage(timeout = 5000) {
+  async getErrorMessage(timeout = 20000) {
+    const deadline = Date.now() + timeout;
     const errorEl = await this.driver.$(this.errorMsg);
-    await errorEl.waitForDisplayed({ timeout }).catch(() => null);
-    if (await errorEl.isDisplayed()) {
-      return await errorEl.getText();
+    while (Date.now() < deadline) {
+      await dismissKeyboard(this.driver);
+      if (await errorEl.isDisplayed().catch(() => false)) {
+        return await errorEl.getText();
+      }
+      await this.driver.pause(500);
     }
     return null;
   }
