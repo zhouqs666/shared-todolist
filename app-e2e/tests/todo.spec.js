@@ -11,6 +11,7 @@ import {
   waitForTodoCompleted,
   E2E_PREFIX,
 } from '../utils/test-data.js';
+import { dismissAnrDialogIfPresent } from '../utils/device.js';
 
 let client;
 let userId;
@@ -24,6 +25,8 @@ let dashboardPage;
  */
 async function relaunchAndLogin() {
   await browser.reloadSession();
+  // 切后台会诱发启动器 ANR 弹窗，先清掉再操作
+  await dismissAnrDialogIfPresent(browser);
   loginPage = new LoginPage(browser);
   dashboardPage = new DashboardPage(browser);
   await loginPage.waitForLoaded();
