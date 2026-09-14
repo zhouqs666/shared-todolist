@@ -42,7 +42,16 @@ export class LoginPage {
 
     // submit 按钮在输入后才渲染（CI 时序差异），必须单独等待
     const submitBtn = await this.driver.$(this.submitButton);
-    await submitBtn.waitForDisplayed({ timeout: 10000 });
+    try {
+      await submitBtn.waitForDisplayed({ timeout: 15000 });
+    } catch (e) {
+      // CI 排查：dump 页面源码 + 截图，定位元素为何不存在
+      const source = await this.driver.getPageSource();
+      console.error('[LoginPage] submitBtn not found. Page source (first 3000 chars):');
+      console.error(source.substring(0, 3000));
+      await this.driver.takeScreenshot();
+      throw e;
+    }
     await submitBtn.click();
   }
 
