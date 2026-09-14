@@ -9,9 +9,12 @@
  * 用法： node scripts/test_compress.mjs
  */
 import { chromium } from 'playwright';
+import { guardReadOnly } from './_lib-readonly-guard.mjs';
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
+// 本脚本跑在生产服务（:3000）上：只读守卫保证它永远不会写生产库
+const guard = guardReadOnly(page);
 page.on('console', (m) => {
   if (m.type() === 'error') console.log('[console.err]', m.text());
 });
@@ -102,4 +105,5 @@ assert(r.isOriginal === true, 'webp 应原文件');
 assert(r.ext === 'webp', 'ext 应 webp');
 
 await browser.close();
-console.log('\n✅ 全部测试通过');
+const clean = guard.assertClean();
+console.log(clean ? '\n✅ 全部测试通过' : '\n⚠️ 断言通过，但只读守卫发现写请求（见上）');

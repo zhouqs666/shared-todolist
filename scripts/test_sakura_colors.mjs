@@ -12,6 +12,7 @@
  * 用法：先 node scripts/serve.mjs 3000，再 node scripts/test_sakura_colors.mjs
  */
 import { chromium } from 'playwright';
+import { guardReadOnly } from './_lib-readonly-guard.mjs';
 
 const BASE = 'http://localhost:3000';
 
@@ -39,10 +40,12 @@ const FORBIDDEN_HEX = [
 ];
 
 const browser = await chromium.launch();
+// 本脚本跑在生产服务（:3000）上：只读守卫保证它永远不会写生产库
+const guard = guardReadOnly();
 try {
   // ===== login.html：token + 组件 computed style =====
   {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    const page = guard.attach(await browser.newPage({ viewport: { width: 390, height: 844 } }));
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(BASE + '/login.html', { waitUntil: 'domcontentloaded' });
@@ -76,7 +79,7 @@ try {
 
   // ===== index.html：token 同源 + 心跳时段色 =====
   {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    const page = guard.attach(await browser.newPage({ viewport: { width: 390, height: 844 } }));
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
@@ -105,7 +108,7 @@ try {
 
   // ===== 静态资源：旧色值清零 =====
   {
-    const page = await browser.newPage();
+    const page = guard.attach(await browser.newPage());
     for (const css of ['/css/style.css', '/css/login.css']) {
       const text = await (await page.goto(BASE + css)).text();
       const hits = FORBIDDEN_HEX.filter((hex) => text.toLowerCase().includes(hex));
@@ -117,5 +120,6 @@ try {
   await browser.close();
 }
 
+const clean = guard.assertClean();
 console.log(`\n结果：${pass} 通过 / ${fail} 失败`);
-process.exit(fail ? 1 : 0);
+process.exit(fail || !clean ? 1 : 0);

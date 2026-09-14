@@ -12,6 +12,7 @@
  */
 
 import { chromium } from 'playwright';
+import { guardReadOnly } from './_lib-readonly-guard.mjs';
 
 const SUPA_REF = 'zyceucmmtstszdnugimn';
 const FAKE_UID = 'test-uid-0001';
@@ -67,6 +68,8 @@ const json = (body) => ({
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 400, height: 800 } });
+// 本脚本跑在生产服务（:3000）上：只读守卫保证它永远不会写生产库
+const guard = guardReadOnly(page);
 
 const errors = [];
 page.on('console', (m) => {
@@ -78,6 +81,12 @@ page.on('pageerror', (e) => errors.push('PAGEERR: ' + e.message));
 await page.addInitScript(injectSessionSrc);
 
 // 2. 拦截 Supabase 请求，mock 全部数据
+// 兜底路由必须**先注册**：Playwright 路由按注册逆序执行，后注册的具体 mock 优先级更高。
+// 之前漏了 POST /rest/v1/rpc/increment_login_count（App 冷启动计数），它真的打到了
+// 生产库（zyceucmmtstszdnugimn），只因假 JWT 被 401 才没写进去 —— 新端点会重蹈覆辙。
+await page.route('**/rest/v1/**', (r) =>
+  r.fulfill(json(r.request().url().includes('/rpc/') ? {} : []))
+);
 await page.route('**/auth/v1/user**', (r) =>
   r.fulfill(
     json({
@@ -217,4 +226,5 @@ assert(!stillOpen, '未放大时单击应关闭 lightbox');
 
 console.log('\nconsole errors:', errors.length ? errors : '(无)');
 await browser.close();
-console.log('\n✅ 全部测试通过');
+const clean = guard.assertClean();
+console.log(clean ? '\n✅ 全部测试通过' : '\n⚠️ 断言通过，但只读守卫发现写请求（见上）');
