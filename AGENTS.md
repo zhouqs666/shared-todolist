@@ -36,12 +36,15 @@
 - ✅ 局部回归：可用 Node 脚本 `scripts/test_*.mjs`（允许 mock Supabase，但**必须标注"未写生产"**）
 - ✅ 必须覆盖：核心功能、边界情况、错误处理、Realtime 双端同步
 - ✅ 测试要真实验证结果（截图、断言、状态检查），不能只看"没报错"就算过
-- ✅ **测试前跑 `node scripts/check-test-env.mjs`**：校验测试库隔离 + schema 与生产对齐。测试库缺列/缺表会导致"跑绿但没验证真实行为"（假阴性）
+- ✅ **测试前跑两个 preflight**：
+  - `node scripts/check-test-env.mjs` —— Web 通道隔离（测试库 ≠ 生产库）
+  - `node app-e2e/scripts/check-test-schema.mjs` —— 测试库 schema 契约（从 `supabase/*.sql` 自动推导，漂移会打印修复 SQL）
+  测试库缺列/缺表会导致 `listTodos()` 整体报错、界面静默空列表，E2E 只报「元素找不到」，极易误判成定位/时序问题（2026-09-14 烧了多轮 CI）。
 
 **血泪教训（2026-09-14）：**
 Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `public/`（其中 `supabase.js` 硬编码生产库 URL），而 `test_*.py` 直连 `localhost:3000` = 生产库。调试撤销完成功能时，在生产库创建 27 条测试待办，并因盲盒开奖发生在「添加」瞬间，误解锁 `legendary_1` 传说贴纸 —— 清待办也撤不回贴纸。
 **根因**：隔离只做了 Android APK 通道（`build-test-apk.mjs`），Web 通道漏了。
-**修复**：`serve-test.mjs`（运行时改写 supabase.js，生产文件零改动）+ `e2e_common.py`（fail-closed 隔离断言）+ `check-test-env.mjs`（schema 漂移检测）。
+**修复**：`serve-test.mjs`（运行时改写 supabase.js，生产文件零改动）+ `e2e_common.py`（fail-closed 隔离断言）+ `check-test-env.mjs`（隔离自检）。
 **关键认知**：「E2E- 前缀 + 测完清理」这种软约定挡不住事故 —— 必须是物理隔离，不是命名约定。
 
 **如果有硬限制导致无法完整验证：**
