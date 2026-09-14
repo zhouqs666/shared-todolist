@@ -8,6 +8,7 @@
     "dev": "node --watch scripts/serve.mjs",
     "serve:test": "node scripts/serve-test.mjs",
     "check:test-env": "node scripts/check-test-env.mjs",
+    "reset:test-db": "node scripts/reset-test-db.mjs",
     "bundle:supabase": "esbuild --bundle --format=esm --platform=browser --target=es2020 --minify --outfile=public/js/vendor/supabase-js.esm.js @supabase/supabase-js",
     "cap:sync": "cap sync",
     "cap:open": "cap open android",

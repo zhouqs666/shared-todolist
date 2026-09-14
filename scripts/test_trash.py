@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from playwright.sync_api import sync_playwright
-from e2e_common import resolve_base, load_test_creds, make_checker
+from e2e_common import resolve_base, load_test_creds, make_checker, cleanup_test_data
 
 BASE = resolve_base()
 TEST_USER, TEST_PASSWORD = load_test_creds()
@@ -106,6 +106,8 @@ with sync_playwright() as p:
     for e in real[:5]:
         print(f"    {e}", flush=True)
 
+    # UI 删除/彻底删除后仍有行残留（软删除打时间戳），统一硬删一次
+    cleanup_test_data()
     browser.close()
 
 print("=" * 40, flush=True)

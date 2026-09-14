@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from playwright.sync_api import sync_playwright
-from e2e_common import resolve_base, load_test_creds, make_checker
+from e2e_common import resolve_base, load_test_creds, make_checker, cleanup_test_data
 
 BASE = resolve_base()
 TEST_USER, TEST_PASSWORD = load_test_creds()
@@ -113,6 +113,9 @@ with sync_playwright() as p:
     page.locator('.action-sheet__icon-btn[aria-label="删除"]').click()
     page.wait_for_timeout(1000)
     check("H2 测试待办已清理", page.locator('.todo', has_text=test_text_h2).count() == 0)
+
+    # UI 删除是软删除，行仍在表里；统一硬删一次（自带生产库硬闸）
+    cleanup_test_data()
 
     # 汇总
     print(f"\n== 结果: {results['pass']} 通过 / {results['fail']} 失败 ==", flush=True)

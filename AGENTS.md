@@ -29,23 +29,26 @@
 - ✅ **跑测试前必须先起测试专用服务器**（铁律一）：
   ```bash
   node scripts/serve-test.mjs     # 测试服务器，端口 3100，连独立测试库
+  node scripts/reset-test-db.mjs  # 归零测试库（清 E2E 残留 + 贴纸）
   python3 scripts/test_undo_complete.py   # 测试脚本自动连 3100 + 自证隔离
   ```
   测试脚本默认连 3100（测试库），**禁止指向 3000**（那是生产库）。指向生产会被 `e2e_common.py` 直接拦下、退出码 2。
+- ✅ **测试库必须归零**：`tests` 末尾会自动调 `reset-test-db.mjs` 硬删；`E2E_KEEP_DATA=1` 可保留现场排查。
+  **为什么不能只靠测试内部的删除**：那是**软删除**（`deleted_at` 打时间戳），行永远留在表里 —— 看着清了，其实越跑越脏。贴纸更麻烦：`sticker_key` 有 UNIQUE 约束、解锁幂等，一旦解锁就再也测不了「首次解锁」路径（开奖弹窗/庆祝动画/图鉴+1），盲盒的核心卖点在测试环境里失效。
 - ✅ 核心流程 / 双端同步：用 Playwright 跑真实业务流程（Python 脚本 `scripts/test_*.py`，双账号 E2E，测试账号来自 `app-e2e/.env.test`）
-- ✅ 局部回归：可用 Node 脚本 `scripts/test_*.mjs`（允许 mock Supabase，但**必须标注"未写生产"**）
+- ✅ 局部回归：Node 脚本 `scripts/test_*.mjs` 跑在生产服务（:3000）上，**只读** —— 已由 `_lib-readonly-guard.mjs` 在网络层阻断写请求（不是靠自觉，也不是靠 token 恰好无效）
 - ✅ 必须覆盖：核心功能、边界情况、错误处理、Realtime 双端同步
 - ✅ 测试要真实验证结果（截图、断言、状态检查），不能只看"没报错"就算过
 - ✅ **测试前跑两个 preflight**：
   - `node scripts/check-test-env.mjs` —— Web 通道隔离（测试库 ≠ 生产库）
-  - `node app-e2e/scripts/check-test-schema.mjs` —— 测试库 schema 契约（从 `supabase/*.sql` 自动推导，漂移会打印修复 SQL）
-  测试库缺列/缺表会导致 `listTodos()` 整体报错、界面静默空列表，E2E 只报「元素找不到」，极易误判成定位/时序问题（2026-09-14 烧了多轮 CI）。
+  - `node app-e2e/scripts/check-test-schema.mjs` —— 测试库 schema 契约（从 `supabase/*.sql` 推导表/列/**函数**，漂移会打印修复 SQL）
+  测试库缺列/缺表会导致 `listTodos()` 整体报错、界面静默空列表，E2E 只报「元素找不到」，极易误判成定位/时序问题（2026-09-14 烧了多轮 CI）。缺 RPC 函数同理（`increment_login_count` 缺失时冷启动 404）。
 
 **血泪教训（2026-09-14）：**
 Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `public/`（其中 `supabase.js` 硬编码生产库 URL），而 `test_*.py` 直连 `localhost:3000` = 生产库。调试撤销完成功能时，在生产库创建 27 条测试待办，并因盲盒开奖发生在「添加」瞬间，误解锁 `legendary_1` 传说贴纸 —— 清待办也撤不回贴纸。
 **根因**：隔离只做了 Android APK 通道（`build-test-apk.mjs`），Web 通道漏了。
 **修复**：`serve-test.mjs`（运行时改写 supabase.js，生产文件零改动）+ `e2e_common.py`（fail-closed 隔离断言）+ `check-test-env.mjs`（隔离自检）。
-**关键认知**：「E2E- 前缀 + 测完清理」这种软约定挡不住事故 —— 必须是物理隔离，不是命名约定。
+**关键认知**：「E2E- 前缀 + 测完清理」这种软约定挡不住事故 —— 必须是物理隔离，不是命名约定。同理，「脚本本意只读」也挡不住事故（实测 `test_pinch.mjs` 漏 mock 了 `rpc/increment_login_count`，请求直接打到生产库，全靠假 JWT 被 401 才没写入）—— 只读必须是网络层阻断。
 
 **如果有硬限制导致无法完整验证：**
 - 必须在交付时**明确列出未验证的功能点**
@@ -195,4 +198,5 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
 - **测试**：Playwright（Python 双账号 E2E，连测试库）+ Node 局部回归（可 mock）
 - **本地服务**：`node scripts/serve.mjs`（端口 3000，**生产库**，仅手动自测）／`node scripts/serve-test.mjs`（端口 3100，**测试库**，跑 E2E 必须用这个）
+- **测试库维护**：`node scripts/reset-test-db.mjs`（归零，硬删 E2E 残留 + 贴纸）／`node scripts/check-test-env.mjs`（隔离自检）／`node app-e2e/scripts/check-test-schema.mjs`（schema 契约）
 - **埋点状态**：⚠️ 目前零埋点，无法回答"哪个功能最常用""两人一天互动几次"。补基础埋点（北极星 = 双端同日活跃天数）在路线图 P0。

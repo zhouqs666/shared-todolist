@@ -136,3 +136,31 @@ def make_checker():
             print(f"  FAIL {name} {detail}", flush=True)
 
     return check, results
+
+
+def cleanup_test_data():
+    """硬删测试库里的 E2E 数据（待办 + 贴纸）。
+
+    为什么不能只靠测试内部的 UI 删除：那是**软删除**（deleted_at 打时间戳），
+    行永远留在表里 —— 看起来清了，其实越跑越脏。贴纸更麻烦：sticker_key 有
+    UNIQUE 约束，一旦解锁就幂等，之后再也测不了「首次解锁」路径。
+    所以清理以 scripts/reset-test-db.mjs 为准（它自带生产库硬闸）。
+
+    设 E2E_KEEP_DATA=1 可跳过（排查失败用例时保留现场）。
+    返回 True 表示清理成功。
+    """
+    if os.environ.get("E2E_KEEP_DATA") == "1":
+        print("\n[清理] E2E_KEEP_DATA=1，跳过清理（保留现场）")
+        return True
+    import subprocess
+
+    script = os.path.join(ROOT, "scripts", "reset-test-db.mjs")
+    print("\n[清理] 归零测试库…", flush=True)
+    r = subprocess.run(["node", script], capture_output=True, text=True)
+    tail = [l for l in (r.stdout or "").splitlines() if l.strip()][-3:]
+    for l in tail:
+        print(f"  {l}")
+    if r.returncode != 0:
+        print("  ⚠️ 清理未完全成功（见上方输出）")
+        return False
+    return True

@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import re
 import json
 from playwright.sync_api import sync_playwright
-from e2e_common import resolve_base, load_test_creds
+from e2e_common import resolve_base, load_test_creds, cleanup_test_data
 
 BASE = resolve_base()
 TEST_USER, TEST_PASSWORD = load_test_creds()
@@ -163,6 +163,10 @@ with sync_playwright() as p:
         page.screenshot(path="/tmp/blindbox-after-add.png", full_page=True)
 
     browser.close()
+
+# 本用例用 UI 软删除清不干净（deleted_at 只打时间戳），且开出的贴纸无法通过删待办撤销。
+# 统一走 reset 脚本硬删（自带生产库硬闸）。
+cleanup_test_data()
 
 print()
 print("=" * 60)
