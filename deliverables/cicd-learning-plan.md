@@ -212,7 +212,8 @@
 > 四道门：手动触发 + `confirm` 逐字确认版本号 + `assertNewerThanLatest` 版本守卫 + 环境审批人。
 > 本地已验证全部 `run` 块（含「无 `.env` 纯环境变量」这条 CI 特有路径）与 `verify-release.mjs` 正反用例，
 > `actionlint` 静态校验 0 错误；**CI 真实 run 待 push 后执行**（`workflow_dispatch` 要求 workflow 已在默认分支）。
-> 第 1、3、4、5 项（web 后台 SSH 部署 / APK 自动打 / secrets 分级 / 回滚演练）未开工。
+> 第 1、3、4 项（web 后台 SSH 部署 / APK 自动打 / secrets 分级）未开工；第 5 项**回滚演练已完成**（2026-09-14：
+> `rollback.mjs 2.7.65` → 客户端落到 2.7.64，并反向验证了回读校验能抓出已下线版本；生产终态与演练前一致）。
 > 阶段 4 的一个认知修正：**并非所有 CD 都该 push 自动触发**——只读的验证环节可以 push 触发，
 > 但写生产（发布 APP、改线上数据）必须留人工门，两者风险等级不同（详见 `.workbuddy/memory/cicd-handoff.md`）。
 
