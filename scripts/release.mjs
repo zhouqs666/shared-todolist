@@ -133,6 +133,7 @@ async function main() {
   // bundle 不一致。改成在暂存副本上注入后：**发布对工作区零改动**，也不再需要任何补提交。
   const STAGE_DIR = join(TMP_DIR, 'stage');
   const GIT_SRC_DIR = join(TMP_DIR, 'git-src');
+  const GIT_TAR_PATH = join(TMP_DIR, 'public-from-git.tar');
 
   try {
     // 1. 准备暂存副本 + 注入版本号（不动仓库里的任何文件）
@@ -168,9 +169,8 @@ async function main() {
 
       rmSync(GIT_SRC_DIR, { recursive: true, force: true });
       mkdirSync(GIT_SRC_DIR, { recursive: true });
-      const tarPath = join(TMP_DIR, 'public-from-git.tar');
-      execFileSync('git', ['archive', `--output=${tarPath}`, sha, 'public'], { cwd: ROOT });
-      execFileSync('tar', ['-xf', tarPath, '-C', GIT_SRC_DIR]);
+      execFileSync('git', ['archive', `--output=${GIT_TAR_PATH}`, sha, 'public'], { cwd: ROOT });
+      execFileSync('tar', ['-xf', GIT_TAR_PATH, '-C', GIT_SRC_DIR]);
       cpSync(join(GIT_SRC_DIR, 'public'), STAGE_DIR, { recursive: true });
       // 回退包本身不再声明壳版本要求：沿用线上最高行的（避免退回后突然要求更高的壳）
       if (!effectiveMinApp && highest && highest.min_app_version) {
@@ -258,9 +258,12 @@ async function main() {
     console.log(`\n   App 下次冷启动时自动检查并下载；下载完成后再次启动生效。\n`);
 
   } finally {
-    // 清理：临时 zip（成功时）与暂存副本（始终）
+    // 清理：临时 zip（成功时）、暂存副本、以及 --from-git 的中间产物（始终）
+    // （中间产物漏清会在 .release-tmp/ 里留下多份旧 public/ 快照，一次几十 MB）
     try {
       rmSync(STAGE_DIR, { recursive: true, force: true });
+      rmSync(GIT_SRC_DIR, { recursive: true, force: true });
+      if (existsSync(GIT_TAR_PATH)) unlinkSync(GIT_TAR_PATH);
       if (existsSync(ZIP_PATH) && !dryRun) unlinkSync(ZIP_PATH);
     } catch { /* ignore */ }
   }
