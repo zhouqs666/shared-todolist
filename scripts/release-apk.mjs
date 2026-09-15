@@ -129,6 +129,8 @@ async function main() {
   }
   const gradleCode = parseInt(gradleCodeRaw, 10);
   const preconditions = [];
+  /** 历史最大 versionCode 那行（含已下线版本）；在 (d) 里查到，仅用于日志与报错文案 */
+  let maxEver = null;
 
   // (a) versionName 必须逐字等于本次发布的版本号。
   //     为什么是「逐字相等」而不是「大于等于」：客户端拿 **APK manifest 里的 versionName**
@@ -161,6 +163,31 @@ async function main() {
     修复：改 android/app/build.gradle 的 versionCode（走 PR 合并），然后不要传 --code。`);
   }
 
+  // (d) 历史最大值检查也**并进同一批**报出。
+  //     ⚠️ 这条曾经写成独立的一步、排在 preconditions 之后 —— 结果「一次性报出全部不一致」只兑现了一半：
+  //     versionName 不一致时会先 exit，versionCode 的问题根本轮不到报，
+  //     而这两项**通常要一起改**（升一次版本 = code 与 name 同步升），
+  //     于是操作者要「改 name → 重跑 → 才发现 code 也没升 → 再改 → 再跑」两轮。
+  //     （这是自查时发现的：CI 预演只报了一条，而按设计本该报两条 —— 声明与行为不一致要当缺陷修。）
+  if (Number.isInteger(code) && code > 0) {
+    const { data: maxCodeRows, error: maxCodeErr } = await sb
+      .from('app_native_versions')
+      .select('version_code, version_name')
+      .order('version_code', { ascending: false })
+      .limit(1);
+    if (maxCodeErr) {
+      console.error(`✗ 查询历史最大 versionCode 失败：${maxCodeErr.message}`);
+      process.exit(1);
+    }
+    maxEver = maxCodeRows?.[0] ?? null;
+    if (maxEver && code <= maxEver.version_code) {
+      preconditions.push(`versionCode 必须严格递增：历史上用过 ${maxEver.version_code}（${maxEver.version_name}），本次 ${code}。
+    Android 不允许同码覆盖安装 —— 同码会让用户点安装时直接失败，且**没有任何提示**。
+    注意基准含**已下线**版本（2.8.0 的 code 33 虽已 enabled=false，33 也已经用掉了）。
+    修复：把 android/app/build.gradle 的 versionCode 改成大于 ${maxEver.version_code}（走 PR 合并）。`);
+    }
+  }
+
   if (preconditions.length > 0) {
     console.error('\n✗ 发布前置检查未通过（build.gradle 与本次发布不一致）：\n');
     for (const p of preconditions) console.error(`  · ${p}\n`);
@@ -169,23 +196,6 @@ async function main() {
     process.exit(1);
   }
 
-  const { data: maxCodeRows, error: maxCodeErr } = await sb
-    .from('app_native_versions')
-    .select('version_code, version_name')
-    .order('version_code', { ascending: false })
-    .limit(1);
-  if (maxCodeErr) {
-    console.error(`✗ 查询历史最大 versionCode 失败：${maxCodeErr.message}`);
-    process.exit(1);
-  }
-  const maxEver = maxCodeRows?.[0] ?? null;
-  if (maxEver && code <= maxEver.version_code) {
-    console.error(`✗ versionCode 必须严格递增：历史上用过 ${maxEver.version_code}（${maxEver.version_name}），本次 ${code}。
-  Android 不允许同码覆盖安装 —— 同码会让用户点安装时直接失败，且**没有任何提示**。
-  注意基准含**已下线**版本（2.8.0 的 code 33 虽已 enabled=false，33 也已经用掉了）。
-  修复：先在 PR 里升 android/app/build.gradle 的 versionCode 并合并，再重新触发发布。`);
-    process.exit(1);
-  }
   console.log(`  ✓ build.gradle 与本次发布一致：versionName=${gradleNameRaw} · versionCode=${code}（历史最大 ${maxEver ? `${maxEver.version_code} · ${maxEver.version_name}` : '无（首发）'}）`);
 
   // 1.5【必需前置】cap sync：把 public/ 同步进 android assets。
