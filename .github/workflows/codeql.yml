@@ -1,0 +1,108 @@
+name: CodeQL
+
+# ============================================================================
+# 供应链安全 · 静态代码扫描（批次 D）
+# ----------------------------------------------------------------------------
+# 与「依赖扫描」（Dependabot）是**两件事**，面试里经常被混为一谈：
+#   - Dependabot：扫 **依赖**（package.json / package-lock / requirements）→ 找已知 CVE
+#   - CodeQL    ：扫 **你自己的代码** → 找注入、XSS、路径穿越、不安全的反序列化等模式
+#     （本项目最相关的一条：这个 App 的 public/js 大量操作 innerHTML / 用户输入，
+#      正是 XSS 类查询覆盖的地方）
+# 前者靠 CVE 数据库，后者靠语义分析 —— 所以依赖全都升到最新，也挡不住自己写出的漏洞。
+#
+# ## 为什么用 advanced setup（本文件）而不是 GitHub 的 default setup
+#   - default setup 在网页上点几下就完事，**配置不进仓库**：PR 里看不到、
+#     review 不到、也改不了（语言/查询集/触发时机全是黑盒）。
+#   - 本文件 = Pipeline as Code，与本项目其余四个工作流一致：可 review、可 diff、
+#     可按 SHA 固定 action（见 scripts/check-actions-pinned.mjs）。
+#   代价是多写一个文件、多维护一点；收益是"扫描这件事本身"也被版本管理。
+#
+# ## 刻意不设 paths 过滤
+#   ci.yml 那种带 paths 过滤的 workflow 不能做 required check（会让不匹配的 PR
+#   永远停在 "Expected"，批次 B 的坑）。本工作流**没有** paths 过滤 ⇒ 每次 PR 必跑，
+#   于是将来若想把它提升为 required check，不会踩那个坑。
+#   （当前**有意不设** required check：见文件末尾的「准入策略」）
+# ============================================================================
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 每周一 04:00 北京（周日 20:00 UTC）。
+    # 为什么还要定时跑：PR 只扫"这次改了什么"，而 CodeQL 的查询集本身会更新 ——
+    # 上游新增一条规则时，**没人改过的老代码也可能突然有问题**。定时跑就是为这种漂移兜底。
+    - cron: '0 20 * * 0'
+  workflow_dispatch:
+
+# 最小权限：只读代码 + 唯一必需的写权限（上传 SARIF 到 Security → Code scanning）。
+# 仓库默认的 GITHUB_TOKEN 权限已是 read（只读），但**显式声明 > 依赖仓库默认值** ——
+# 默认值是仓库设置，谁都能在某天点一下改掉，而工作流文件里的声明会跟着代码一起被 review。
+permissions:
+  contents: read
+  security-events: write
+
+# 同一分支上来新提交时取消旧扫描：CodeQL 单次 1~2 分钟，重复跑纯属浪费。
+# 注意这里是安全的（与 e2e-* 那两个工作流不同）—— CodeQL 不碰共享的测试库，
+# 取消一个正在跑的扫描不会留下任何中间状态。cancel-in-progress 能不能用，
+# 取决于「被打断会不会留下坏的半成品」，不是取决于习惯。
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      # 语言多于一种时，一个失败不该把另一个也取消掉（各自独立、各自出报告）
+      fail-fast: false
+      matrix:
+        # 只扫 JavaScript/TypeScript。**有意不含 Python**：
+        # 本仓库的 .py 全部是 E2E 测试脚本（scripts/test_*.py），不随产品分发、
+        # 也不在生产环境执行 —— 扫它的收益是"给测试代码找 XSS"，接近 0，
+        # 代价是每次 PR 多跑一路分析。等测试代码量级上来了再评估。
+        # 同理不含 java/kotlin：android/ 是 Capacitor 生成的壳工程，我们几乎不改它。
+        language: ['javascript-typescript']
+
+    steps:
+      - name: Checkout
+        # 固定到 v4.4.0 指向的 commit（tag 可变，SHA 不可变）；版本注释是给 Dependabot 读的
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3.38.0
+        with:
+          languages: ${{ matrix.language }}
+          # 查询集刻意先留默认（default = 安全类为主）。
+          # 想更严可以改成 security-extended，但那是"更多查询 ⇒ 更多告警"，
+          # 应该先看清默认集在本仓库报什么、逐条定级（真问题/误报）之后再升，
+          # 而不是一上来就开最大档、然后因为满屏告警而把整个扫描当噪声忽略。
+
+      # JavaScript/TypeScript 是解释型语言，CodeQL 直接从源码抽取，无需构建步骤。
+      # （若将来加了 java/kotlin 语言项，这里需要补 autobuild 或手写 gradle 构建 ——
+      #  这是 advanced setup 相对 default setup 唯一真正多出来的心智负担。）
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3.38.0
+        with:
+          # category 决定结果在 Security 页面里的分组名。
+          # 单语言时它只是好看；一旦加了第二种语言，没有它两路结果会互相覆盖。
+          category: '/language:${{ matrix.language }}'
+
+# ============================================================================
+# 准入策略（刻意如此，改之前先读）
+# ----------------------------------------------------------------------------
+# 本工作流**不进 main 的 required checks**，与 e2e-web-full.yml 同一个理由的两种形态：
+#   - e2e-web-full.yml 不进，是因为它**不在 PR 上跑** ⇒ 设了 check 永远停在 "Expected"
+#   - 本工作流不进，是因为它**在 PR 上跑，但结论的性质不同** ——
+#     静态扫描的产出是"待定级的告警"，不是"通过与失败"。
+#     把它设成 required = 每条 CodeQL 告警都能卡住合并，而在还没逐条定级之前，
+#     团队会做的第一件事是给所有告警打 "won't fix" —— 门禁由此变成一张白纸。
+#
+# 正确的提升路径（和 test_sticker_wiggle.mjs 那条完全同构）：
+#   观察若干周 → 统计真实告警数 / 误报率 → 把稳定为 0 的查询子集固化，
+#   再谈"能不能当门禁"。**门的价值来自它拦得住真问题，而不是来自它被设为 required。**
+# ============================================================================

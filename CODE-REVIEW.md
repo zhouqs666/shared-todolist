@@ -55,12 +55,19 @@
   真值只能放 `.env*`（已 gitignore）与 GitHub Secrets；仓库里一律占位符（`your-xxx` / `test-user@example.com`）。
   自查：`git grep -nE "PASSWORD=[^y]|@todo\.local" -- '*.example' '*.md'` 应为空或仅注释/占位符。
   **血泪（2026-09-15 发现）**：`admin/.env.test.example` 从 2026-09-08 起在 **public 仓库**里写着
-  真实账号邮箱 + 真实密码（`TodoTest@2026`），躺了一周才发现 —— 而生产账号用的是**同一个邮箱**，
+  真实账号邮箱 + 真实密码（值已轮换作废，此处不复述），躺了一周才发现 —— 而生产账号用的是**同一个邮箱**，
   只要密码复用，这就等价于把账号贴在公网。**教训**：删掉文件里的值不够，历史提交里还有 ⇒
   发现即**先改密码**（让泄露值失效），再清理文件；且这类问题本该由 push protection 在推送时拦下（批次 D）。
 - 🔴 SQL 注入：本项目直连 PostgREST 风险低，但手写 SQL / RPC 函数要逐一检查。
 - 🟡 输入校验：长度、类型、emoji、图片 MIME。
 - 🟡 Storage：`todo-attachments` 公开读 bucket 是否会泄露不该公开的内容。
+- 🟡 **供应链：本次是否新增了依赖？** 新增前先问「这个依赖值不值得引入」——维护状态、下载量、
+  是否锁版本。另外要分清本项目的两道自动扫描（**它们扫的不是同一样东西**）：
+  - `Dependabot` 扫**依赖**（package-lock / requirements）→ 找**已知 CVE**，靠 CVE 数据库
+  - `CodeQL` 扫**你自己写的代码** → 找注入 / XSS / 路径穿越（本应用大量操作 `innerHTML` + 用户输入，
+    正是 XSS 类查询覆盖的地方）
+  ⇒ **把依赖全升到最新，也挡不住自己写出的漏洞**，两者不能互相替代。
+  CI 里 actions 的固定策略见 F2 的供应链两条。
 
 ### 维度 D：可维护性
 
@@ -95,7 +102,7 @@
 - 🟡 测试脚本里是否有「跨通道共用测试库」的清理逻辑？统一用 `E2E-` 前缀过滤会**连其他通道的夹具一起删**
   （`E2E-APP-` 也以 `E2E-` 开头）。清理必须按自己的命名空间精确匹配。
 
-#### F2. 工作流 / CI 改动专项（2026-09-14 批次 A/B 复盘新增；批次 C 补充 2 条）
+#### F2. 工作流 / CI 改动专项（2026-09-14 批次 A/B 复盘新增；批次 C 补充 2 条；批次 D 补充 4 条）
 
 > 触发条件：本次改动碰了 `.github/workflows/**` 或 `scripts/release*.mjs`（发布/CD 类脚本）。
 
@@ -137,6 +144,28 @@
 - 🟡 定时/全量回归是否被误加进 required checks？**不该** —— 它不在 PR 上运行，设成 required
   会让 check 永远停在 "Expected"（与上面 `paths` 过滤那条同因）。分层触发的分工是：
   PR 门禁要**快而稳**，全量回归可以**慢而全**。
+- 🔴 **所有 `uses:` 是否固定到完整 commit SHA，且带 `# vX.Y.Z` 注释？**（批次 D 供应链安全）
+  tag 与分支都是**可变**的 —— 上游能把 `v4` 重新指向任意 commit，而你的工作流会照跑不误；
+  这是 "SolarWinds 式" 供应链攻击最省力的入口。注释不是装饰：**Dependabot 靠它判断当前版本**，
+  没有注释 = 它看不到这个依赖 = 永远不会提更新（静默盲区）。
+  机器判定：`node scripts/check-actions-pinned.mjs`（已进 CI required job，秒级失败）。
+  取 SHA：`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`（`type=tag` 时再解一层 `git/tags/<sha>`）。
+- 🔴 **「固定 SHA」与「Dependabot 版本更新」是否成对存在？** 固定 = 再也不会自动变新，
+  所以**必须有 `dependabot.yml` 的 `github-actions` ecosystem 来推**，否则安全补丁永远进不来。
+  两者缺一个都不成立：只固定不更 = 冻在旧版本上；只更不固定 = 门敞开。
+  ⚠️ 另注意：仓库若开了 `sha_pinning_required`，它的失败方式是**工作流根本不启动**
+  （PR 上的 check 直接不出现，看起来像"还没跑"而不是"配错了"）—— 这正是 `check-actions-pinned.mjs`
+  存在的理由：把隐形故障提前成秒级、带报错的静态检查。
+- 🟡 **依赖升级 PR 是否按「minor/patch 合组、major 各自单独」配？** 合组是为了降噪
+  （一周 15 个 PR 没人看 = 等于没有 Dependabot）；但 major 刻意**不**合并 ——
+  major 有 breaking change，合在一个 PR 里一旦 CI 红了**没法二分定位**是哪个依赖的锅。
+- 🟡 **`permissions:` 是否显式声明了最小权限？** 本仓库默认已是 `read`，但
+  **默认值是别人能在 Settings 里点一下改掉的东西**，而工作流文件里的声明会跟着代码一起被 review。
+  最低要求：只读代码的 job 显式写 `contents: read`；CodeQL 那类需要 `security-events: write` 的单独声明。
+- 🟡 **引入静态扫描（CodeQL）时，是否想清楚它的结论性质？** 它产出的是"**待定级的告警**"，
+  不是"通过与失败"。在还没逐条定级之前就设成 required check，团队的第一反应会是给所有告警
+  打 "won't fix" —— **门禁由此变成一张白纸**。正确路径与 `test_sticker_wiggle.mjs` 同构：
+  观察若干周 → 统计真实告警/误报率 → 再谈能否当门禁。
 
 ---
 
@@ -227,6 +256,17 @@
   - 当前处置：用例对该缺陷做**隔离（quarantine）**——普通款断言 toast 撤销按钮，命中隐藏款时
     打印已知缺陷标注并改走菜单撤销路径验证状态可恢复。**隔离必须显式留痕**（不许静默跳过）：
     只有输出了「跳过理由」才算合规，否则等于把缺陷洗成绿灯。
+[2026-09-15] 批次 D 供应链安全（actions 按 SHA 固定 + CodeQL + Dependabot 版本更新 + 最小权限）：🔴0 🟡0 → 通过
+  · 4 个既有 workflow 共 32 处 `uses:` 全部固定到完整 SHA + `# vX.Y.Z` 注释（行为等价：固定的是
+    当前 `@v4`/`@v2` 指向的那个 commit，只换不可变性，不换版本）
+  · 新增 `scripts/check-actions-pinned.mjs`（机器判定）+ 4 个负向用例（unpinned / 短 SHA / 缺注释 / 无 @ref）
+    与 1 个正向用例（含「注释掉的行不算已声明」）全部实测过
+  · 新增 `.github/workflows/codeql.yml`（advanced setup，刻意不含 Python：scripts/*.py 全是测试工具链）
+    与 `.github/dependabot.yml`（5 个 ecosystem；**刻意不启用 gradle**：android/ 是 Capacitor 生成工程，
+    AGP/Gradle 兼容区间由上游定，盲升大概率红，而"有没有 CVE"已由 alerts 覆盖 —— 原生层只要可见性，不要自动改代码）
+  · 三个只读 workflow 补显式 `permissions: contents: read`
+  · 顺带确认：`secret_scanning_non_provider_patterns` / `validity_checks` **API 不接受**（第二次实测，
+    返回 200 但值仍为 disabled）⇒ 需人工在 Settings → Code security 勾选，已列入待办
 ```
 
 ---
