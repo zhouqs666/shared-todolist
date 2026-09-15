@@ -118,8 +118,37 @@
   + 版本守卫 + 环境评审人，任何一条都不要为了「自动化得更彻底」而拆掉。
 - 🟡 上传制品路径含隐藏目录（点开头）时，是否显式 `include-hidden-files: true`？
 - 🟡 是否在 CI 里执行上游脚本（`bash <(curl .../main/scripts/...`）？应改为下 pinned 版本的二进制/产物。
+- 🟡 **`run:` 块里的「仪式性代码」是不是空操作？** 照抄同一段 shell 时先确认它在当前环境真的做事。
+  实测（2026-09-15）：`e2e-app.yml` 的 keystore 块里有 `sed -i 's/^          //'` 去 heredoc 缩进 ——
+  但 **YAML 的 `run: |` 块标量会先按公共缩进 dedent**，进到 shell 时 heredoc 每行已经没有前导空格，
+  所以那行是**空操作**（已用 Ruby 解析 YAML 实测），它的注释「移除 heredoc 缩进」也是错的。
+  更实际的问题是 `sed -i` 在 macOS 上必须写成 `sed -i ''`，照抄会让那段**在本地根本跑不起来**
+  （报 `command a expects \ followed by text` —— 因为 BSD sed 把脚本参数当成了备份后缀）。
+  判据：**这段 run 块能不能原样在本地执行一遍？** 不能 → 它要么在 CI 才第一次被执行（返工风险），
+  要么本来就是死代码。同一批还顺手统一了 `openssl base64 -d -A`（BSD 的 `base64` 历史参数是 `-D`，
+  只有较新 macOS 才认 `-d`），把「本地与 CI 行为不一致」的坑一起消掉。
+- 🟡 **「预演」是否真的覆盖了要验的那条断言？** 带 `--dry-run` 的预演若跳过了关键步骤，
+  它证明的只是「前几行没报错」。实测：APK 通道的 `--dry-run` 原先**跳过 gradle 构建** ⇒
+  没有 APK ⇒ 三重守卫里最关键的「包内 meta == 本次版本」（防"发了个旧包"）**根本没被执行**，
+  而报告却是绿的。修法是加 `--build` 让它预演时也真构建 —— **预演的价值取决于它跑到了哪一步**，
+  不是取决于它绿了。
 - 🟡 静态检查工具「某条规则被静默跳过」是否被察觉？`actionlint` 缺 `shellcheck` 时只在 `-verbose` 里
   说一句 `Rule "shellcheck" was disabled` —— 不看 verbose 会误以为已经全查过。
+  **2026-09-15 补：这个缺口已经可以彻底关掉，不要再靠「逐块抽出来手跑」兜底** ——
+  下个 shellcheck 静态二进制即可（无需 brew）：
+  ```bash
+  curl -sSfL -o sc.tar.xz https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.x86_64.tar.xz
+  tar -xJf sc.tar.xz && cp shellcheck-v0.11.0/shellcheck /tmp/shellcheck && chmod +x /tmp/shellcheck
+  PATH="/tmp:$PATH" actionlint -verbose .github/workflows/*.yml   # verbose 里不再出现 "was disabled"
+  ```
+  **代价与收益的实测对照**：装之前，我新写的 workflow 本地 actionlint **exit 0**、CI 上却 5 秒红
+  （`SC2012: Use find instead of ls`）—— 一次 push 白跑。装之后同一份文件本地立刻报出全部 run 块问题。
+  **结论：本地工具缺一条规则 ≠ 少一个提示，而是「本地绿灯的可信度」被悄悄扣掉一块。**
+- 🟡 **`run:` 块里别让任何一行以 `# shellcheck` 开头** —— 那是 shellcheck 的**指令**语法，
+  它会把该行当指令解析并报 `SC1072/SC1073 Couldn't parse this shellcheck directive`。
+  实测踩到（2026-09-15）：我写了一段注释解释「没装 shellcheck 时 actionlint 会静默跳过 run 块」，
+  **换行后正好断在「# shellcheck」处**，于是这条注释自己把 lint 弄红了。改写措辞即可，
+  不需要禁用规则。**这条也是「装了本地 shellcheck 才看得见」的那一类** —— 与本文件 F2 的另一条同源。
 - 💭 失败诊断是否可从 CLI 读到？Run Summary 用 `tee -a "$GITHUB_STEP_SUMMARY"` 同时进日志，
   `gh run view --log` 即可核查，不必开浏览器。
 - 🔴 **CI 生成的环境文件是否与本地「同形」？** 本地 `.env.test` 是手写的、什么都有；CI 那份是

@@ -7,10 +7,24 @@
 [![CI](https://github.com/zhouqs666/shared-todolist/actions/workflows/ci.yml/badge.svg)](https://github.com/zhouqs666/shared-todolist/actions/workflows/ci.yml)
 [![APP E2E](https://github.com/zhouqs666/shared-todolist/actions/workflows/e2e-app.yml/badge.svg)](https://github.com/zhouqs666/shared-todolist/actions/workflows/e2e-app.yml)
 [![Web E2E Full](https://github.com/zhouqs666/shared-todolist/actions/workflows/e2e-web-full.yml/badge.svg)](https://github.com/zhouqs666/shared-todolist/actions/workflows/e2e-web-full.yml)
+[![CodeQL](https://github.com/zhouqs666/shared-todolist/actions/workflows/codeql.yml/badge.svg)](https://github.com/zhouqs666/shared-todolist/actions/workflows/codeql.yml)
 
 > 分层触发（有意为之，别改坏）：PR 门禁只跑 `ci.yml`（**快而稳**，required check）；
 > 4 个双账号 Web E2E 走 `e2e-web-full.yml`（**慢而全**，每晚 02:00 北京定时 + 可手动触发）。
 > 定时那份**刻意不设 required check** —— 它不在 PR 上运行，设了会让 check 永远停在 "Expected" 卡死 PR。
+
+### 两条交付通道（形态完全不同，别混）
+
+| | 通道 A：热更新（默认） | 通道 B：APK（兜底） |
+|---|---|---|
+| 改什么 | 只改 `public/` | 动原生层（Capacitor 插件 / Android 配置 / 权限） |
+| 执行体 | `release.mjs` → `release-web.yml` | `release-apk.mjs` → `release-apk.yml` |
+| 产物 | zip → Supabase Storage | APK → Storage + `app_native_versions` 表 |
+| 到用户手上 | 冷启动后台下载，**再启动一次**生效 | 弹更新面板 → 下载 → **用户手动点安装** |
+| 发布后回读校验 | `verify-release.mjs` | `verify-apk-release.mjs`（多一条 **SHA-256 一致** —— 对不上用户装不上） |
+
+两条通道的工作流工序同构：`workflow_dispatch` 手动触发 → **预演出报告**（不写生产）→ `confirm`
+逐字确认 → `production` 环境审批 → 写生产 → **回读校验**。
 
 ## 技术栈
 
