@@ -134,6 +134,21 @@
   不是取决于它绿了。
 - 🟡 静态检查工具「某条规则被静默跳过」是否被察觉？`actionlint` 缺 `shellcheck` 时只在 `-verbose` 里
   说一句 `Rule "shellcheck" was disabled` —— 不看 verbose 会误以为已经全查过。
+  **2026-09-15 补：这个缺口已经可以彻底关掉，不要再靠「逐块抽出来手跑」兜底** ——
+  下个 shellcheck 静态二进制即可（无需 brew）：
+  ```bash
+  curl -sSfL -o sc.tar.xz https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.x86_64.tar.xz
+  tar -xJf sc.tar.xz && cp shellcheck-v0.11.0/shellcheck /tmp/shellcheck && chmod +x /tmp/shellcheck
+  PATH="/tmp:$PATH" actionlint -verbose .github/workflows/*.yml   # verbose 里不再出现 "was disabled"
+  ```
+  **代价与收益的实测对照**：装之前，我新写的 workflow 本地 actionlint **exit 0**、CI 上却 5 秒红
+  （`SC2012: Use find instead of ls`）—— 一次 push 白跑。装之后同一份文件本地立刻报出全部 run 块问题。
+  **结论：本地工具缺一条规则 ≠ 少一个提示，而是「本地绿灯的可信度」被悄悄扣掉一块。**
+- 🟡 **`run:` 块里别让任何一行以 `# shellcheck` 开头** —— 那是 shellcheck 的**指令**语法，
+  它会把该行当指令解析并报 `SC1072/SC1073 Couldn't parse this shellcheck directive`。
+  实测踩到（2026-09-15）：我写了一段注释解释「没装 shellcheck 时 actionlint 会静默跳过 run 块」，
+  **换行后正好断在「# shellcheck」处**，于是这条注释自己把 lint 弄红了。改写措辞即可，
+  不需要禁用规则。**这条也是「装了本地 shellcheck 才看得见」的那一类** —— 与本文件 F2 的另一条同源。
 - 💭 失败诊断是否可从 CLI 读到？Run Summary 用 `tee -a "$GITHUB_STEP_SUMMARY"` 同时进日志，
   `gh run view --log` 即可核查，不必开浏览器。
 - 🔴 **CI 生成的环境文件是否与本地「同形」？** 本地 `.env.test` 是手写的、什么都有；CI 那份是

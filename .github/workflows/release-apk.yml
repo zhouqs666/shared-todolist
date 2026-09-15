@@ -245,7 +245,12 @@ jobs:
           if [ -z "$APKSIGNER" ]; then
             for root in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
               [ -n "$root" ] || continue
-              cand="$(ls -d "$root"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1 || true)"
+              # 用 find 而不是 `ls -d .../build-tools/*/apksigner`：这条会触发 SC2012
+              # （`ls` 的解析输出对非字母数字文件名不安全）。⚠️ 它在本机是**看不见**的 ——
+              # 没装 shellcheck 时 actionlint 会静默跳过整个 run 块，只有 CI 那侧才报。
+              # ⚠️ 写这类注释时别让某行以「# shellcheck」开头：那会被 shellcheck 当成
+              # 指令去解析（实测踩到：注释换行后正好断在那里 → SC1072/SC1073 解析失败）。
+              cand="$(find "$root/build-tools" -maxdepth 2 -name apksigner 2>/dev/null | sort -V | tail -1 || true)"
               if [ -n "$cand" ] && [ -x "$cand" ]; then APKSIGNER="$cand"; break; fi
             done
           fi
@@ -418,7 +423,12 @@ jobs:
           if [ -z "$APKSIGNER" ]; then
             for root in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
               [ -n "$root" ] || continue
-              cand="$(ls -d "$root"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1 || true)"
+              # 用 find 而不是 `ls -d .../build-tools/*/apksigner`：这条会触发 SC2012
+              # （`ls` 的解析输出对非字母数字文件名不安全）。⚠️ 它在本机是**看不见**的 ——
+              # 没装 shellcheck 时 actionlint 会静默跳过整个 run 块，只有 CI 那侧才报。
+              # ⚠️ 写这类注释时别让某行以「# shellcheck」开头：那会被 shellcheck 当成
+              # 指令去解析（实测踩到：注释换行后正好断在那里 → SC1072/SC1073 解析失败）。
+              cand="$(find "$root/build-tools" -maxdepth 2 -name apksigner 2>/dev/null | sort -V | tail -1 || true)"
               if [ -n "$cand" ] && [ -x "$cand" ]; then APKSIGNER="$cand"; break; fi
             done
           fi
