@@ -323,6 +323,74 @@ with sync_playwright() as p:
         page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")
         check("钩子已清理", page.evaluate("() => localStorage.getItem('__e2e_force_rarity')") is None)
 
+        # ===== 8. 对方端揭晓（双账号端到端）=====
+        print()
+        print("=" * 60)
+        print("8. 对方端揭晓（第二个账号 e2e-beta）")
+        print("=" * 60)
+        # 为什么要这一节：`rarity_seen` 这条链路曾经**从未触发过**（客户端只写 true、守卫要求 false），
+        # 而它有两个半边 —— 写入方（隐藏款落库时写 false）和读取方（对方端收到后播提示并回标 true）。
+        # 单账号只能验写入方；这里用测试库预置的第二个账号把读取方也跑到（两账号共用测试口令，
+        # auth.js 的 usernameToEmail 兜底会把 'e2e-beta' 映射成 e2e-beta@todo.local）。
+        context2 = browser.new_context()
+        page2 = context2.new_page()
+        page2.set_default_timeout(15000)
+        second_user = os.environ.get("E2E_SECOND_ACCOUNT", "e2e-beta")
+        check("第二账号登录成功", login(page2, BASE, second_user, TEST_PASSWORD), page2.url)
+        # 等 Realtime 订阅真正开始推送：本项目自己记录过「订阅变 SUBSCRIBED 后仍需 ~2-3 秒」，
+        # 这里刻意等一个观察窗口（不是赌异步同步，是被测对象的已知时序）。
+        page2.wait_for_timeout(4000)
+
+        def epic_count2():
+            return page2.evaluate("""async () => {
+                const s = await import('/js/state.js');
+                return s.getStickers().filter((x) => x.rarity === 'epic').length;
+            }""")
+
+        # 记下 beta 登录时的张数，稍后断言它**因为 alpha 这次开奖涨了一张**（共享图鉴同步）
+        epic_before = epic_count2()
+
+        force_rarity("epic")
+        t7 = "E2E-测试-对方揭晓"
+        check("（alpha）强制 epic 添加成功", add_todo(page, t7))
+        wait_until(page, lambda: "解锁" in toast_text(), desc="（alpha）自己的解锁提示")
+        wait_add_settled(page, t7)
+
+        def toast2_text():
+            el = page2.locator("#toast")
+            return (el.text_content() or "") if el.count() > 0 else ""
+
+        revealed = wait_until(
+            page2,
+            lambda: "开出的" in toast2_text() and "史诗" in toast2_text(),
+            timeout_ms=20000,
+            desc="（beta）对方开出的揭晓提示",
+        )
+        check("对方端收到揭晓提示（含归属，旧实现恒为 true 时这条永远是空的）",
+              revealed, f"（beta）实际提示: {toast2_text()}")
+        # 回标校验：beta 播完提示会把 rarity_seen 写回 true，落库可见
+        seen_back = wait_until(
+            page,
+            lambda: page.evaluate("""async () => {
+                const { db } = await import('/js/db.js');
+                const list = await db.listTodos();
+                const t = list.find((x) => x.text === 'E2E-测试-对方揭晓');
+                return !!t && t.raritySeen === true;
+            }"""),
+            desc="对方端回标 rarity_seen=true",
+        )
+        check("对方端看过之后回标 rarity_seen=true（不会重复播）", seen_back)
+
+        # beta 端也能看到共享图鉴的新解锁（Realtime stickers INSERT）
+        shared = wait_until(
+            page2,
+            lambda: epic_count2() >= epic_before + 1,
+            timeout_ms=20000,
+            desc="（beta）共享图鉴同步到新解锁",
+        )
+        check("（beta）共享图鉴同步到新解锁", shared, f"登录时 {epic_before} 张 → 现在 {epic_count2()} 张")
+        context2.close()
+
     browser.close()
 
 # 本用例用 UI 软删除清不干净（deleted_at 只打时间戳），且开出的贴纸无法通过删待办撤销。

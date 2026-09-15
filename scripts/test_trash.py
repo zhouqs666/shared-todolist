@@ -107,9 +107,13 @@ with sync_playwright() as p:
     ))
     print(f"    [诊断] 二次点击前 purge 文本={page.locator('.trash-item', has_text=test_text).first.locator('.trash-item__btn--purge').text_content()}", flush=True)
     page.locator('.trash-item__btn--armed').first.click()
+    # 超时给到 25s（默认 10s 不够）：物理删除是一次真实请求，测试库免费层冷启动时实测会挂住
+    # 十几秒 —— 现场证据是按钮停在「删除中…」（截图 /tmp/e2e-timeout-彻底删除后回收站清空-*.png），
+    # 那是环境延迟，不是删除逻辑出错（2026-09-16 观测到 1 次，随后 6 次连跑全过）。
     check("彻底删除后回收站清空", wait_until(
         page,
         lambda: page.locator('.trash-item', has_text=test_text).count() == 0,
+        timeout_ms=25000,
         desc="彻底删除后回收站清空",
     ))
     if page.locator('.trash-item', has_text=test_text).count() > 0:
