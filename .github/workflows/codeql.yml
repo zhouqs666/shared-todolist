@@ -77,10 +77,7 @@ jobs:
         uses: github/codeql-action/init@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3.38.0
         with:
           languages: ${{ matrix.language }}
-          # 查询集刻意先留默认（default = 安全类为主）。
-          # 想更严可以改成 security-extended，但那是"更多查询 ⇒ 更多告警"，
-          # 应该先看清默认集在本仓库报什么、逐条定级（真问题/误报）之后再升，
-          # 而不是一上来就开最大档、然后因为满屏告警而把整个扫描当噪声忽略。
+          queries: security-extended   # ← 实验：临时放开，测完即回改
 
       # JavaScript/TypeScript 是解释型语言，CodeQL 直接从源码抽取，无需构建步骤。
       # （若将来加了 java/kotlin 语言项，这里需要补 autobuild 或手写 gradle 构建 ——
