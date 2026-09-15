@@ -192,8 +192,12 @@ jobs:
             export DEVICE_NAME="emulator-5554"
             export ANDROID_HOME="$ANDROID_HOME"
 
-            # 运行测试（脚本内部管理 Appium 生命周期）
-            bash app-e2e/scripts/ci-run.sh
+            # 跑测试：外面套一层「失败重试一次」（重试原因与实测证据写在
+            # app-e2e/scripts/ci-run-with-retry.sh 的文件头；真回归仍会失败，只吸收环境抖动）
+            #
+            # ⚠️ 这个 script 是**逐行**交给 /usr/bin/sh -c 执行的：不要在这里写跨行的
+            # for/if 结构（会被拆断成语法错误 —— 2026-09-15 踩过），多行逻辑写进脚本文件。
+            bash app-e2e/scripts/ci-run-with-retry.sh
 
       - name: Upload Allure results
         if: always()
