@@ -39,6 +39,12 @@ jobs:
         # 不依赖任何依赖，纯静态扫描 → 放在最前面，秒级失败，别浪费后面的安装时间。
         run: node scripts/check-test-guards.mjs
 
+      - name: Check E2E credential keys (three-way consistency)
+        # 同一类问题的第二例：本地 .env.test 手写、什么都有，CI 生成的那份少一个键
+        # 就会「本地绿 / CI 红」（2026-09-14：CI 缺 E2E_TEST_USERNAME，而 python 侧靠它登录）。
+        # 这里把「代码要读的键 / 模板 / 两个工作流生成的键」三方一致性变成机器判定。
+        run: node scripts/check-e2e-env-keys.mjs
+
       - name: Install dependencies
         run: npm ci
 

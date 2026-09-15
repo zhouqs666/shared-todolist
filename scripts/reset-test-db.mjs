@@ -11,7 +11,9 @@
  * 安全设计（铁律一）：
  *   - 硬闸一：只认 app-e2e/.env.test 的测试库；URL 等于 .env 的生产库则拒绝执行
  *   - 硬闸二：先 SELECT 列出待删 id 清单并打印，再按**显式 id** 删除（不用 LIKE 一把梭）
- *   - 只删 E2E- 前缀待办（含回收站）与图鉴贴纸；发现非 E2E 待办只报告不删
+ *   - 只删 web 通道的 E2E- 前缀待办（含回收站）与图鉴贴纸；发现非 E2E 待办只报告不删
+ *   - **APP 通道（`E2E-APP-`）的数据一律不碰**：那个前缀也以 `E2E-` 开头，按前缀一刀切
+ *     会删掉正在跑的 Appium 用例的夹具（2026-09-14 批次 C 发现两通道命名空间重叠）
  *
  * 用法：node scripts/reset-test-db.mjs [--dry-run]
  */
@@ -38,7 +40,9 @@ function loadDotenv(p) {
   return out;
 }
 
-const prodUrl = loadDotenv(path.join(ROOT, '.env')).SUPABASE_URL;
+// 生产 URL：本地读 .env，CI 用环境变量注入（与 serve-test.mjs / check-test-env.mjs 同一条约定）。
+// 拿不到就 fail-closed（下面的硬闸一），「必须证明隔离」这条没有放松。
+const prodUrl = process.env.SUPABASE_URL || loadDotenv(path.join(ROOT, '.env')).SUPABASE_URL;
 const testEnv = loadDotenv(path.join(ROOT, 'app-e2e', '.env.test'));
 const testUrl = testEnv.E2E_SUPABASE_URL;
 const testKey = testEnv.E2E_SUPABASE_SERVICE_ROLE_KEY;
@@ -55,6 +59,13 @@ if (testUrl === prodUrl) abort(`测试库 URL 与生产库相同：${testUrl}`);
 
 const sb = createClient(testUrl, testKey);
 const E2E_PREFIX = 'E2E-';
+// APP 通道（app-e2e / Appium）用 `E2E-APP-` 前缀。**它同样以 `E2E-` 开头**，
+// 所以按 `E2E-` 过滤会连它一起删 —— 正在跑的 Appium 用例会因此丢夹具而失败
+// （2026-09-14 批次 C 发现：两个通道的命名空间其实是重叠的）。
+// 跨通道只读不删：这是铁律一「不要删不属于你的数据」在测试库内部的对应要求。
+const APP_PREFIX = 'E2E-APP-';
+const isWebE2E = (t) => Boolean(t.text) && t.text.startsWith(E2E_PREFIX) && !t.text.startsWith(APP_PREFIX);
+const isAppE2E = (t) => Boolean(t.text) && t.text.startsWith(APP_PREFIX);
 
 console.log('\n=== 测试库归零 ===');
 console.log(`  目标库：${testUrl}`);
@@ -67,20 +78,26 @@ const { data: allTodos, error: e1 } = await sb
   .select('id, text, deleted_at');
 if (e1) abort(`读取 todos 失败：${e1.message}`);
 
-const targets = allTodos.filter((t) => t.text && t.text.startsWith(E2E_PREFIX));
-const others = allTodos.filter((t) => !(t.text && t.text.startsWith(E2E_PREFIX)));
+const targets = allTodos.filter(isWebE2E);
+const appData = allTodos.filter(isAppE2E);
+const others = allTodos.filter((t) => !isWebE2E(t) && !isAppE2E(t));
 
 const { data: allStickers, error: e2 } = await sb.from('stickers').select('id, sticker_key, unlocked_at');
 if (e2) abort(`读取 stickers 失败：${e2.message}`);
 
-console.log(`待删待办：${targets.length} 条（${E2E_PREFIX} 前缀）`);
+console.log(`待删待办：${targets.length} 条（web 通道，${E2E_PREFIX} 前缀且非 ${APP_PREFIX}）`);
 targets.forEach((t) => console.log(`   ${t.deleted_at ? '[回收站]' : '[活跃  ]'} "${t.text}"  ${t.id}`));
 
 console.log(`\n待删贴纸：${allStickers.length} 张（图鉴归零，让「首次解锁」路径重新可测）`);
 allStickers.forEach((s) => console.log(`   ${s.sticker_key}  ${s.id}`));
 
+if (appData.length) {
+  console.log(`\nℹ️ APP 通道待办 ${appData.length} 条（${APP_PREFIX}）—— 不属于本通道，刻意不删：`);
+  appData.forEach((t) => console.log(`   "${t.text}"  ${t.id}`));
+}
+
 if (others.length) {
-  console.log(`\n⚠️ 非 ${E2E_PREFIX} 前缀待办 ${others.length} 条 —— 不在清理范围内，仅报告：`);
+  console.log(`\n⚠️ 非测试前缀待办 ${others.length} 条 —— 不在清理范围内，仅报告：`);
   others.forEach((t) => console.log(`   "${t.text}"  ${t.id}`));
 }
 
@@ -114,12 +131,14 @@ if (todoIds.length) {
 // ===== 3. 验证 =====
 const { data: leftTodos } = await sb.from('todos').select('id, text');
 const { data: leftStickers } = await sb.from('stickers').select('id');
-const leftE2E = leftTodos.filter((t) => t.text && t.text.startsWith(E2E_PREFIX));
+const leftE2E = leftTodos.filter(isWebE2E);
+const leftApp = leftTodos.filter(isAppE2E);
 
 console.log('\n--- 验证 ---');
-console.log(`  剩余 ${E2E_PREFIX} 待办：${leftE2E.length} 条`);
+console.log(`  剩余 web 通道待办：${leftE2E.length} 条`);
 console.log(`  剩余贴纸：${leftStickers.length} 张`);
-console.log(`  剩余其它待办：${leftTodos.length - leftE2E.length} 条（非测试数据，未动）`);
+console.log(`  剩余 APP 通道待办：${leftApp.length} 条（不属于本通道，未动）`);
+console.log(`  剩余其它待办：${leftTodos.length - leftE2E.length - leftApp.length} 条（非测试数据，未动）`);
 
 if (leftE2E.length === 0 && leftStickers.length === 0) {
   console.log('\n✅ 测试库已归零\n');

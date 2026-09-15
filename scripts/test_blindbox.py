@@ -15,7 +15,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import re
 import json
 from playwright.sync_api import sync_playwright
-from e2e_common import resolve_base, load_test_creds, cleanup_test_data
+from e2e_common import (
+    resolve_base,
+    load_test_creds,
+    cleanup_test_data,
+    add_todo,
+    login,
+    wait_until,
+)
 
 BASE = resolve_base()
 TEST_USER, TEST_PASSWORD = load_test_creds()
@@ -56,16 +63,12 @@ with sync_playwright() as p:
     print("=" * 60)
     print("2. 登录（小宝宝账号）")
     print("=" * 60)
-    page.fill('#username', TEST_USER)
-    page.fill('#password', TEST_PASSWORD)
-    page.click('#submitBtn')
-    page.wait_for_timeout(5000)
-    on_home = "login" not in page.url
+    # 原来是「点登录 → 睡 5 秒 → 判断 URL」，冷启动（auth+profiles 2~10s）时是在赌。
+    # 改成等 body[data-app-ready]（app.js bindEvents 后的就绪标记）这个真实信号。
+    on_home = login(page, BASE, TEST_USER, TEST_PASSWORD, timeout_ms=30000)
     check("登录成功进入主页", on_home, page.url)
 
     if on_home:
-        page.wait_for_timeout(2500)
-
         print()
         print("=" * 60)
         print("3. 主页元素验证")
@@ -132,33 +135,41 @@ with sync_playwright() as p:
         # 用固定 sleep 会因 Supabase 冷启动波动（auth+profiles 2~10s）而时序脆弱，改等真实信号
         page.wait_for_selector('#todoList .todo, #todoList .todo-list__empty', timeout=30000)
         page.locator('#stickerEntry').click()
-        page.wait_for_timeout(800)
-        modal_visible = page.locator('#stickerModal').is_visible()
-        check("图鉴弹层打开", modal_visible)
+        check("图鉴弹层打开", wait_until(
+            page,
+            lambda: page.locator('#stickerModal').is_visible(),
+            desc="图鉴弹层可见",
+        ))
+        # 注意：弹层可见 ≠ 格子渲染完成。openStickerBook() 是「先显示弹层 → await db.listStickers()
+        # → renderStickerBook()」，所以必须等格子真的渲染出来再数（原来写死 800ms 是在赌这个 await）。
+        # 等「出现了格子」这个就绪信号，再去断言**数量是 12** —— 断言本身没有被等掉。
+        cells_rendered = wait_until(
+            page,
+            lambda: page.locator('.sticker-cell').count() > 0,
+            desc="图鉴格子渲染",
+        )
         cell_count = page.locator('.sticker-cell').count()
-        check("贴纸格子数=12", cell_count == 12, f"实际 {cell_count}")
+        check("贴纸格子数=12", cells_rendered and cell_count == 12, f"实际 {cell_count}")
         progress_text = page.locator('#stickerProgress').text_content()
         check("进度条显示 X/12", "/ 12" in progress_text or "/12" in progress_text, f"实际: {progress_text}")
         page.screenshot(path="/tmp/blindbox-stickerbook.png", full_page=True)
-        # 关闭图鉴弹层，避免遮挡后续操作
+        # 关闭图鉴弹层，等它真的收起再继续，避免遮挡后续操作
         page.locator('#stickerModalClose').click()
-        page.wait_for_timeout(500)
+        wait_until(
+            page,
+            lambda: not page.locator('#stickerModal').is_visible(),
+            desc="图鉴弹层收起",
+        )
 
-        # 添加待办测试（验证 createTodo 降级容错）
+        # 添加待办测试（验证 createTodo 正常落库）
         print()
         print("=" * 60)
-        print("6. 添加待办（验证 createTodo 容错，因迁移未执行会降级）")
+        print("6. 添加待办")
         print("=" * 60)
         before_count = page.locator('#todoList .todo').count()
-        # 先点 FAB 打开添加面板
-        page.locator('#fabBtn').click()
-        page.wait_for_timeout(500)
-        page.fill('#todoInput', 'E2E-测试-盲盒功能验证')
-        page.wait_for_timeout(200)
-        page.locator('#addBtn').click()
-        page.wait_for_timeout(3000)
+        check("添加待办成功（列表出现）", add_todo(page, 'E2E-测试-盲盒功能验证'))
         after_count = page.locator('#todoList .todo').count()
-        check("添加待办成功（数量+1）", after_count == before_count + 1, f"前{before_count} 后{after_count}")
+        check("列表数量 +1", after_count == before_count + 1, f"前{before_count} 后{after_count}")
 
         page.screenshot(path="/tmp/blindbox-after-add.png", full_page=True)
 

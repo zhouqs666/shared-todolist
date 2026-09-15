@@ -13,7 +13,16 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from playwright.sync_api import sync_playwright
-from e2e_common import resolve_base, load_test_creds, make_checker, cleanup_test_data
+from e2e_common import (
+    resolve_base,
+    load_test_creds,
+    make_checker,
+    cleanup_test_data,
+    add_todo,
+    login,
+    wait_toast_gone,
+    wait_until,
+)
 
 BASE = resolve_base()
 TEST_USER, TEST_PASSWORD = load_test_creds()
@@ -30,14 +39,7 @@ with sync_playwright() as p:
     page.on("pageerror", lambda e: errors.append(f"[pageerror] {e}"))
 
     print("== 1. 登录 ==", flush=True)
-    page.goto(f"{BASE}/login.html", wait_until="domcontentloaded")
-    page.wait_for_selector('#username', timeout=15000)
-    page.fill('#username', TEST_USER)
-    page.fill('#password', TEST_PASSWORD)
-    page.click('#submitBtn')
-    page.wait_for_selector('.topbar__avatar', timeout=15000)
-    page.wait_for_timeout(1500)
-    check("登录成功进入主页", "login" not in page.url, page.url)
+    check("登录成功进入主页", login(page, BASE, TEST_USER, TEST_PASSWORD), page.url)
 
     # 清空离线队列（隔离上次残留），不影响登录态
     page.evaluate("() => localStorage.removeItem('youai_offline_queue')")
@@ -46,16 +48,14 @@ with sync_playwright() as p:
 
     print("== 2. 断网 ==", flush=True)
     context.set_offline(True)
-    page.wait_for_timeout(600)
-    check("浏览器判定离线", page.evaluate("() => navigator.onLine === false"))
+    check("浏览器判定离线", wait_until(
+        page,
+        lambda: page.evaluate("() => navigator.onLine === false"),
+        desc="navigator.onLine 变为 false",
+    ))
 
     print("== 3. 离线添加待办 → pending ==", flush=True)
-    page.locator('#fabBtn').click()
-    page.wait_for_selector('#addPanel.add-panel--show', timeout=5000)
-    page.fill('#todoInput', test_text)
-    page.locator('#addBtn').click()
-    page.wait_for_selector(f'.todo:has-text("{test_text}")', timeout=8000)
-    check("离线添加后本地显示", page.locator('.todo', has_text=test_text).count() >= 1)
+    check("离线添加后本地显示", add_todo(page, test_text))
     check("带 pending 态", page.locator(f'.todo--pending:has-text("{test_text}")').count() >= 1)
     check("显示「待同步」小标", page.locator('.todo__pending-badge', has_text='待同步').count() >= 1)
     check("已入队", page.evaluate(
@@ -64,30 +64,46 @@ with sync_playwright() as p:
     print("== 4. 恢复网络 → 自动补发 ==", flush=True)
     context.set_offline(False)
     # 等 online 事件触发 replay，pending 被真实待办替换后 detach
-    page.wait_for_selector('.todo--pending', state='detached', timeout=20000)
-    page.wait_for_timeout(1500)
+    page.wait_for_selector('.todo--pending', state='detached', timeout=30000)
     check("补发后 pending 消失", page.locator(f'.todo--pending:has-text("{test_text}")').count() == 0)
-    check("补发后真实待办存在", page.locator('.todo', has_text=test_text).count() >= 1)
+    check("补发后真实待办存在", wait_until(
+        page,
+        lambda: page.locator('.todo', has_text=test_text).count() >= 1,
+        desc="补发后真实待办出现",
+    ))
     check("「待同步」小标已移除", page.locator('.todo__pending-badge', has_text='待同步').count() == 0)
-    check("队列已清空", page.evaluate(
-        "() => JSON.parse(localStorage.getItem('youai_offline_queue') || '[]').length === 0"))
+    check("队列已清空", wait_until(
+        page,
+        lambda: page.evaluate("() => JSON.parse(localStorage.getItem('youai_offline_queue') || '[]').length === 0"),
+        desc="离线队列清空",
+    ))
 
     print("== 5. 清理测试数据（软删除 + 彻底删除）==", flush=True)
     page.locator('.todo', has_text=test_text).first.click(button='right')
     page.wait_for_selector('.action-sheet__icon-btn[aria-label="删除"]', timeout=5000)
     page.locator('.action-sheet__icon-btn[aria-label="删除"]').click()
-    page.wait_for_timeout(5500)  # 等撤销 toast 消失
-    check("主列表已移除", page.locator('.todo', has_text=test_text).count() == 0)
+    wait_toast_gone(page)  # 等 5 秒撤销窗口过去（原来写死 5500ms）
+    check("主列表已移除", wait_until(
+        page,
+        lambda: page.locator('.todo', has_text=test_text).count() == 0,
+        desc="删除后待办离开主列表",
+    ))
     page.locator('.topbar__avatar').click(button='right')
     page.wait_for_selector('.account-menu__item', timeout=5000)
     page.locator('.account-menu__item', has_text='回收站').first.click()
     page.wait_for_selector('.trash-item', timeout=8000)
-    purge = page.locator('.trash-item', has_text=test_text).first.locator('.trash-item__btn--purge')
-    purge.click()
-    page.wait_for_timeout(500)
+    page.locator('.trash-item', has_text=test_text).first.locator('.trash-item__btn--purge').click()
+    wait_until(
+        page,
+        lambda: page.locator('.trash-item__btn--armed').count() >= 1,
+        desc="彻底删除待确认态出现",
+    )
     page.locator('.trash-item__btn--armed').first.click()
-    page.wait_for_timeout(3000)
-    check("测试数据已彻底清理", page.locator('.trash-item', has_text=test_text).count() == 0)
+    check("测试数据已彻底清理", wait_until(
+        page,
+        lambda: page.locator('.trash-item', has_text=test_text).count() == 0,
+        desc="彻底删除后回收站清空",
+    ))
 
     print("== 5b. 冷启动补发（队列残留 + 联网重开）==", flush=True)
     test_text2 = 'E2E-测试-离线冷启动'
@@ -98,25 +114,35 @@ with sync_playwright() as p:
       localStorage.setItem('youai_offline_queue', JSON.stringify(q));
     }""", test_text2)
     page.reload(wait_until='domcontentloaded')
-    page.wait_for_selector('.topbar__avatar', timeout=15000)
-    page.wait_for_selector(f'.todo:has-text("{test_text2}")', timeout=15000)
+    page.wait_for_selector('.topbar__avatar', timeout=30000)
+    page.wait_for_selector(f'.todo:has-text("{test_text2}")', timeout=30000)
     check("冷启动自动补发并显示", page.locator('.todo', has_text=test_text2).count() >= 1)
-    check("冷启动后队列清空", page.evaluate(
-        "() => JSON.parse(localStorage.getItem('youai_offline_queue') || '[]').length === 0"))
+    check("冷启动后队列清空", wait_until(
+        page,
+        lambda: page.evaluate("() => JSON.parse(localStorage.getItem('youai_offline_queue') || '[]').length === 0"),
+        desc="冷启动补发后队列清空",
+    ))
     # 清理冷启动场景的测试数据
     page.locator('.todo', has_text=test_text2).first.click(button='right')
     page.wait_for_selector('.action-sheet__icon-btn[aria-label="删除"]', timeout=5000)
     page.locator('.action-sheet__icon-btn[aria-label="删除"]').click()
-    page.wait_for_timeout(5500)
+    wait_toast_gone(page)
     page.locator('.topbar__avatar').click(button='right')
     page.wait_for_selector('.account-menu__item', timeout=5000)
     page.locator('.account-menu__item', has_text='回收站').first.click()
     page.wait_for_selector('.trash-item', timeout=8000)
     page.locator('.trash-item', has_text=test_text2).first.locator('.trash-item__btn--purge').click()
-    page.wait_for_timeout(500)
+    wait_until(
+        page,
+        lambda: page.locator('.trash-item__btn--armed').count() >= 1,
+        desc="冷启动待办彻底删除待确认态出现",
+    )
     page.locator('.trash-item__btn--armed').first.click()
-    page.wait_for_timeout(3000)
-    check("冷启动测试数据已清理", page.locator('.trash-item', has_text=test_text2).count() == 0)
+    check("冷启动测试数据已清理", wait_until(
+        page,
+        lambda: page.locator('.trash-item', has_text=test_text2).count() == 0,
+        desc="冷启动测试数据已彻底删除",
+    ))
 
     print("== 6. 页面报错检查 ==", flush=True)
     real = [e for e in errors if "Failed to fetch" not in e and "net::" not in e and "favicon" not in e]

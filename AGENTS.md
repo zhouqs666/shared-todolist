@@ -36,20 +36,29 @@
 
 - ✅ **跑测试前必须先起测试专用服务器**（铁律一）：
   ```bash
-  node scripts/serve-test.mjs     # 测试服务器，端口 3100，连独立测试库
-  node scripts/reset-test-db.mjs  # 归零测试库（清 E2E 残留 + 贴纸）
-  python3 scripts/test_undo_complete.py   # 测试脚本自动连 3100 + 自证隔离
+  node scripts/serve-test.mjs      # 测试服务器，端口 3100，连独立测试库
+  node scripts/reset-test-db.mjs   # 归零测试库（清 E2E 残留 + 贴纸）
+  node scripts/run-web-e2e.mjs     # 推荐：一次跑完 4 个用例（逐个归零 + 失败重试一次 + flaky 显式标记 + 汇总表）
+  python3 scripts/test_undo_complete.py   # 也可单跑某个：脚本自动连 3100 + 自证隔离
   ```
   测试脚本默认连 3100（测试库），**禁止指向 3000**（那是生产库）。指向生产会被 `e2e_common.py` 直接拦下、退出码 2。
+  单跑用例时记得自己先归零；`run-web-e2e.mjs` 会在每个用例前自动归零（用例之间不留隐含依赖）。
 - ✅ **测试库必须归零**：`tests` 末尾会自动调 `reset-test-db.mjs` 硬删；`E2E_KEEP_DATA=1` 可保留现场排查。
   **为什么不能只靠测试内部的删除**：那是**软删除**（`deleted_at` 打时间戳），行永远留在表里 —— 看着清了，其实越跑越脏。贴纸更麻烦：`sticker_key` 有 UNIQUE 约束、解锁幂等，一旦解锁就再也测不了「首次解锁」路径（开奖弹窗/庆祝动画/图鉴+1），盲盒的核心卖点在测试环境里失效。
 - ✅ 核心流程 / 双端同步：用 Playwright 跑真实业务流程（Python 脚本 `scripts/test_*.py`，双账号 E2E，测试账号来自 `app-e2e/.env.test`）
 - ✅ 局部回归：Node 脚本 `scripts/test_*.mjs` 跑在生产服务（:3000）上，**只读** —— 已由 `_lib-readonly-guard.mjs` 在网络层阻断写请求（不是靠自觉，也不是靠 token 恰好无效）；并由 `scripts/check-test-guards.mjs` 在 CI 里做**结构性检查**（漏挂守卫直接红），不靠记忆
 - ✅ 必须覆盖：核心功能、边界情况、错误处理、Realtime 双端同步
 - ✅ **合并前置门 = CI required checks 全绿**（`ci.yml` 三个 job；main 已开分支保护，红灯合不进去）。
-  ⚠️ 但**门禁覆盖 ≠ 测试全覆盖**：4 个双账号 Playwright E2E（`scripts/test_blindbox.py` / `test_offline.py` /
-  `test_trash.py` / `test_undo_complete.py`）**尚未进 CI** —— 本地不跑就等于没覆盖（补进 CI 见批次 C）。
-  另注意：**CI 绿灯 ≠ 交付物可用** —— 制品/发布结果要单独回读验证（见铁律三 `verify-release.mjs`）
+  ⚠️ 但**门禁覆盖 ≠ 测试全覆盖**，这是**有意的分层**（2026-09-14 批次 C 定型）：
+  - **PR 门禁要「快而稳」**：只放 Node 回归 + admin Playwright E2E + workflow 静态检查。跑得慢会拖住每次合并，
+    跑得不稳会让团队开始无视红灯。
+  - **全量回归要「慢而全」**：4 个双账号 Playwright E2E（`scripts/test_blindbox.py` / `test_offline.py` /
+    `test_trash.py` / `test_undo_complete.py`）走 **`.github/workflows/e2e-web-full.yml`** ——
+    **每晚 02:00（北京）定时**跑（`schedule`，cron 按 UTC 写）+ 可手动 `workflow_dispatch`，
+    由 `scripts/run-web-e2e.mjs` 驱动（逐文件归零 / 失败重试一次 / FLAKY 显式标记 / 汇总进 Run Summary）。
+  - ⚠️ **该工作流不设 required check**（它不在 PR 上运行；设了会让 check 永远停在 "Expected" 而卡死 PR）。
+    本地不跑也仍等于没覆盖 —— 夜里会跑，但**改动等待期内**要自己先跑一遍。
+  - 另注意：**CI 绿灯 ≠ 交付物可用** —— 制品/发布结果要单独回读验证（见铁律三 `verify-release.mjs`）
 - ✅ 测试要真实验证结果（截图、断言、状态检查），不能只看"没报错"就算过
 - ✅ **测试前跑两个 preflight**：
   - `node scripts/check-test-env.mjs` —— Web 通道隔离（测试库 ≠ 生产库）
@@ -282,9 +291,15 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 - **Capacitor 插件**：`SystemBars` / `LocalNotifications` / `SplashScreen` / `CapacitorUpdater`（热更）/ 自研 `ApkInstaller`（APK 自更）
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
 - **测试**：Playwright（Python 双账号 E2E，连测试库）+ Node 局部回归（可 mock）
-- **CI/CD**：GitHub Actions 三个 workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint**）、
-  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，有 `paths` 过滤）、`release-web.yml`（热更新 CD，仅手动触发）。
+- **CI/CD**：GitHub Actions 四个 workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** + 两个结构性检查）、
+  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，有 `paths` 过滤）、`release-web.yml`（热更新 CD，仅手动触发）、
+  `e2e-web-full.yml`（**定时全量回归**：每晚 02:00 北京 / `schedule` + `workflow_dispatch`，跑 4 个双账号 Python E2E）。
   main 已开**分支保护**，required checks 取 `ci.yml` 三个 job；改代码走分支 + PR（见「铁律五 → main 分支保护」）
+  ⚠️ `schedule` 的 cron **按 UTC 解释**，且定时任务只在**默认分支**上运行（夜里跑的是 main 上已合并的代码）
 - **本地服务**：`node scripts/serve.mjs`（端口 3000，**生产库**，仅手动自测）／`node scripts/serve-test.mjs`（端口 3100，**测试库**，跑 E2E 必须用这个）
-- **测试库维护**：`node scripts/reset-test-db.mjs`（归零，硬删 E2E 残留 + 贴纸）／`node scripts/check-test-env.mjs`（隔离自检）／`node app-e2e/scripts/check-test-schema.mjs`（schema 契约）
+- **测试库维护**：`node scripts/reset-test-db.mjs`（归零，硬删 web 通道 E2E 残留 + 贴纸）／`node scripts/check-test-env.mjs`（隔离自检）／`node app-e2e/scripts/check-test-schema.mjs`（schema 契约）
+- **Web E2E 跑批**：`node scripts/run-web-e2e.mjs`（逐个归零 + 失败重试一次 + flaky 显式标记 + Run Summary；`--files` / `--keep-data` / `--no-retry` / `--fail-on-flaky`）；
+  依赖钉在 `scripts/requirements-e2e.txt`（Python playwright，CI 与本地同版本）
+- **结构性检查（CI required job 里跑，都是纯静态、秒级失败）**：`check-test-guards.mjs`（只读守卫）／
+  `check-e2e-env-keys.mjs`（凭证键三方一致：代码读取 / 模板 / 两个工作流生成）
 - **埋点状态**：⚠️ 目前零埋点，无法回答"哪个功能最常用""两人一天互动几次"。补基础埋点（北极星 = 双端同日活跃天数）在路线图 P0。

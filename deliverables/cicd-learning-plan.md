@@ -222,6 +222,28 @@
 > 在此之前 CI 只是「有记录」：红了也不影响合并。
 > 阶段 4 的一个认知修正：**并非所有 CD 都该 push 自动触发**——只读的验证环节可以 push 触发，
 > 但写生产（发布 APP、改线上数据）必须留人工门，两者风险等级不同（详见 `.workbuddy/memory/cicd-handoff.md`）。
+>
+> **CI 侧已补（2026-09-14，批次 C）：测试分层 + 定时全量回归 + flaky 治理**
+> ① **4 个双账号 Playwright E2E 真正进了 CI**：新增 `.github/workflows/e2e-web-full.yml`，
+>   触发方式 = **`schedule`（每晚 02:00 北京，cron 按 UTC 写 `0 18 * * *`）+ 手动 `workflow_dispatch`**。
+>   这是本项目第一次实践 cron 触发。**刻意不设 required check**：它不在 PR 上跑，设了 check 会永远停在
+>   "Expected" 卡死 PR（batch B 的坑）。由此形成**分层触发**：PR 门禁要快而稳、全量回归可以慢而全。
+> ② **执行体是 `scripts/run-web-e2e.mjs` 而不是 YAML 里的 for 循环**：逐个用例前归零测试库（+ 硬删贴纸，
+>   让「首次解锁」路径重新可测）、失败**重试一次但把结果显式记为 FLAKY**（重试是兜底不是解药 ——
+>   静默重试会把真 bug 洗成绿灯）、最后出汇总表并写进 Run Summary（趋势可回溯）。
+> ③ **flaky 治理：把「等固定毫秒」换成「等条件」**。4 个脚本里 20 多处 `wait_for_timeout(N)`，
+>   多数不是「需要等这么久」而是「在赌这段时间够」。换成条件等待后当场**暴露一个真问题**：
+>   `#stickerModal` 的「可见」早于 12 个格子渲染（`openStickerBook()` 是先显示弹层再
+>   `await listStickers()`），原先的 `sleep(800)` 一直在替这个异步 gap 兜底。
+>   同时给被测应用加了**就绪信号** `body[data-app-ready]`（app.js 在 `bindEvents()` 后打标记）——
+>   根治「头像已出现但事件还没绑定，点击落在空处」这个竞态（`test_sticker_wiggle.mjs` 曾因此被误诊为 CI flaky）。
+>   全量单轮耗时从 ~117s 降到 ~84s（删掉的等待本来就在白等）。
+> ④ **补齐 CI 通道的两处缺口**（都属于「本地绿 / CI 红」的经典成因）：
+>   隔离守卫脚本改为「`.env` 或 `SUPABASE_URL` 环境变量」二选一（CI 不落 `.env`，且**只给 URL 不给写权限**：
+>   service_role key 只存在于发布链路）；CI 生成的 `app-e2e/.env.test` 补上 `E2E_TEST_USERNAME`
+>   （App 登录框收的是**用户名**，此前 CI 只注入了 `E2E_TEST_EMAIL`，python 侧必然拿不到凭证）。
+> ⑤ **把这次的坑变成机器判定**：新增 `scripts/check-e2e-env-keys.mjs`（凭证键三方一致：代码读取 /
+>   模板 / 两个工作流生成，已进 CI required job）—— 与 `check-test-guards.mjs`、`check-test-schema.mjs` 同一思路。
 
 ### 阶段 5：全链路整合 + 面试准备
 
