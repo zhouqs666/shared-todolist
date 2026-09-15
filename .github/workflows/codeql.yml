@@ -109,7 +109,7 @@ jobs:
       # （若将来加了 java/kotlin 语言项，这里需要补 autobuild 或手写 gradle 构建 ——
       #  这是 advanced setup 相对 default setup 唯一真正多出来的心智负担。）
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3.38.0
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           # category 决定结果在 Security 页面里的分组名。
           # 单语言时它只是好看；一旦加了第二种语言，没有它两路结果会互相覆盖。
