@@ -41,7 +41,12 @@ function loadDotenv(filePath) {
 }
 
 const prodEnv = loadDotenv(path.join(ROOT, '.env'));
-const PROD_URL = prodEnv.SUPABASE_URL;
+// 生产 URL 的两种来源：本地读 .env；CI（.github/workflows/e2e-web-full.yml）直接用环境变量注入。
+// 刻意不在 CI 里落一个 .env 文件：那些作业只需要一个「用于证明隔离」的地址，
+// 不需要生产的任何写权限（service_role key 只给发布链路）。地址本身也不是秘密 ——
+// 它就是 public/js/supabase.js 里硬编码、随客户端一起分发的那一个。
+// 读不到仍然 fail-closed（下面会拒绝启动），这条保证没有被削弱。
+const PROD_URL = process.env.SUPABASE_URL || prodEnv.SUPABASE_URL;
 
 const testEnv = loadDotenv(path.join(ROOT, 'app-e2e', '.env.test'));
 // 允许环境变量覆盖，便于 CI

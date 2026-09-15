@@ -37,7 +37,7 @@ const ROOT = path.dirname(path.dirname(new URL(import.meta.url).pathname));
 const prodEnv = loadDotenv(path.join(ROOT, '.env'));
 const testEnv = loadDotenv(path.join(ROOT, 'app-e2e', '.env.test'));
 
-const prodUrl = prodEnv.SUPABASE_URL;
+const prodUrl = process.env.SUPABASE_URL || prodEnv.SUPABASE_URL;
 const testUrl = testEnv.E2E_SUPABASE_URL;
 const testKey = testEnv.E2E_SUPABASE_SERVICE_ROLE_KEY || testEnv.E2E_SUPABASE_ANON_KEY;
 

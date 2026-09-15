@@ -1,0 +1,195 @@
+name: Web E2E Full (定时全量回归)
+
+# ============================================================================
+# 为什么是「定时」而不是 PR 门禁（这是本工作流最重要的设计决策）
+# ----------------------------------------------------------------------------
+# 分层触发的行业实践：
+#   - PR 门禁（ci.yml）要**快而稳**：跑得慢会拖住每一次合并，跑得不稳会让团队开始
+#     无视红灯。所以 required check 里只放 Node 回归 + admin Playwright + actionlint。
+#   - 全量回归（本工作流）可以**慢而全**：4 个双账号 Playwright E2E 覆盖回收站/
+#     删除撤销/完成撤销/离线补发/盲盒图鉴 —— 价值最高、但也最依赖时序，
+#     放夜里跑，红了不影响任何人当天的工作，第二天照诊断流程查即可。
+#   ⚠️ 因此本工作流**刻意不进 main 的 required checks**（也不该进）：
+#      它不在 PR 上运行，设成 required 只会让 check 永远停在 "Expected"（批次 B 的坑）。
+#
+# 定时触发（cron）在本项目是第一次实践，两个易错点写在下面：
+#   1. GitHub 的 cron 一律按 **UTC** 解释，不按本地时区。北京 = UTC+8。
+#   2. 定时任务只在**默认分支**上运行，且使用的是默认分支的最新提交 ——
+#      所以「夜里跑的是 main 上已合并的代码」，与「发布必须从 main 出包」是同一个道理。
+# ============================================================================
+
+on:
+  schedule:
+    # 每天 18:00 UTC = 次日 02:00 北京时间（避开本地开发时段）
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+    inputs:
+      files:
+        description: '只跑指定用例（逗号分隔，如 test_trash,test_offline；留空=全部）'
+        required: false
+        default: ''
+      keep_data:
+        description: '保留失败现场（不归零测试库，便于人工查看）'
+        type: boolean
+        required: false
+        default: false
+      fail_on_flaky:
+        description: 'flaky 也判失败（默认关：重试通过只告警，不阻断）'
+        type: boolean
+        required: false
+        default: false
+
+# 全量回归不能被中途打断（跑一半的回归没有意义），所以 cancel-in-progress: false。
+# 同一个测试库上也不要并发跑两套：它们会互相删数据（见下方「共享测试库」说明）。
+concurrency:
+  group: e2e-web-full
+  cancel-in-progress: false
+
+jobs:
+  web-e2e-full:
+    name: Web 全量回归 (Playwright + Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      # 只用来「证明测试库 ≠ 生产库」（scripts/serve-test.mjs / reset-test-db.mjs /
+      # check-test-env.mjs 都拿它做 fail-closed 比对）。
+      # 刻意**不给**任何生产的写权限：supabase service_role key 只存在于发布链路
+      # （release-web.yml），测试作业碰不到它 —— 拿不到写权限，就不存在误写生产的可能。
+      # 这个地址本身也不是秘密：它硬编码在 public/js/supabase.js 里，随客户端分发。
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      E2E_BASE: http://localhost:3100
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: scripts/requirements-e2e.txt
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          python -m pip install --upgrade pip
+          python -m pip install -r scripts/requirements-e2e.txt
+
+      # 浏览器二进制约 150MB，缓存后省 1~2 分钟；key 跟着 requirements 走，
+      # playwright 版本一变就自动换缓存（避免旧浏览器配新库的诡异失败）
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('scripts/requirements-e2e.txt') }}
+          restore-keys: playwright-${{ runner.os }}-
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Generate app-e2e/.env.test
+        # 与 e2e-app.yml 生成同一份文件、同样的键 —— 本地 .env.test 与 CI 的**同形**。
+        # 这个「同形」不是洁癖：本地能过、CI 却挂，最常见的原因就是环境变量少了一个
+        # （本次补的 E2E_TEST_USERNAME 正是这种情况：.py 用**用户名**登录，
+        #  而此前 CI 只注入了 E2E_TEST_EMAIL，于是 python 侧拿不到登录凭证）。
+        run: |
+          printf '%s\n' \
+            "E2E_SUPABASE_URL=${{ secrets.E2E_SUPABASE_URL }}" \
+            "E2E_SUPABASE_ANON_KEY=${{ secrets.E2E_SUPABASE_ANON_KEY }}" \
+            "E2E_SUPABASE_SERVICE_ROLE_KEY=${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}" \
+            "E2E_TEST_USERNAME=${{ secrets.E2E_TEST_USERNAME }}" \
+            "E2E_TEST_EMAIL=${{ secrets.E2E_TEST_EMAIL }}" \
+            "E2E_TEST_PASSWORD=${{ secrets.E2E_TEST_PASSWORD }}" \
+            > app-e2e/.env.test
+          echo "✓ .env.test 已生成（键位与 e2e-app.yml 一致）"
+
+      # 两个 preflight 都是「几十秒内快速失败」：与其让 4 个用例各挂一次、
+      # 再从「元素找不到」的日志里反推环境问题，不如先确认环境本身是对的。
+      - name: Preflight · Web 通道隔离检查（铁律一）
+        run: node scripts/check-test-env.mjs
+
+      - name: Preflight · 测试库 schema 契约
+        # 缺列/缺表会让 listTodos() 整体报错、界面静默空列表，E2E 只报「元素找不到」
+        # （2026-09-14 烧过好几轮 CI）。漂移时这里直接打印可复制的修复 SQL。
+        run: node app-e2e/scripts/check-test-schema.mjs
+
+      - name: Start test server (:3100)
+        # 测试服务器在内存里把 supabase.js 改写为测试库（生产文件零改动），
+        # 并暴露 /__dbinfo 供测试脚本自证隔离。绝不能用 :3000（那是生产库）。
+        run: |
+          nohup node scripts/serve-test.mjs > /tmp/serve-test.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3100/__dbinfo > /dev/null; then
+              echo "✓ 测试服务器已就绪（${i}s）"
+              cat /tmp/serve-test.log
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::测试服务器 30s 内未就绪"
+          cat /tmp/serve-test.log
+          exit 1
+
+      - name: Run full web regression
+        # 用脚本而不是内联 for 循环：逐文件归零测试库 + 失败重试一次 + FLAKY 显式标记 + 汇总表。
+        # 依赖注入一律走 env（不做内联表达式插值），避免输入被当成 shell 片段执行。
+        env:
+          INPUT_FILES: ${{ inputs.files }}
+          INPUT_KEEP_DATA: ${{ inputs.keep_data }}
+          INPUT_FAIL_ON_FLAKY: ${{ inputs.fail_on_flaky }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -n "${INPUT_FILES}" ]; then args+=(--files "${INPUT_FILES}"); fi
+          if [ "${INPUT_KEEP_DATA}" = "true" ]; then args+=(--keep-data); fi
+          if [ "${INPUT_FAIL_ON_FLAKY}" = "true" ]; then args+=(--fail-on-flaky); fi
+          # `${args[@]+"${args[@]}"}` 而不是直接 `"${args[@]}"`：
+          # 后者在 `set -u` + 空数组下，bash 4.4 以前会报 unbound variable
+          # （本地只有 bash 3.2，写成可移植形式才**验得动** —— 验证不了的分支等于没验证）。
+          node scripts/run-web-e2e.mjs ${args[@]+"${args[@]}"}
+
+      - name: Upload failure screenshots
+        # 失败时的第一动作是**看截图**（阶段 3 的方法论沉淀）：
+        # 日志里的「元素找不到」永远只是表层现象。
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-e2e-screenshots
+          path: /tmp/*.png
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: serve-test-log
+          path: /tmp/serve-test.log
+          if-no-files-found: warn
+          retention-days: 7
+
+# ---------------------------------------------------------------------------
+# 共享测试库：已知的并发风险（留档，不假装不存在）
+# ---------------------------------------------------------------------------
+# 同一个 Supabase 测试项目被三个工作流共用：
+#   - ci.yml 的 admin E2E（每次 PR / push 都跑，数据前缀 `E2E-`）
+#   - e2e-app.yml 的 Appium E2E（paths 过滤，数据前缀 `E2E-APP-`）
+#   - 本工作流（定时，数据前缀 `E2E-测试-`）
+# 两套 E2E 同时跑会互相删数据（各自都会「归零」自己的前缀范围）。
+#   - 已处理：reset-test-db.mjs 现在跳过 `E2E-APP-`，web 通道不会再删 APP 通道的夹具。
+#   - 仍有残余：本工作流撞上 ci.yml 的 admin E2E（两者都按 `E2E-` 清）时，可能互删。
+#     概率极低（定时在 02:00，且窗口只有两三分钟）；真发生时只是**一次红灯**，
+#     重跑即可，不会损坏任何真实数据（测试库而已）。
+#   - 若真被撞到，修法是把三者放到同一个仓库级并发组（GitHub 的并发组是仓库范围的，
+#     不同工作流同名即互斥）：
+#       concurrency: { group: e2e-test-db, cancel-in-progress: false }
+#     代价是同分支连续 push 不再互相取消（要排队），所以先不做，等真被咬到再说。
+# ---------------------------------------------------------------------------

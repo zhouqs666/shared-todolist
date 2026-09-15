@@ -175,6 +175,13 @@ function hideLoading() {
   // 核心交互尽早绑定（不依赖通知初始化，避免用户在通知加载期间点击无响应）
   bindEvents();
 
+  // 可交互就绪标记（供 E2E 等待，见 scripts/e2e_common.py 的 login()）。
+  // 为什么不能靠「头像出现」判断：renderMe() 之后还有 await db.listProfiles() 才走到这里，
+  // 而 FAB / 图鉴入口在静态 HTML 里早就 visible 了 —— 测试若在这段间隙点击，
+  // 会点在尚未绑定的处理器上（本项目 test_sticker_wiggle.mjs 被这个竞态坑过）。
+  // 这行不改变任何行为，只是把「已经绑定完成」变成可观测的信号。
+  document.body.dataset.appReady = '1';
+
   // 图鉴入口尽早绑定（只绑 DOM 事件，不依赖 auth/listTodos/通知/stickers 数据）。
   // 修复（2026-09-07）：initStickerBook 原在 listStickers 之后，而 listStickers 冷启动慢（3~20s），
   // 导致图鉴入口在冷启动头几秒点不开。提前到 bindEvents 后（auth+profiles 一完成即可点）。

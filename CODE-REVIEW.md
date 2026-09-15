@@ -77,8 +77,18 @@
 - 🔴 涉及 Realtime 的改动是否验证了双端同步（不是只看「没报错」）？
 - 🟡 边界 + 错误处理是否覆盖。
 - 🔴 无法验证的硬限制，交付时必须明确列出「未验证 X / 原因 Y」，禁止把「没测」说成「已验证」。
+- 🔴 **等待是「等条件」还是「等固定毫秒」？** `waitForTimeout(3000)` / `sleep 5` 这类固定等待，
+  本质是在赌「这段时间够」——赌注是 CI 机器比本地慢几倍。判断法：**删掉这个 sleep 会不会挂？**
+  会挂 → 说明它在偷偷同步某个异步过程，应该换成显式条件等待（Playwright `expect`/`wait_for_selector`、
+  pytest 轮询断言、本项目 `e2e_common.wait_until`）。
+  血泪：批次 C 把 4 个 `.py` 里的固定 sleep 换成条件等待时，当场暴露出 `#stickerModal` 的
+  「可见」早于 12 个格子渲染（`openStickerBook()` 是先显示弹层再 `await listStickers()`）——
+  原先的 `sleep(800)` 一直在替这个异步 gap 兜底。**换成条件等待时，条件必须是「就绪」而不是「断言」**
+  （等「出现了格子」再断言「是 12 个」，不要把断言本身等掉，那等于删掉了检查）。
+- 🟡 测试脚本里是否有「跨通道共用测试库」的清理逻辑？统一用 `E2E-` 前缀过滤会**连其他通道的夹具一起删**
+  （`E2E-APP-` 也以 `E2E-` 开头）。清理必须按自己的命名空间精确匹配。
 
-#### F2. 工作流 / CI 改动专项（2026-09-14 批次 A/B 复盘新增）
+#### F2. 工作流 / CI 改动专项（2026-09-14 批次 A/B 复盘新增；批次 C 补充 2 条）
 
 > 触发条件：本次改动碰了 `.github/workflows/**` 或 `scripts/release*.mjs`（发布/CD 类脚本）。
 
@@ -98,6 +108,20 @@
   说一句 `Rule "shellcheck" was disabled` —— 不看 verbose 会误以为已经全查过。
 - 💭 失败诊断是否可从 CLI 读到？Run Summary 用 `tee -a "$GITHUB_STEP_SUMMARY"` 同时进日志，
   `gh run view --log` 即可核查，不必开浏览器。
+- 🔴 **CI 生成的环境文件是否与本地「同形」？** 本地 `.env.test` 是手写的、什么都有；CI 那份是
+  `printf` 出来的，少一个键就是「本地绿 / CI 红」。血泪（批次 C）：CI 只注入了 `E2E_TEST_EMAIL`，
+  而 python 侧靠 `E2E_TEST_USERNAME` 登录 → CI 上必然拿不到凭证。
+  已有机器判定：`node scripts/check-e2e-env-keys.mjs`（代码读取 / 模板 / 两个工作流三方一致，
+  已进 CI required job）。
+- 🔴 **带 `schedule` 的定时任务，cron 是否按 UTC 写的？** GitHub 的 cron **一律按 UTC** 解释
+  （北京 = UTC+8：要跑 02:00 CST 就得写 `0 18 * * *`），且定时任务只在**默认分支**上运行。
+  写成本地时间会得到「时间对不上」而无人报错的静默错位。
+- 🟡 **同一个测试库/环境是否会被多个工作流并发使用？** 各套用例的「归零」会互删对方夹具。
+  要么共用同一个仓库级 `concurrency.group`（同名即互斥），要么按命名空间精确隔离；
+  「概率很低」不是设计，是运气。
+- 🟡 定时/全量回归是否被误加进 required checks？**不该** —— 它不在 PR 上运行，设成 required
+  会让 check 永远停在 "Expected"（与上面 `paths` 过滤那条同因）。分层触发的分工是：
+  PR 门禁要**快而稳**，全量回归可以**慢而全**。
 
 ---
 
@@ -172,6 +196,22 @@
 [2026-09-14] 批次 A 热更新接入 CD：🔴1（.release-tmp 隐藏目录致制品静默未上传，真跑 CI 才暴露；已修）🟡2（actionlint 缺 shellcheck 静默跳过 / 抽 _lib-env 时残留 2 个脚本未迁移，已留注释豁免）→ 通过
 [2026-09-14] 批次 B actionlint 进 CI + 分支保护：🔴0 🟡0（新增 F2 工作流专项 8 条，把批次 A/B 的坑固化成检查项）→ 通过
 [2026-09-14] 铁律审计第一批（两条 🔴）：🔴2（① `test_sticker_wiggle.mjs` 缺只读守卫，实测会向生产库发 PATCH profiles + 两个 RPC 写请求；② 文档引用了从不存在的 `cleanup-deleted.mjs`）→ 已修，🟡1（该脚本长期被记为「CI flaky」，真因是竞态 + 3 处从没跑到过的测试代码 bug；已修但仍有残余时序敏感，未并入 CI，留待批次 C 治理）
+[2026-09-14] 批次 C 4 个 Web E2E 进定时全量回归 + flaky 治理：🔴0 🟡0 → 通过
+  ⚠️ 附带发现 1 个**产品缺陷（未修，用户决定「先记录在案，后续批次修」）**：
+  **隐藏款待办完成时，toast 上的「撤销」按钮会被抹掉（约 15% 命中，命中即必现）**
+  - 链路：`confetti-effects.js` 的 `celebrateCompletion()` 先 `showToast(phrase, {action:{label:'撤销'}})`，
+    紧接着调 `celebrateRarity()`；而 `blindbox.js:191` 的 `celebrateRarity()` 又 `showToast(meta.toast)`
+    → `toast.js` 的 `showToast` **复用单例 `#toast` 元素**（先 `textContent = ''` 再写）
+    → 第二次调用把第一次的内容**连同操作按钮一起清空**
+  - 影响：隐藏款（rare/epic/legendary，合计 ~15%）待办完成后 **toast 的撤销入口不可用**；
+    长按菜单的「撤销完成」不受影响（绕行路径存在，非数据安全类缺陷）
+  - 怎么发现的（方法论）：用例表现为「15% 概率超时的 flaky」。给用例加失败现场快照后拿到
+    `{cls:'todo todo--done todo--rare', toastText:'✨ 开出稀有款！', actionButtons:0}` ——
+    **随机 flaky 的根因可以是确定性的**：随机的是「命中哪种稀有度」，不是「会不会出问题」。
+    教训：**先拿现场证据（快照/截图），再谈"时序问题"**；「按经验调超时/加 sleep」会让这类缺陷永远查不出来。
+  - 当前处置：用例对该缺陷做**隔离（quarantine）**——普通款断言 toast 撤销按钮，命中隐藏款时
+    打印已知缺陷标注并改走菜单撤销路径验证状态可恢复。**隔离必须显式留痕**（不许静默跳过）：
+    只有输出了「跳过理由」才算合规，否则等于把缺陷洗成绿灯。
 ```
 
 ---

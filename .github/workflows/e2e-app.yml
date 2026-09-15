@@ -75,11 +75,14 @@ jobs:
           echo "✓ Java home 已设为 $JAVA_HOME"
 
       - name: Generate .env.test
+        # 键位与 e2e-web-full.yml 保持一致（同一个测试账号，两个通道各取所需：
+        # app-e2e 的夹具用 E2E_TEST_EMAIL 反查用户名，scripts/test_*.py 直接填 E2E_TEST_USERNAME）
         run: |
           printf '%s\n' \
             "E2E_SUPABASE_URL=${{ secrets.E2E_SUPABASE_URL }}" \
             "E2E_SUPABASE_ANON_KEY=${{ secrets.E2E_SUPABASE_ANON_KEY }}" \
             "E2E_SUPABASE_SERVICE_ROLE_KEY=${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}" \
+            "E2E_TEST_USERNAME=${{ secrets.E2E_TEST_USERNAME }}" \
             "E2E_TEST_EMAIL=${{ secrets.E2E_TEST_EMAIL }}" \
             "E2E_TEST_PASSWORD=${{ secrets.E2E_TEST_PASSWORD }}" \
             > app-e2e/.env.test
