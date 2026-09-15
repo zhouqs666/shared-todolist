@@ -11,6 +11,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# 最小权限（批次 D）：本工作流只读代码。仓库默认的 GITHUB_TOKEN 权限恰好也是 read，
+# 但**显式声明 > 依赖仓库默认值** —— 默认值是别人能在 Settings 里点一下改掉的东西，
+# 而工作流文件里的声明会跟着代码一起被 review。
+permissions:
+  contents: read
+
 # 取消旧 run：同一分支上有新 push 时，旧 run 自动取消（行业最佳实践，省 CI 资源）
 concurrency:
   group: ci-${{ github.ref }}
@@ -24,10 +30,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -44,6 +50,14 @@ jobs:
         # 就会「本地绿 / CI 红」（2026-09-14：CI 缺 E2E_TEST_USERNAME，而 python 侧靠它登录）。
         # 这里把「代码要读的键 / 模板 / 两个工作流生成的键」三方一致性变成机器判定。
         run: node scripts/check-e2e-env-keys.mjs
+
+      - name: Check actions are pinned to commit SHAs
+        # 第三例（批次 D）：把「供应链安全」变成机器判定。
+        # 仓库设置里已开 sha_pinning_required，但那个开关的失败方式是**工作流根本不启动** ——
+        # PR 上的 check 直接不出现，看起来像「还没跑」而不是「配错了」（同 paths 漏配那类隐形故障）。
+        # 这个检查把它提前到秒级、带明确报错、本地也能跑。
+        # 规则见 scripts/check-actions-pinned.mjs 头部注释（含「为什么必须有 vX.Y.Z 注释」）。
+        run: node scripts/check-actions-pinned.mjs
 
       - name: Install dependencies
         run: npm ci
@@ -113,7 +127,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # actionlint 会自动调用 shellcheck 来 lint `run:` 块；缺了它只查 YAML/表达式，
       # 而且只在 -verbose 里提一句 `Rule "shellcheck" was disabled` —— 极易被误当成「已全查」。
@@ -147,17 +161,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: admin/package-lock.json
 
       - name: Setup Java (Allure 报告依赖 JRE)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -192,7 +206,7 @@ jobs:
 
       - name: Upload Allure report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: allure-report
           path: admin/allure-report
@@ -200,7 +214,7 @@ jobs:
 
       - name: Upload Playwright traces (on failure)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-traces
           path: admin/test-results
