@@ -15,10 +15,19 @@ on:
       - 'app-e2e/**'
       - 'android/**'
 
-# 同一分支/PR 只保留最新一次运行，避免重复触发浪费时间
+# 并发组：**与 e2e-web-full.yml 共用同一个仓库级组名** —— 两个工作流都写同一个 Supabase 测试库，
+# 同时跑会互相干扰。实测过一次（2026-09-15）：APP E2E 跑到一半时定时全量回归开始归零测试库，
+# Appium 侧随即出现 `no such element`（同一份代码在前一次的 PR 运行里是绿的）。
+# 机制上说得通：归零会删掉全部贴纸 → 被测 App 添加待办时重新开奖 → 开奖 toast/特效盖住界面
+# → Appium 找元素失败（web 通道里刚查过同一类"toast 盖住界面"的问题）。
+#
+# ⚠️ cancel-in-progress 必须是 false（不能继承原来的 true）：同名组里任何一个 run 若设为 true，
+# 它启动时会把**正在跑的另一个工作流**（比如夜间全量回归）直接取消 —— 那正是我们要避免的。
+# 代价：同一分支连续 push 不再互相取消，而是排队。对"共享可变测试环境"来说这是正确取舍：
+# 串行化是设计，不是浪费。
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: e2e-test-db
+  cancel-in-progress: false
 
 jobs:
   # ============================================================
