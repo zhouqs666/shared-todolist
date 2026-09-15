@@ -53,10 +53,14 @@ jobs:
 
       - name: Check actions are pinned to commit SHAs
         # 第三例（批次 D）：把「供应链安全」变成机器判定。
-        # 仓库设置里已开 sha_pinning_required，但那个开关的失败方式是**工作流根本不启动** ——
-        # PR 上的 check 直接不出现，看起来像「还没跑」而不是「配错了」（同 paths 漏配那类隐形故障）。
-        # 这个检查把它提前到秒级、带明确报错、本地也能跑。
-        # 规则见 scripts/check-actions-pinned.mjs 头部注释（含「为什么必须有 vX.Y.Z 注释」）。
+        # 仓库设置里也已开 sha_pinning_required（实测行为：未固定的那个 job 在 "Set up job"
+        # 阶段直接失败，带明确报错 —— 需要真推到 runner 上才知道）。
+        # 本脚本的价值有两条，第二条是那个开关**做不到**的：
+        #   ① 本地/CI 秒级反馈，且直接打印「取 SHA 的命令」；
+        #   ② 它查 `# vX.Y.Z` 版本注释 —— 那是 Dependabot 判断当前版本的唯一依据，
+        #      缺了它 Dependabot 就看不到这个依赖，**永远不会提更新**（安全补丁静默进不来）。
+        #      开关只看 SHA 长度，完全不查注释。
+        # 规则见 scripts/check-actions-pinned.mjs 头部注释。
         run: node scripts/check-actions-pinned.mjs
 
       - name: Install dependencies

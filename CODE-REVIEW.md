@@ -153,9 +153,14 @@
 - 🔴 **「固定 SHA」与「Dependabot 版本更新」是否成对存在？** 固定 = 再也不会自动变新，
   所以**必须有 `dependabot.yml` 的 `github-actions` ecosystem 来推**，否则安全补丁永远进不来。
   两者缺一个都不成立：只固定不更 = 冻在旧版本上；只更不固定 = 门敞开。
-  ⚠️ 另注意：仓库若开了 `sha_pinning_required`，它的失败方式是**工作流根本不启动**
-  （PR 上的 check 直接不出现，看起来像"还没跑"而不是"配错了"）—— 这正是 `check-actions-pinned.mjs`
-  存在的理由：把隐形故障提前成秒级、带报错的静态检查。
+  ⚠️ 另注意：仓库开了 `sha_pinning_required` 后，**用到未固定 action 的那个 job 会在 "Set up job"
+  阶段直接失败**（报错 `The action actions/checkout@v4 is not allowed in <repo> because all actions
+  must be pinned to a full-length commit SHA.`，一个 step 都不执行）—— **2026-09-15 实测**
+  （canary 分支 A/B：同一 run 里含 `@v4` 的 job 这样挂掉，另外两个只用固定 SHA 的 job 正常跑绿）。
+  这条**推翻了我一开始写进文档的推断**（原文写"工作流根本不启动、check 不出现"）。
+  教训：**推断性的机制描述，写进文档前必须被实测检验**，否则文档就在传播错误结论。
+  也正因为失败发生在 runner 上（要推了才知道），`check-actions-pinned.mjs` 的本地秒级反馈仍有价值；
+  更重要的是它还能查 `# vX.Y.Z` 注释 —— 那是开关**完全不管**、而 Dependabot 赖以工作的一环。
 - 🟡 **依赖升级 PR 是否按「minor/patch 合组、major 各自单独」配？** 合组是为了降噪
   （一周 15 个 PR 没人看 = 等于没有 Dependabot）；但 major 刻意**不**合并 ——
   major 有 breaking change，合在一个 PR 里一旦 CI 红了**没法二分定位**是哪个依赖的锅。
@@ -267,6 +272,25 @@
   · 三个只读 workflow 补显式 `permissions: contents: read`
   · 顺带确认：`secret_scanning_non_provider_patterns` / `validity_checks` **API 不接受**（第二次实测，
     返回 200 但值仍为 disabled）⇒ 需人工在 Settings → Code security 勾选，已列入待办
+[2026-09-15] 批次 D 收尾：实测证据 + 一处**文档推断被推翻**
+  · **正向**：PR #15 七个 check 全绿（含 `Analyze (javascript-typescript)` 1m6s、APP E2E 8m55s ——
+    第三方 `reactivecircus/android-emulator-runner` 固定 SHA 后照常跑通，证明固定是**行为等价**改动）；
+    开启 `sha_pinning_required` 后 dispatch `ci.yml@main` 仍正常（门没误伤正常流水线）
+  · **负向**：canary 分支把 `checkout` 改回 `@v4` → 该 job 在 **"Set up job" 阶段失败**、零 step 执行，
+    报错 `The action actions/checkout@v4 is not allowed … must be pinned to a full-length commit SHA.`；
+    **同一 run 的另外两个 job（只用固定 SHA）照常全绿** —— 单次 run 内完成 A/B 对照
+  · ⚠️ **推翻了原文推断**：我原先把 `sha_pinning_required` 的失败方式写成「工作流根本不启动、
+    check 直接不出现」，实测是「per-job、响亮、带明确报错」。已按实测更正 4 处文档
+    （本文件 F2 / AGENTS.md / ci.yml 步骤注释 / check-actions-pinned.mjs 头部）。
+    **方法论**：推断性的机制描述写进文档前必须被实测检验 —— 否则文档在传播错误结论，
+    而它看上去和正确答案一模一样地自信。
+  · **CodeQL 查询集实测对照**（同一份代码、只换一个参数）：default → 87 规则 / 0 告警；
+    security-extended → 103 规则 / **6 告警**（1 条可证伪的 XSS 误报 + 3 条 release 脚本的 TOCTOU
+    + 2 条 check-test-schema 按设计的"读凭据发请求"）。**逐条定级结论与升级步骤已写进
+    `codeql.yml` 的注释**；本次刻意不翻档：dismiss 掉发布链路里的 TOCTOU 属 owner 判断（铁律三）。
+  · **Dependabot 存量**：22 条告警（15 high / 7 medium）→ 合并 #12/#13 后 **10 条**
+    （全部 dev-scope，无一条随产品分发）。顺带发现 `sharp` 是**声明了但全仓库无人 import** 的
+    遗留 devDependency —— 记在 SECURITY.md，是否移除留给后续。
 ```
 
 ---

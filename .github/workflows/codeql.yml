@@ -77,10 +77,33 @@ jobs:
         uses: github/codeql-action/init@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3.38.0
         with:
           languages: ${{ matrix.language }}
-          # 查询集刻意先留默认（default = 安全类为主）。
-          # 想更严可以改成 security-extended，但那是"更多查询 ⇒ 更多告警"，
-          # 应该先看清默认集在本仓库报什么、逐条定级（真问题/误报）之后再升，
-          # 而不是一上来就开最大档、然后因为满屏告警而把整个扫描当噪声忽略。
+          # ── 查询集：留在默认档，但这是**量过之后**的决定，不是没想过 ──────────────
+          # 2026-09-15 实测对照（同一份代码、同一时间，只换这一个参数）：
+          #   default            →  87 条规则 ·  0 条告警
+          #   security-extended  → 103 条规则 ·  6 条告警
+          # 6 条逐条定级的结果（全部为「不可利用」，但**都不是垃圾告警**，值得记下来）：
+          #   · js/xss-through-dom  public/js/app.js:454  `img.src = URL.createObjectURL(file)`
+          #       → 可证伪的误报：blob: URL 的格式恒为 `blob:<origin>/<uuid>`，
+          #         不可能含 `javascript:` 或 HTML 元字符；且 `<img>` 上下文不执行 SVG 脚本。
+          #         CodeQL 的 DOM 污点启发式没有建模 createObjectURL 的输出约束。
+          #   · js/file-system-race × 3  release.mjs / release-apk.mjs / build-test-apk.mjs
+          #       → 读-改-写（readFileSync → replace → writeFileSync）与「先校验后读取」两种 TOCTOU。
+          #         本项目的威胁模型里没有"并发写这些文件的第三方"（单开发者本机 / 一次性 CI runner），
+          #         故按接受。**但这是真实存在的代码形态**，不是噪声。
+          #   · js/file-access-to-http × 2  app-e2e/scripts/check-test-schema.mjs
+          #       → 正是该脚本的设计：从本地 .env 读凭据、向测试库 PostgREST 发请求。
+          #         这条查询在"文件内容流向 HTTP"上是真有价值的一类检测（凭证外泄），
+          #         在这里命中的是"按设计读凭据发请求"。
+          # ── 为什么现在还不开 ────────────────────────────────────────────────
+          # 开 = 往 Security 页面引入 6 条待处理告警，需要逐条 dismiss 并留理由；
+          # 而 dismiss 掉 release*.mjs 里那 3 条 TOCTOU 属**对发布链路的判断**（铁律三），
+          # 应由 owner 拍板，不该由 agent 顺手按掉。**升级路径已就绪、数据已备齐**：
+          #   ① 把下面这行改回 `queries: security-extended`
+          #   ② 等 main 上跑出这 6 条 ③ 用 `PATCH /repos/{owner}/{repo}/code-scanning/alerts/{n}`
+          #   （`{"state":"dismissed","dismissed_reason":"false positive"|"won't fix","dismissed_comment":"<理由>"}`，
+          #    已实测该 API 在本仓库可用）逐条按上面的结论关闭 —— 关闭后就不再计入后续 PR 的"新增告警"，
+          #   于是新 PR 只会被真正的新问题标红。这才是把静态扫描做成门禁的正确前提。
+          # （对照 CODE-REVIEW.md F2 的那条：扫描没定级完就当门禁，团队会集体 dismiss，门就成白纸了。）
 
       # JavaScript/TypeScript 是解释型语言，CodeQL 直接从源码抽取，无需构建步骤。
       # （若将来加了 java/kotlin 语言项，这里需要补 autobuild 或手写 gradle 构建 ——
