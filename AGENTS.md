@@ -133,10 +133,19 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 写 `app_native_versions` 表 → 上传 APK → （本地跑时）覆盖 `~/Desktop/有爱.apk`
 
 **⚠️ CI 发布的前置条件（两段式，必须先合再发）：**
-版本号是发布命令传入的，但 **`versionCode` 在 `android/app/build.gradle` 里** ——
-它属于代码改动，必须**先走 PR 合并到 main**，再触发发布工作流。
-工作流内置 `sha_pinning_required` 同级的守卫：`versionCode` 必须大于**历史最大值（含已下线行）**，
-否则发布被拒并提示"先去 PR 里升 versionCode"。
+版本号是发布命令传入的，但 **`versionCode` 与 `versionName` 都在 `android/app/build.gradle` 里** ——
+它们属于代码改动，必须**先走 PR 合并到 main**，再触发发布工作流。
+`release-apk.mjs` 对这两项都有守卫，任一对不上就拒绝发布（并**一次性报出全部不一致**，不用来回跑两轮）：
+
+- **`versionName` 必须逐字等于本次发布的版本号。** 客户端把 **APK manifest 里的 versionName**
+  当本地版本（`apk-update.js` 用 `App.getInfo().version`），再和表里的 `version_name` 比 ——
+  两者不等就会「表说 2.1.29、装的包自报 2.1.28」⇒ App **反复提示同一次更新，用户陷入无限重装**。
+  ⚠️ 这条是 2026-09-15 补的：此前**没有任何检查**守它（包内 `shell-version` meta 是脚本自己注入的，
+  恒等于版本号、必然通过），而它的症状正是 2026-09-04 那次事故的原样复现。
+- **`versionCode` 必须严格递增**，基准是**含已下线行**的历史最大值（2.8.0 误发布后已 `enabled=false`，
+  但它的 code 33 已经用掉了，而 Android 不允许同码覆盖安装）。
+- `--code` 参数**不允许**与 `build.gradle` 不一致：APK 里真实的 code 永远取自 `build.gradle`，
+  用 `--code` 覆盖只会让**表里记的号和包里装的不一致**。
 
 - ✅ 打包后必须验证：构建时间（确认是最新）、签名通过（`apksigner verify`，工作流里有独立步骤）、
   关键改动已入包（unzip 检查，脚本第 5b 步）

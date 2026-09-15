@@ -6,7 +6,7 @@
  *
  * 示例：
  *   node scripts/release-apk.mjs 2.1.29 --notes "App 内更新能力 + 震动权限"
- *   node scripts/release-apk.mjs 2.1.29 --code 34                    # 显式指定 versionCode
+ *   node scripts/release-apk.mjs 2.1.29 --code 34                    # 显式指定 versionCode（须与 build.gradle 一致）
  *   node scripts/release-apk.mjs 2.1.29 --apk ~/Desktop/有爱.apk     # 指定 APK 路径
  *   node scripts/release-apk.mjs 2.1.29 --dry-run                   # 只校验不上传，预演
  *   node scripts/release-apk.mjs 2.1.29 --dry-run --build           # 预演但真的构建（CI 预演用）
@@ -15,8 +15,11 @@
  *   1. 校验版本号格式（x.y.z）
  *   2. 【铁律】先查线上 app_native_versions 最新启用版本，新版本必须语义化大于线上，
  *      否则中止（防止版本号倒挂导致 App 判定"无更新"——2026-08-07 的血泪教训）
- *   3. 【铁律】versionCode 必须严格递增 —— 跟**含已下线版本**的历史最大值比，
- *      不是只跟"最新 enabled"比（2.8.0 误发布后下线，它的 code 33 也已经用掉了）
+ *   3. 【铁律】发布前置守卫：build.gradle 必须与本次发布**一致**（一次性报出全部不一致）
+ *      · versionName 必须**逐字等于**本次版本号（否则客户端会"无限重装同一版本"）
+ *      · versionCode 必须严格递增 —— 跟**含已下线版本**的历史最大值比，
+ *        不是只跟"最新 enabled"比（2.8.0 误发布后下线，它的 code 33 也已经用掉了）
+ *      · `--code` 不允许与 build.gradle 不一致（APK 里真实的 code 永远取自 build.gradle）
  *   4. cap sync（public/ → android assets）→ 校验 assets 指向生产库
  *   5. 构建期注入版本 meta → gradle assembleRelease
  *   6. 定位 APK → 校验包内 meta（防"发了个旧包"）→ SHA-256 + 体积
@@ -54,7 +57,7 @@ if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
 
 选项：
   --notes "<说明>"   更新说明（面板里展示）
-  --code <n>         versionCode（缺省从 android/app/build.gradle 读取）
+  --code <n>         versionCode（缺省从 android/app/build.gradle 读取；**若传入则必须与之一致**）
   --apk <path>       APK 文件路径（默认 gradle 产物，fallback ~/Desktop/有爱.apk）
   --dry-run          只校验不上传，预演（默认跳过 gradle 构建，保持预演快速）
   --build            即使 --dry-run 也真的跑 gradle 构建（CI 预演用：
@@ -104,24 +107,68 @@ async function main() {
   await assertNewerThanLatest(sb, 'app_native_versions', 'version_name', VERSION,
     '  血泪教训 2026-08-07：壳版本号低，App 判定无更新，用户永远收不到。');
 
-  // 1.2【铁律】versionCode 必须**严格递增**，且基准是「历史上用过的最大值」（含已下线行）。
-  //     为什么不能只跟「最新 enabled」比：2.8.0 误发布后已 enabled=false，但它的 versionCode
-  //     33 是**真实存在过**的包号 —— Android 不允许同码覆盖安装，同码 = 用户点安装直接失败。
-  //     放在 cap sync / gradle 之前是为了 **fail fast**：坏输入不该等 2~3 分钟构建完才报错，
-  //     CI 预演尤其需要这一点（否则每次都是"等构建 → 才发现 versionCode 没升"）。
-  if (code == null) {
-    const gradle = await readFile(join(ROOT, 'android', 'app', 'build.gradle'), 'utf8');
-    const m = gradle.match(/versionCode\s+(\d+)/);
-    if (!m) {
-      console.error('✗ 无法从 android/app/build.gradle 解析 versionCode，请用 --code 显式指定');
-      process.exit(1);
-    }
-    code = parseInt(m[1], 10);
-  }
-  if (!Number.isInteger(code) || code <= 0) {
-    console.error(`✗ versionCode 不合法：${code}`);
+  // 1.2【铁律】发布前置守卫 —— build.gradle 与「本次发布」必须一致。
+  //
+  // 这一块守的是**同一件事的两面**：`app_native_versions` 表里那行，必须**如实描述**
+  // 用户马上要装的那个 APK。表说一套、包里是另一套，客户端就会做出错误判断
+  // （最严重的是「无限重装同一版本」，见下面 versionName 那段）。
+  //
+  // 放在 cap sync / gradle 之前是为了 **fail fast**：坏输入不该等 2~3 分钟构建完才报错，
+  // CI 预演尤其需要这一点。
+  //
+  // ⚠️ 设计上**一次性报出全部不一致**再退出，而不是第一个就退 ——
+  //    这些前置条件通常要一起改（versionCode + versionName 一起升），
+  //    报一个改一个等于让用户来回跑两轮。与两个 verify-*.mjs 的「跑完全部检查」一致。
+  const gradlePath = join(ROOT, 'android', 'app', 'build.gradle');
+  const gradle = await readFile(gradlePath, 'utf8');
+  const gradleCodeRaw = gradle.match(/versionCode\s+(\d+)/)?.[1];
+  const gradleNameRaw = gradle.match(/versionName\s+["']([^"']*)["']/)?.[1];
+  if (!gradleCodeRaw || gradleNameRaw === undefined) {
+    console.error(`✗ 无法从 android/app/build.gradle 解析 versionCode / versionName（解析到 code=${gradleCodeRaw ?? '无'} name=${gradleNameRaw ?? '无'}）`);
     process.exit(1);
   }
+  const gradleCode = parseInt(gradleCodeRaw, 10);
+  const preconditions = [];
+
+  // (a) versionName 必须逐字等于本次发布的版本号。
+  //     为什么是「逐字相等」而不是「大于等于」：客户端拿 **APK manifest 里的 versionName**
+  //     当本地版本（apk-update.js 用 App.getInfo().version，注释里写明了 2026-09-04 的血泪教训：
+  //     读 meta 会拿到过期快照），再和表里的 version_name 比。两者不等就会：
+  //       表说 2.1.29、装的包自报 2.1.28 → 2.1.29 > 2.1.28 → **又提示更新** → 重装 → 仍报 2.1.28
+  //       → 用户陷入**无限重装同一版本**（这正是 09-04 那次事故的症状）。
+  //     ⚠️ 之前**没有任何检查**守这一条：versionCode 有守卫、包内 shell-version meta 也校验，
+  //     但 meta 是脚本自己注入的（恒等于本次版本号，必然通过）—— 于是「表与包不一致」可以一路绿灯。
+  if (gradleNameRaw !== VERSION) {
+    preconditions.push(`versionName 不一致：build.gradle 是 "${gradleNameRaw}"，本次要发 "${VERSION}"。
+    ⇒ 用户装上的包会自报 ${gradleNameRaw}，而表里写 ${VERSION}，App 会**反复提示同一次更新**（无限重装）。
+    修复：把 android/app/build.gradle 的 versionName 改成 "${VERSION}"（走 PR 合并）。`);
+  }
+
+  // (b) versionCode 必须**严格递增**，基准是「历史上用过的最大值」（含已下线行）。
+  //     为什么不能只跟「最新 enabled」比：2.8.0 误发布后已 enabled=false，但它的 versionCode
+  //     33 是**真实存在过**的包号 —— Android 不允许同码覆盖安装，同码 = 用户点安装直接失败。
+  if (code == null) {
+    code = gradleCode;
+  } else if (!Number.isInteger(code) || code <= 0) {
+    preconditions.push(`--code 不合法：${code}`);
+  } else if (code !== gradleCode) {
+    // (c) `--code` 不能与 build.gradle 不一致 —— 因为**打进 APK 的是 build.gradle 里的值**，
+    //     而表里写的是这里的值。两者不一致 = 表描述的 APK 并不存在：
+    //     表说 code 34、包里是 32 ⇒ 下一次「34 > 33 可发」的判断建立在假前提上，
+    //     而用户端 Android 真正比较的也是包里的 32。**这个参数只会制造脱钩，没有正当用途。**
+    preconditions.push(`--code ${code} 与 build.gradle 的 versionCode ${gradleCode} 不一致。
+    ⇒ APK 里真实的 versionCode 永远取自 build.gradle，用 --code 覆盖只会让**表里记的号和包里装的不一致**。
+    修复：改 android/app/build.gradle 的 versionCode（走 PR 合并），然后不要传 --code。`);
+  }
+
+  if (preconditions.length > 0) {
+    console.error('\n✗ 发布前置检查未通过（build.gradle 与本次发布不一致）：\n');
+    for (const p of preconditions) console.error(`  · ${p}\n`);
+    console.error('  说明：这些都是**代码改动**，必须先走 PR 合并到 main，再重新触发发布 ——');
+    console.error('        发布流水线刻意不代改仓库文件（否则线上版本与仓库内容就会脱钩）。\n');
+    process.exit(1);
+  }
+
   const { data: maxCodeRows, error: maxCodeErr } = await sb
     .from('app_native_versions')
     .select('version_code, version_name')
@@ -139,7 +186,7 @@ async function main() {
   修复：先在 PR 里升 android/app/build.gradle 的 versionCode 并合并，再重新触发发布。`);
     process.exit(1);
   }
-  console.log(`  ✓ versionCode：${code}（历史最大 ${maxEver ? `${maxEver.version_code} · ${maxEver.version_name}` : '无（首发）'}）`);
+  console.log(`  ✓ build.gradle 与本次发布一致：versionName=${gradleNameRaw} · versionCode=${code}（历史最大 ${maxEver ? `${maxEver.version_code} · ${maxEver.version_name}` : '无（首发）'}）`);
 
   // 1.5【必需前置】cap sync：把 public/ 同步进 android assets。
   // 为什么这里必须先同步（2026-09-14 加）：下面按「构建期注入」给 assets 盖版本号，
