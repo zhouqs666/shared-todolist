@@ -15,6 +15,7 @@
 
 import { db } from './db.js';
 import { textToHeart } from './text-to-heart.js';
+import { showToast } from './toast.js';
 
 /** @type {Object|null} 当前用户 */
 let currentUser = null;
@@ -246,7 +247,7 @@ async function submitNote() {
     writePane.classList.remove('note-write--leaving');
     hideEcho();
     const detail = err && (err.message || err.code) ? `${err.code || ''} ${err.message}` : '未知错误';
-    toastSimple(`发送失败：${detail}`);
+    showToast(`发送失败：${detail}`, { urgent: true });
   } finally {
     sendBtn.disabled = false;
   }
@@ -533,19 +534,4 @@ export function onNoteUpdated(note) {
   if (!note) return;
   notes = notes.map((n) => (n.id === note.id ? note : n));
   refreshBell();
-}
-
-/** 便捷 toast */
-function toastSimple(msg) {
-  let toast = document.getElementById('toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'toast';
-    toast.className = 'toast';
-    document.body.appendChild(toast);
-  }
-  toast.textContent = msg;
-  toast.classList.add('toast--show');
-  clearTimeout(toastSimple._t);
-  toastSimple._t = setTimeout(() => toast.classList.remove('toast--show'), 2500);
 }

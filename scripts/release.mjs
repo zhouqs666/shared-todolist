@@ -9,13 +9,24 @@
  *   node scripts/release.mjs 2.0.1 --notes "修复留言板滚动 bug"
  *   node scripts/release.mjs 2.0.1 --min-app 2.0.0   # 要求 App 壳版本 >= 2.0.0
  *   node scripts/release.mjs 2.0.1 --dry-run         # 只打 zip 不上传，预演
+ *   node scripts/release.mjs 2.7.67 --from-git 2.7.63 --notes "回退到 2.7.63 内容"   # 回退包
  *
  * 流程：
- *   1. 校验版本号格式（x.y.z）
+ *   1. 校验版本号格式（x.y.z）+ 版本号必须大于线上出现过的最高版本
  *   2. 把 public/ 复制到暂存目录，在**副本**上把 index.html 的 app-version 改成新版本号
  *   3. 用系统 zip 打包暂存目录内容（zip 根目录即 web 内容，符合 updater 要求）
- *   4. 上传 zip 到 Supabase Storage 的 app_updates bucket
- *   5. 在 app_versions 表插入版本记录
+ *   4. 回读校验：从 zip 里取出 index.html，确认注入的 meta 真的进包了
+ *   5. 上传 zip 到 Supabase Storage 的 app_updates bucket
+ *   6. 在 app_versions 表插入版本记录
+ *
+ * 【2026-09-16 加】--from-git <ref>：**真回滚**（把线上退回旧代码）。
+ *   背景：把新版本 `enabled=false` 只是"下线"（阻止还没更新的设备拿到它），
+ *   已经装上新版本的设备不会退回 —— 客户端判定更新用的是「服务端版本 <= 本地版本 → 无更新」，
+ *   本地版本已经是新的了。真要退回去，只能**发一个版本号更高、内容为旧代码**的包。
+ *   本选项就是那条路：内容取自 `git archive <ref> public`，版本号用本次传入的新号，
+ *   meta 注入到新号上（否则客户端下完又判定"有新版本"，陷入无限重装）。
+ *   因为是重发**已经发布过的旧代码**，它天然不会出现在 main 上 —— 所以本模式下
+ *   「改动必须先合并到 main」这条前置不适用（内容不是新写的）。
  *
  * 【2026-09-14 改】版本号只注入**暂存副本**，发布对仓库工作区零改动。
  *   旧做法是改 public/index.html 且不还原（靠 git 提交让壳内置 meta 跟上），
@@ -55,12 +66,15 @@ if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
   --notes "<说明>"      更新说明（可选）
   --min-app <x.y.z>     最低兼容 App 壳版本（可选）
   --dry-run             只打 zip 不上传，预演
+  --from-git <ref>      回退包：内容取自该 git ref（commit/tag/分支）的 public/，
+                        版本号仍用本次传入的新号。用于**真回滚**（详见文件头注释）
   -h, --help            显示帮助
 
 示例：
   node scripts/release.mjs 2.0.1
   node scripts/release.mjs 2.0.1 --notes "修复留言板滚动 bug"
   node scripts/release.mjs 2.0.1 --min-app 2.0.0 --dry-run
+  node scripts/release.mjs 2.7.67 --from-git 2.7.63 --notes "回退到 2.7.63 内容"
 `);
   process.exit(0);
 }
@@ -74,10 +88,16 @@ if (!/^\d+\.\d+\.\d+$/.test(VERSION)) {
 let notes = '';
 let minApp = null;
 let dryRun = false;
+let fromGit = null;
 for (let i = 1; i < args.length; i++) {
   if (args[i] === '--notes') notes = args[++i] || '';
   else if (args[i] === '--min-app') minApp = args[++i] || null;
   else if (args[i] === '--dry-run') dryRun = true;
+  else if (args[i] === '--from-git') fromGit = args[++i] || null;
+}
+if (fromGit === '') {
+  console.error('✗ --from-git 需要跟一个 git ref（commit / tag / 分支名）');
+  process.exit(1);
 }
 
 // ---------- 加载 .env ----------
@@ -93,7 +113,7 @@ async function main() {
   // 1.【铁律】先查线上最新版本，版本号必须语义化大于线上
   // 2026-08-07 血泪教训：没查线上发 2.0.1，App 判定无更新，用户永远收不到
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
-  await assertNewerThanLatest(sb, 'app_versions', 'version', VERSION,
+  const highest = await assertNewerThanLatest(sb, 'app_versions', 'version', VERSION,
     '  血泪教训 2026-08-07：热更新版本号低，App 判定无更新，用户连开几次都收不到。');
 
   // 用 regex.test 检测"是否找到 meta"，而非 strict equal —— V8 的 String.replace 优化
@@ -112,12 +132,55 @@ async function main() {
   // （分支保护下要走 PR，还会触发约 11 分钟模拟器 CI），且一旦漏提交就让壳内置 meta 与线上
   // bundle 不一致。改成在暂存副本上注入后：**发布对工作区零改动**，也不再需要任何补提交。
   const STAGE_DIR = join(TMP_DIR, 'stage');
+  const GIT_SRC_DIR = join(TMP_DIR, 'git-src');
 
   try {
     // 1. 准备暂存副本 + 注入版本号（不动仓库里的任何文件）
-    console.log('  → 复制 public/ 到暂存目录并在副本上注入版本号 ...');
     rmSync(STAGE_DIR, { recursive: true, force: true });
-    cpSync(PUBLIC_DIR, STAGE_DIR, { recursive: true });
+    let effectiveMinApp = minApp;
+    if (fromGit) {
+      // ===== 回退包：内容取自旧 ref，版本号用新号 =====
+      let sha;
+      try {
+        sha = execFileSync('git', ['rev-parse', '--verify', `${fromGit}^{commit}`],
+          { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+      } catch {
+        console.error(`✗ 找不到 git ref：${fromGit}`);
+        process.exit(1);
+      }
+      // 该 ref 里必须真有 public/：否则打出来是空包，装上就是白屏
+      try {
+        execFileSync('git', ['cat-file', '-e', `${sha}:public/index.html`], { cwd: ROOT, stdio: 'pipe' });
+      } catch {
+        console.error(`✗ ${fromGit} 里没有 public/index.html，不能作为回退内容的来源`);
+        process.exit(1);
+      }
+      console.log(`  → 回退模式：内容取自 ${fromGit}（${sha.slice(0, 8)}）`);
+      // 让人一眼看到这次会把线上退回成什么样（相对当前工作区丢了哪些改动）
+      try {
+        const stat = execFileSync('git', ['diff', '--stat', `${sha}..HEAD`, '--', 'public'],
+          { cwd: ROOT, encoding: 'utf8' }).trim();
+        if (stat) {
+          console.log('    与当前工作区的差异（本次发布将回退掉这些）：');
+          for (const line of stat.split('\n')) console.log(`      ${line}`);
+        }
+      } catch { /* 差异只是辅助信息，取不到不阻塞发布 */ }
+
+      rmSync(GIT_SRC_DIR, { recursive: true, force: true });
+      mkdirSync(GIT_SRC_DIR, { recursive: true });
+      const tarPath = join(TMP_DIR, 'public-from-git.tar');
+      execFileSync('git', ['archive', `--output=${tarPath}`, sha, 'public'], { cwd: ROOT });
+      execFileSync('tar', ['-xf', tarPath, '-C', GIT_SRC_DIR]);
+      cpSync(join(GIT_SRC_DIR, 'public'), STAGE_DIR, { recursive: true });
+      // 回退包本身不再声明壳版本要求：沿用线上最高行的（避免退回后突然要求更高的壳）
+      if (!effectiveMinApp && highest && highest.min_app_version) {
+        effectiveMinApp = highest.min_app_version;
+        console.log(`    最低壳版本沿用线上：${effectiveMinApp}`);
+      }
+    } else {
+      console.log('  → 复制 public/ 到暂存目录并在副本上注入版本号 ...');
+      cpSync(PUBLIC_DIR, STAGE_DIR, { recursive: true });
+    }
     const stagedIndex = join(STAGE_DIR, 'index.html');
     const stagedHtml = await readFile(stagedIndex, 'utf8');
     if (!META_RE.test(stagedHtml)) {
@@ -141,6 +204,23 @@ async function main() {
     const zipSize = statSync(ZIP_PATH).size;
     console.log(`  ✓ 已打包：${ZIP_PATH}（${(zipSize / 1024).toFixed(1)} KB）`);
 
+    // 2b. 回读校验：从 zip 里取出 index.html，确认注入的 meta 真的进包了。
+    // 防的是「包内版本号与实际发布号不一致」→ 客户端下完又判定"有新版本"→ 无限重装
+    // （2026-09-04 事故形态；APK 通道的同类校验在 release-apk.mjs 第 5b 步）。
+    let inZip = '';
+    try {
+      inZip = execFileSync('unzip', ['-p', ZIP_PATH, 'index.html'],
+        { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+    } catch (e) {
+      console.error(`✗ 回读校验失败：读不出 zip 内的 index.html（${e.message}）`);
+      process.exit(1);
+    }
+    if (!inZip.includes(`<meta name="app-version" content="${VERSION}" />`)) {
+      console.error(`✗ 回读校验不过：包内 app-version 不是 ${VERSION}，拒绝发布。`);
+      process.exit(1);
+    }
+    console.log(`  ✓ 回读校验：包内 meta = ${VERSION}`);
+
     if (dryRun) {
       console.log('\n🟡 --dry-run：跳过上传。zip 保留在 .release-tmp/ 供检查（仓库工作区未被改动）。');
       return;
@@ -156,14 +236,17 @@ async function main() {
     if (upErr) throw new Error(`上传失败：${upErr.message}`);
     console.log('  ✓ 上传成功');
 
-    // 4. 写版本表
+    // 4. 写版本表（回退包自动在备注里标出来源，事后翻表就知道这次是回的哪一版）
+    const finalNotes = fromGit
+      ? `【回退包】内容取自 ${fromGit}${notes ? '：' + notes : ''}`
+      : (notes || null);
     console.log('  → 写入 app_versions 表...');
     const { error: dbErr } = await sb.from('app_versions').upsert({
       version: VERSION,
       storage_path: storagePath,
-      min_app_version: minApp,
+      min_app_version: effectiveMinApp,
       enabled: true,
-      notes: notes || null,
+      notes: finalNotes,
       released_at: new Date().toISOString(),
     }, { onConflict: 'version' });
     if (dbErr) throw new Error(`写版本表失败：${dbErr.message}`);

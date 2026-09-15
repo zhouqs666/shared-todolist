@@ -1,14 +1,19 @@
 /**
- * 紧急回滚脚本：把指定版本置 enabled=false，立即对所有 App 生效
+ * 紧急**下线**脚本：把指定版本置 enabled=false（止损），并说明它与"回滚"的区别
  *
  * 用法：
  *   node scripts/rollback.mjs <版本号>
  *   node scripts/rollback.mjs 2.7.57
  *
- * 原理：app_versions 表的 enabled=false 时，App 启动时拉版本会忽略这条记录，
- *       客户端自动落到上一条 enabled=true 的版本（即回退到上一个热更新包）。
+ * 原理与边界（2026-09-16 更正原措辞）：
+ *   客户端拉版本时会忽略 enabled=false 的行，所以下线后**还没更新 + 新装机**会拿到更早的启用版本；
+ *   但**已经更新到该版本的设备不会退回去** —— 客户端判定更新用的是「服务端版本 ≤ 本地版本 → 无更新」
+ *   （update.js / apk-update.js），这些设备本地版本已经更高，会一直停在上面。
+ *   要让它们退回来，只能发一个「版本号更高、内容为旧代码」的包：
+ *       node scripts/release.mjs <更高的新版本号> --from-git <旧 ref>
+ *   详见 AGENTS.md 铁律三「下线 ≠ 回滚」。
  *
- * 安全：使用 service_role key，仅本地运行。
+ * 安全：使用 service_role key，仅本地运行。只改 enabled 一列（不动 Storage、不删记录）。
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -84,7 +89,7 @@ const { data: verify, error: vErr } = await supabase
 
 if (vErr) throw new Error(`回滚后校验失败：${vErr.message}`);
 if (verify.enabled === false) {
-  // 动态查当前最新 enabled 版本作为回退提示，避免硬编码具体版本号误导
+  // 动态查当前最新 enabled 版本，只用于说明"新设备会拿到哪个"（不是"设备会退到哪个"，见下）
   const { data: latest } = await supabase
     .from('app_versions')
     .select('version')
@@ -92,11 +97,17 @@ if (verify.enabled === false) {
     .order('released_at', { ascending: false })
     .limit(1);
   const fallback =
-    latest && latest.length > 0 ? `（客户端将落到 ${latest[0].version}）` : '';
-  console.log(`\n✅ 回滚成功！`);
+    latest && latest.length > 0 ? `（还没更新的设备将装到 ${latest[0].version}）` : '';
+  console.log(`\n✅ 已下线（止损完成）`);
   console.log(`   版本 ${VERSION} 已在 ${new Date().toLocaleString('zh-CN')} 下线`);
-  console.log(`   生效时机：用户下次冷启动 App 时（已打开的需要杀掉重开 1 次）`);
-  console.log(`   客户端会落到上一条 enabled=true 的版本${fallback}`);
+  console.log(`   生效时机：用户下次冷启动 App 时（已打开的需要杀掉重开 1 次）${fallback}`);
+  console.log('');
+  console.log('   ⚠️ 这只是「下线」，不是「回滚」：');
+  console.log('      已经更新到该版本的设备**不会退回去** —— 客户端判定更新用的是');
+  console.log('      「服务端版本 ≤ 本地版本 → 无更新」，它们的本地版本已经更高了。');
+  console.log('      要让那些设备退回来，得发一个「版本号更高、内容为旧代码」的包：');
+  console.log(`        node scripts/release.mjs <更高的新版本号> --from-git <旧 ref> --dry-run`);
+  console.log('      （先 dry-run 预演：会打印将回退掉哪些改动 + 回读校验包内 meta）');
 } else {
   console.error(`✗ 校验失败：enabled 仍为 ${verify.enabled}`);
   process.exit(1);
