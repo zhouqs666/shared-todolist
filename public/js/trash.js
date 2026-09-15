@@ -154,7 +154,7 @@ function renderTrashItem(body, todo) {
       }
     } catch (err) {
       restoreBtn.disabled = false;
-      showToast('恢复失败，请重试');
+      showToast('恢复失败，请重试', { urgent: true });
       console.error('[trash] 恢复失败:', err.message);
     }
   });
@@ -194,7 +194,7 @@ function renderTrashItem(body, todo) {
       purgeBtn.disabled = false;
       purgeBtn.textContent = '彻底删除';
       purgeBtn.classList.remove('trash-item__btn--armed');
-      showToast('删除失败，请重试');
+      showToast('删除失败，请重试', { urgent: true });
       console.error('[trash] 彻底删除失败:', err.message);
     }
   });
