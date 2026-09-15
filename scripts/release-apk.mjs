@@ -5,23 +5,29 @@
  *   node scripts/release-apk.mjs <版本号> [选项]
  *
  * 示例：
- *   node scripts/release-apk.mjs 2.1.0 --notes "App 内更新能力 + 震动权限"
- *   node scripts/release-apk.mjs 2.1.0 --code 3                    # 显式指定 versionCode
- *   node scripts/release-apk.mjs 2.1.0 --apk ~/Desktop/有爱.apk     # 指定 APK 路径
- *   node scripts/release-apk.mjs 2.1.0 --dry-run                   # 只校验不上传，预演
+ *   node scripts/release-apk.mjs 2.1.29 --notes "App 内更新能力 + 震动权限"
+ *   node scripts/release-apk.mjs 2.1.29 --code 34                    # 显式指定 versionCode
+ *   node scripts/release-apk.mjs 2.1.29 --apk ~/Desktop/有爱.apk     # 指定 APK 路径
+ *   node scripts/release-apk.mjs 2.1.29 --dry-run                   # 只校验不上传，预演
+ *   node scripts/release-apk.mjs 2.1.29 --dry-run --build           # 预演但真的构建（CI 预演用）
  *
  * 流程：
  *   1. 校验版本号格式（x.y.z）
  *   2. 【铁律】先查线上 app_native_versions 最新启用版本，新版本必须语义化大于线上，
  *      否则中止（防止版本号倒挂导致 App 判定"无更新"——2026-08-07 的血泪教训）
- *   3. 定位 APK（默认 ~/Desktop/有爱.apk，fallback 到 gradle 输出目录）
- *   4. 计算 SHA-256 与体积（客户端下载后按此校验）
- *   5. 上传到 Supabase Storage 的 app_updates bucket（apks/youai-<版本>.apk）
- *   6. 在 app_native_versions 表 upsert 版本记录
+ *   3. 【铁律】versionCode 必须严格递增 —— 跟**含已下线版本**的历史最大值比，
+ *      不是只跟"最新 enabled"比（2.8.0 误发布后下线，它的 code 33 也已经用掉了）
+ *   4. cap sync（public/ → android assets）→ 校验 assets 指向生产库
+ *   5. 构建期注入版本 meta → gradle assembleRelease
+ *   6. 定位 APK → 校验包内 meta（防"发了个旧包"）→ SHA-256 + 体积
+ *   7. 上传到 Supabase Storage 的 app_updates bucket（apks/youai-<版本>.apk）
+ *   8. 在 app_native_versions 表 upsert 版本记录
  *
- * 安全：用 service_role key（.env 里的 SUPABASE_KEY），仅本地运行
+ * 凭据：用 service_role key（SUPABASE_URL + SUPABASE_KEY）。
+ *       `.env` 文件 **或** 同名环境变量二选一（后者是 CI 通道，见 _lib-env.mjs）。
  *
- * 生效时机：App 冷启动 1.8s 后检查，弹更新面板 → 下载 → 唤起系统安装器（用户手动点安装）。
+ * 生效时机：App 冷启动 1.8s 后检查，弹更新面板 → 下载 → 校验 sha256 → 唤起系统安装器
+ *          （用户手动点安装）。所以 sha256 写错 = 用户装不上，不是"体验差一点"。
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -32,6 +38,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { assertNewerThanLatest } from './_lib-version-check.mjs';
+import { loadEnv, requireSupabaseEnv } from './_lib-env.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -48,12 +55,15 @@ if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
 选项：
   --notes "<说明>"   更新说明（面板里展示）
   --code <n>         versionCode（缺省从 android/app/build.gradle 读取）
-  --apk <path>       APK 文件路径（默认 ~/Desktop/有爱.apk，fallback gradle 输出）
-  --dry-run          只校验不上传，预演
+  --apk <path>       APK 文件路径（默认 gradle 产物，fallback ~/Desktop/有爱.apk）
+  --dry-run          只校验不上传，预演（默认跳过 gradle 构建，保持预演快速）
+  --build            即使 --dry-run 也真的跑 gradle 构建（CI 预演用：
+                     不构建就无法校验「包内 meta」这条最关键的防旧包断言）
   -h, --help         显示帮助
 
 示例：
-  node scripts/release-apk.mjs 2.1.0 --notes "App 内更新 + 震动权限"
+  node scripts/release-apk.mjs 2.1.29 --notes "App 内更新 + 震动权限"
+  node scripts/release-apk.mjs 2.1.29 --dry-run --build
 `);
   process.exit(0);
 }
@@ -68,47 +78,21 @@ let notes = '';
 let code = null;
 let apkPath = null;
 let dryRun = false;
+let forceBuild = false;
 for (let i = 1; i < args.length; i++) {
   if (args[i] === '--notes') notes = args[++i] || '';
   else if (args[i] === '--code') code = parseInt(args[++i], 10);
   else if (args[i] === '--apk') apkPath = args[++i] || null;
   else if (args[i] === '--dry-run') dryRun = true;
+  else if (args[i] === '--build') forceBuild = true;
 }
 
-// ---------- 加载 .env ----------
-function loadEnv() {
-  const envPath = join(ROOT, '.env');
-  if (!existsSync(envPath)) {
-    console.error('✗ 找不到 .env 文件，请在项目根目录创建（参考 .env.example）');
-    process.exit(1);
-  }
-  const lines = readFileSync(envPath, 'utf8').split('\n');
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eq = trimmed.indexOf('=');
-    if (eq < 0) continue;
-    const k = trimmed.slice(0, eq).trim();
-    let v = trimmed.slice(eq + 1).trim();
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-      v = v.slice(1, -1);
-    }
-    if (!process.env[k]) process.env[k] = v;
-  }
-}
+// ---------- 凭据（.env 或环境变量，CI 走后者） ----------
+// 2026-09-15 迁移到 _lib-env.mjs：原来是本地内联的 loadEnv（**强制要求 .env 文件存在**），
+// CI 里没有 .env、凭据只从 GitHub Secrets 注入环境变量 → 那个版本在 CI 上必然跑不起来。
+// 抽公用后「无 .env 时回落环境变量」这条路径由 _lib-env.mjs 统一保证。
 loadEnv();
-
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SERVICE_KEY = process.env.SUPABASE_KEY;
-
-if (!SUPABASE_URL || !SERVICE_KEY) {
-  console.error('✗ .env 缺少 SUPABASE_URL 或 SUPABASE_KEY（service_role）');
-  process.exit(1);
-}
-if (SERVICE_KEY.length < 100) {
-  console.error('✗ SUPABASE_KEY 看起来是 anon key，需要 service_role key（更长）才能上传/写表');
-  process.exit(1);
-}
+const { url: SUPABASE_URL, key: SERVICE_KEY } = requireSupabaseEnv();
 
 // ---------- 主流程 ----------
 async function main() {
@@ -117,9 +101,45 @@ async function main() {
 
   // 1.【铁律】先查线上最新启用版本，版本号必须语义化大于线上
   console.log('  → 查询线上最新壳版本（铁律：不允许版本号倒挂）...');
-  const onlineLatest = await assertNewerThanLatest(sb, 'app_native_versions', 'version_name', VERSION,
+  await assertNewerThanLatest(sb, 'app_native_versions', 'version_name', VERSION,
     '  血泪教训 2026-08-07：壳版本号低，App 判定无更新，用户永远收不到。');
-  // 后续会用 onlineLatest.version_code（L257）做 versionCode 校验；首发时为 null，逻辑已处理
+
+  // 1.2【铁律】versionCode 必须**严格递增**，且基准是「历史上用过的最大值」（含已下线行）。
+  //     为什么不能只跟「最新 enabled」比：2.8.0 误发布后已 enabled=false，但它的 versionCode
+  //     33 是**真实存在过**的包号 —— Android 不允许同码覆盖安装，同码 = 用户点安装直接失败。
+  //     放在 cap sync / gradle 之前是为了 **fail fast**：坏输入不该等 2~3 分钟构建完才报错，
+  //     CI 预演尤其需要这一点（否则每次都是"等构建 → 才发现 versionCode 没升"）。
+  if (code == null) {
+    const gradle = await readFile(join(ROOT, 'android', 'app', 'build.gradle'), 'utf8');
+    const m = gradle.match(/versionCode\s+(\d+)/);
+    if (!m) {
+      console.error('✗ 无法从 android/app/build.gradle 解析 versionCode，请用 --code 显式指定');
+      process.exit(1);
+    }
+    code = parseInt(m[1], 10);
+  }
+  if (!Number.isInteger(code) || code <= 0) {
+    console.error(`✗ versionCode 不合法：${code}`);
+    process.exit(1);
+  }
+  const { data: maxCodeRows, error: maxCodeErr } = await sb
+    .from('app_native_versions')
+    .select('version_code, version_name')
+    .order('version_code', { ascending: false })
+    .limit(1);
+  if (maxCodeErr) {
+    console.error(`✗ 查询历史最大 versionCode 失败：${maxCodeErr.message}`);
+    process.exit(1);
+  }
+  const maxEver = maxCodeRows?.[0] ?? null;
+  if (maxEver && code <= maxEver.version_code) {
+    console.error(`✗ versionCode 必须严格递增：历史上用过 ${maxEver.version_code}（${maxEver.version_name}），本次 ${code}。
+  Android 不允许同码覆盖安装 —— 同码会让用户点安装时直接失败，且**没有任何提示**。
+  注意基准含**已下线**版本（2.8.0 的 code 33 虽已 enabled=false，33 也已经用掉了）。
+  修复：先在 PR 里升 android/app/build.gradle 的 versionCode 并合并，再重新触发发布。`);
+    process.exit(1);
+  }
+  console.log(`  ✓ versionCode：${code}（历史最大 ${maxEver ? `${maxEver.version_code} · ${maxEver.version_name}` : '无（首发）'}）`);
 
   // 1.5【必需前置】cap sync：把 public/ 同步进 android assets。
   // 为什么这里必须先同步（2026-09-14 加）：下面按「构建期注入」给 assets 盖版本号，
@@ -195,10 +215,14 @@ async function main() {
   writeFileSync(androidIndexPath, androidHtml);
   console.log(`  ✓ 已注入 assets：app-version=${webVersion}（线上最新 web）· shell-version=${VERSION}（本次壳）`);
 
-  // 4. 自动 gradle build（旧 meta != 新版本 → rebuild）
-  if (needRebuild && !dryRun) {
+  // 4. gradle 构建
+  //    常规：只在「assets 旧 meta != 新版本」且非预演时构建（保持本地 --dry-run 快速）
+  //    预演 + --build：**照样构建** —— CI 预演必须走通这一步，否则拿不到 APK、
+  //    下面第 5b 步「包内 meta == 本次版本」这条最关键的防旧包断言就等于没做。
+  const shouldBuild = forceBuild || (needRebuild && !dryRun);
+  if (shouldBuild) {
     const { spawnSync } = await import('node:child_process');
-    console.log(`  → android assets meta ${oldAndroidMeta ?? '(无)'} → ${VERSION}，自动 gradle assembleRelease ...`);
+    console.log(`  → android assets meta ${oldAndroidMeta ?? '(无)'} → ${VERSION}，gradle assembleRelease ...${dryRun ? '（预演 --build）' : ''}`);
     const gradleResult = spawnSync('./gradlew', ['assembleRelease'], {
       cwd: join(ROOT, 'android'),
       stdio: 'inherit',
@@ -209,6 +233,8 @@ async function main() {
       process.exit(1);
     }
     console.log('  ✓ gradle build 完成');
+  } else if (dryRun) {
+    console.log('  ⏭  预演未加 --build：跳过 gradle 构建（用已有 APK 校验；包内 meta 断言可能因此失去意义）');
   }
 
   // 5. 定位 APK
@@ -251,24 +277,7 @@ ${candidates.map((p) => '   - ' + p).join('\n')}
     console.log(`  ✓ APK 内 meta：shell-version=${VERSION} · app-version=${apkWebMeta}（防旧包校验通过）`);
   }
 
-  // 6. versionCode：显式指定 > build.gradle 读取
-  if (code == null) {
-    const gradle = await readFile(join(ROOT, 'android', 'app', 'build.gradle'), 'utf8');
-    const m = gradle.match(/versionCode\s+(\d+)/);
-    if (!m) {
-      console.error('✗ 无法从 android/app/build.gradle 解析 versionCode，请用 --code 显式指定');
-      process.exit(1);
-    }
-    code = parseInt(m[1], 10);
-  }
-  if (onlineLatest && code <= onlineLatest.version_code) {
-    console.error(`✗ versionCode 必须大于线上（线上 ${onlineLatest.version_code}，本次 ${code}）。
-  请先升 android/app/build.gradle 里的 versionCode 再发布。`);
-    process.exit(1);
-  }
-  console.log(`  ✓ versionCode：${code}`);
-
-  // 7. SHA-256 + 体积
+  // 6. SHA-256 + 体积（versionCode 已在 1.2 校验过，见那里的注释说明为什么提前）
   const buf = await readFile(apkFile);
   const sha256 = createHash('sha256').update(buf).digest('hex');
   const size = buf.length;

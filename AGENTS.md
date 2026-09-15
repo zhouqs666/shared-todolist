@@ -122,9 +122,31 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 
 **适用**：改了 Capacitor 插件、Android 配置、`capacitor.config.json`、原生权限等，热更新覆盖不到的地方。
 
-- ✅ 跑 `node scripts/release-apk.mjs <版本号>`（自动：**cap sync** → 注入 assets 版本 meta →
-  gradle 打包 → 写 `app_native_versions` 表 → 上传 APK → 覆盖 `~/Desktop/有爱.apk`）
-- ✅ 打包后必须验证：构建时间（确认是最新）、签名通过（`apksigner verify`）、关键改动已入包（unzip 检查）
+**两个执行环境（同一套脚本，不是两条通道）：**
+
+1. **本地直跑**：`node scripts/release-apk.mjs <版本号> [--notes "..."]`
+2. **远程跑（CD，2026-09-15 起）**：GitHub Actions → `CD · APK 发布（原生壳）` → 先 `dry_run=true`
+   看预演报告（**真构建**，产物可从 run 里下载安装验证），确认后 `dry_run=false` + `confirm=<版本号>`，
+   在 `production` 环境点 Approve 才真正写生产
+
+脚本自动：**cap sync** → 注入 assets 版本 meta → gradle 打包 → 校验包内 meta + 签名 →
+写 `app_native_versions` 表 → 上传 APK → （本地跑时）覆盖 `~/Desktop/有爱.apk`
+
+**⚠️ CI 发布的前置条件（两段式，必须先合再发）：**
+版本号是发布命令传入的，但 **`versionCode` 在 `android/app/build.gradle` 里** ——
+它属于代码改动，必须**先走 PR 合并到 main**，再触发发布工作流。
+工作流内置 `sha_pinning_required` 同级的守卫：`versionCode` 必须大于**历史最大值（含已下线行）**，
+否则发布被拒并提示"先去 PR 里升 versionCode"。
+
+- ✅ 打包后必须验证：构建时间（确认是最新）、签名通过（`apksigner verify`，工作流里有独立步骤）、
+  关键改动已入包（unzip 检查，脚本第 5b 步）
+- ✅ 发布后必须回读校验：`node scripts/verify-apk-release.mjs [版本号]`（只读）——
+  版本行 `enabled` / Storage 对象可下载且字节数一致 / **SHA-256 与表里一致** / 包内 meta 一致。
+  ⚠️ 其中 SHA-256 这条是 APK 通道独有的关键项：`apk-update.js` 在唤起系统安装器**之前**会比对它，
+  对不上就**拒绝安装**，用户侧表现是"下载完成后毫无反应"（服务端全绿）——
+  和热更新通道的 `verify-release.mjs` 是同一个「写成功 ≠ 客户端拿得到」的道理
+- ⚠️ **CI 发布不覆盖 `~/Desktop/有爱.apk`**（runner 没有你的桌面）。需要桌面留档时从 run 的
+  artifact 下载，或本地跑一次；「桌面只留一个固定文件名」的纪律仍然只适用于本地打包
 - ✅ 告知用户明确的 APK 路径和构建时间
 
 ### APK 自更新机制（App 内提示升级，与"打 APK"区分）
@@ -310,17 +332,25 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 - **前端**：原生 HTML/CSS/JS（无框架），ES Module
 - **后端**：Supabase（PostgreSQL + Auth + Realtime），无自建服务器
 - **打包**：Capacitor → Android APK（`com.love.todo`）
-- **发布**：热更新（`release.mjs`；本地直跑 或 GitHub Actions `release-web.yml` 审批门跑）+ APK（`release-apk.mjs`）+ App 内自更新（`apk-update.js` + `ApkInstaller`）；发布后回读校验 `verify-release.mjs`
+- **发布**：**通道 A 热更新**（`release.mjs`；本地直跑 或 GitHub Actions `release-web.yml` 审批门跑）
+  + **通道 B APK**（`release-apk.mjs`；本地直跑 或 `release-apk.yml` 审批门跑）
+  + App 内自更新（`apk-update.js` + `ApkInstaller`）；
+  发布后回读校验：通道 A 用 `verify-release.mjs`，通道 B 用 `verify-apk-release.mjs`（两者都是只读、可当 CI 门禁）
 - **PWA**：`manifest.webmanifest` + `sw.js`（Service Worker v15，仅浏览器环境生效，原生环境 bypass）
 - **Capacitor 插件**：`SystemBars` / `LocalNotifications` / `SplashScreen` / `CapacitorUpdater`（热更）/ 自研 `ApkInstaller`（APK 自更）
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
 - **测试**：Playwright（Python 双账号 E2E，连测试库）+ Node 局部回归（可 mock）
-- **CI/CD**：GitHub Actions **五个** workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** + 三个结构性检查）、
-  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，有 `paths` 过滤）、`release-web.yml`（热更新 CD，仅手动触发）、
+- **CI/CD**：GitHub Actions **六个** workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** + 三个结构性检查）、
+  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，有 `paths` 过滤）、
+  `release-web.yml`（**通道 A 热更新 CD**，仅手动触发）、
+  `release-apk.yml`（**通道 B APK 发布 CD**，仅手动触发；工序与 release-web.yml 同构：
+  预演真构建 → 审批门 → 发布 → 回读校验）、
   `e2e-web-full.yml`（**定时全量回归**：每晚 02:00 北京 / `schedule` + `workflow_dispatch`，跑 4 个双账号 Python E2E）、
   `codeql.yml`（**静态代码扫描**：push / PR / 每周一定时；`security-events: write` 是它唯一需要的写权限）。
   main 已开**分支保护**，required checks 取 `ci.yml` 三个 job；改代码走分支 + PR（见「铁律五 → main 分支保护」）
   ⚠️ `schedule` 的 cron **按 UTC 解释**，且定时任务只在**默认分支**上运行（夜里跑的是 main 上已合并的代码）
+  ⚠️ 两个「写生产」的工作流（release-web / release-apk）**共用 `contents: read` + `environment: production` 审批门**，
+  但**各有各的 concurrency 组**（`release-web` / `release-apk`）—— 它们写的是不同的表/对象，互不冲突，不需要串行
 - **供应链安全（2026-09-15 批次 D 起）**：所有 `uses:` **固定到完整 commit SHA**（+ `# vX.Y.Z` 注释，Dependabot 靠它识别版本）；
   仓库已开 `sha_pinning_required`（硬门禁）、secret scanning + push protection、Dependabot alerts / security updates、
   私密漏洞上报（`SECURITY.md`）；依赖版本更新由 `.github/dependabot.yml` 驱动

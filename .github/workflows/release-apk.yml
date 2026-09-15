@@ -1,0 +1,473 @@
+name: CD · APK 发布（原生壳）
+
+# ============================================================
+# 这是什么
+# ============================================================
+# 把「人在本地敲 `node scripts/release-apk.mjs <版本> --notes "..."`」搬到 CI 里点按钮执行。
+# 这是**通道 B（APK 兜底）**的 CD：热更新覆盖不到原生层改动时走这条。
+#
+# 与 release-web.yml 的关系：两个文件工序完全同构（手动触发 → 预演报告 → 人工审批 → 写生产
+# → 回读校验），因为它们防的是同一类风险（写生产不可逆）。区别只在执行体与工具链：
+#
+#   release-web.yml  release.mjs         纯 Node，10 秒级，产物是 zip      → 覆盖 public/ 改动
+#   release-apk.yml  release-apk.mjs     JDK + Android SDK + gradle，分钟级 → 覆盖原生层改动
+#
+# ⚠️ 绝不要给它加 push 触发器（铁律三）：本工作流写生产 Storage + app_native_versions 表，
+#    而它写下去的东西会**推给所有用户的手机**。push 自动触发 = 合并代码即推送，人工确认的机会归零。
+#
+# ============================================================
+# 四道门（任一不过就不会写生产）
+# ============================================================
+#   1. workflow_dispatch        手动触发 —— 只有仓库写权限的人点得动
+#   2. confirm 输入             必须逐字等于版本号 —— 防手滑（本想 dry-run 却点了正式发）
+#   3. 三重版本守卫（脚本内置）  ① version_name 必须 > 线上最新启用版本（2026-08-07 教训）
+#                              ② versionCode 必须 > **历史最大**（含已下线行）
+#                              ③ 包内 shell-version meta 必须 == 本次版本（防"发了个旧包"）
+#   4. environment: production  配好 required reviewers 后是真审批门
+#
+# ============================================================
+# 工序：为什么预演要「真的构建」（--dry-run --build）
+# ============================================================
+# 预演作业**永远执行**（不需要审批），正式发布作业只在 dry_run=false 时进入审批 ——
+# 于是形成「先看报告，再决定要不要审批」的顺序（与 release-web.yml 同一取舍：
+# 若把预演也放到 environment 后面，就得先审批才看得到报告，工序反了）。
+#
+# 预演带上 --build 是**刻意的**：不真跑 gradle 就没有 APK，而三重守卫里最关键的
+# 「包内 meta == 本次版本」（防 2026-09-04 那类"发了个旧包"事故）必须拆开真实产物才验得了。
+# 代价是预演要花掉一次完整构建（约 2~3 分钟，有 gradle 缓存）；换来的是审批人看到的是
+# 「真构建出来的包通过了全部校验」，而不是「脚本的前几行没报错」。
+# ⚠️ 因此预演与发布各构建一次（总共两次）。**刻意不把预演产物传给发布作业复用** ——
+#    复用会引入"验的是 A、发的是 B"的新风险面，而 release-apk.mjs 的构建是它契约的一部分。
+#    省一次构建不值得换这个风险。
+# ============================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '壳版本号（x.y.z，必须大于线上）。⚠️ 前置：versionCode 必须已在 PR 里升好并合并'
+        required: true
+        type: string
+      notes:
+        description: '更新说明（写入 app_native_versions.notes，App 更新面板展示）'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: '预演模式（true = 真构建 + 全量校验，不上传不写库）'
+        required: true
+        default: true
+        type: boolean
+      confirm:
+        description: '正式发布确认：逐字填入与 version 相同的版本号（dry_run=false 时必填）'
+        required: false
+        default: ''
+        type: string
+
+# 最小权限：只读代码。生产写入走 Supabase 凭据（Secrets），不需要仓库写权限。
+permissions:
+  contents: read
+
+# 发布不能被新 run 打断：中断可能停在「构建完但没上传」或「已上传 Storage、未写版本表」的中间态。
+# 与 e2e-* 那两个工作流不同，这里 cancel-in-progress 必须是 false；且它不写测试库，
+# 所以**不并入 e2e-test-db 并发组**（那个组是为了保护共享测试库，与本工作流无关）。
+concurrency:
+  group: release-apk
+  cancel-in-progress: false
+
+jobs:
+  # ============================================================
+  # 作业 1：预演（真构建 + 全量校验，不写生产）
+  # ============================================================
+  preflight:
+    name: 预演（cap sync + gradle 构建 + 三重守卫）
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # 铁律三：发布必须从 main 出包。workflow_dispatch 允许指定 --ref，在分支上跑会把
+      # **未合并的代码**打进 APK 推给用户，并让 main 落后于线上。这条规则用守卫固化，不靠记性。
+      - name: 强制从 main 发布
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "${REF_NAME}" != "main" ]; then
+            echo "::error::发布必须从 main 出包（当前 ref：${REF_NAME}）。请先把改动合并到 main 再发。"
+            exit 1
+          fi
+          echo "✓ 在 main 上发布"
+
+      - name: 校验输入
+        env:
+          VERSION: ${{ inputs.version }}
+          CONFIRM: ${{ inputs.confirm }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          # 变量一律用 ${VAR} 加花括号：$VAR 紧跟中文全角字符时，部分 bash（如 macOS 3.2）
+          # 会把多字节字符的首字节当成变量名的一部分，报 "unbound variable" 且信息乱码。
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::版本号格式错误：${VERSION}（应为 x.y.z）"
+            exit 1
+          fi
+          # 防手滑门：正式发布必须逐字确认版本号，避免「本想 dry-run」变成真推送
+          if [ "${DRY_RUN}" = "false" ] && [ "${CONFIRM}" != "${VERSION}" ]; then
+            echo "::error::正式发布需在 confirm 里逐字填入版本号 ${VERSION}（当前填写：${CONFIRM:-空}）"
+            exit 1
+          fi
+          echo "✓ 输入校验通过：version=${VERSION} dry_run=${DRY_RUN}"
+
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Java 21
+        # gradle 需要 JDK；21 与 build-test-apk 通道保持一致（两处不一致会得到
+        # "本地能打包、CI 打不出"这类只在一边复现的问题）
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Cache Gradle
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        # release-apk.mjs 只用 @supabase/supabase-js + capacitor CLI（纯 JS），
+        # 跳过 sharp/esbuild 等安装脚本加速（与 release-web.yml 同一取舍）
+        run: npm ci --ignore-scripts
+
+      - name: Restore keystore for release signing
+        # 没有 keystore 就只能出 unsigned 包，而它在脚本里的表现是"找不到 APK"（另一件事）
+        # —— 所以这里 fail-closed：连 Secrets 为空也要拦，否则会静默生成一个**空 keystore 文件**，
+        # 一路走到 gradle 才以"签名失败"炸出来，排查成本高得多。
+        #
+        # 本块与 e2e-app.yml 里的同类块有两点**刻意不同**（都是实测得出的，别"统一"回去）：
+        #  1. 不写 `sed -i 's/^          //'`。YAML 的 `run: |` 块标量会先按公共缩进 dedent，
+        #     进到 shell 时 heredoc 的每一行**已经没有前导空格**了 ⇒ 那行是空操作（已实测确认），
+        #     而且它的注释"移除 heredoc 缩进"是错的。更麻烦的是 `sed -i` 在 macOS 上必须写成
+        #     `sed -i ''`，照抄那行会让本块**在本地根本跑不起来**（本工作流的 run 块要求能原样本地执行）。
+        #  2. 用 `openssl base64 -d -A` 而不是 `base64 -d`：BSD 的 base64 历史参数是 `-D`。
+        #     openssl 两边都有，省掉一个"本地和 CI 行为不一致"的坑。
+        #  3. Secrets 走 env 而不是内联 `${{ }}`：不把密钥值拼进脚本正文，也便于逐个校验非空。
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for v in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!v}" ]; then
+              echo "::error::缺少 Secrets：${v}（APK 发布必须能签名，不接受 unsigned 包）"
+              exit 1
+            fi
+          done
+          printf '%s' "${KEYSTORE_BASE64}" | openssl base64 -d -A > love-todo.keystore
+          if [ ! -s love-todo.keystore ]; then
+            echo "::error::keystore 解码后为空 —— KEYSTORE_BASE64 可能不是有效的 base64"
+            exit 1
+          fi
+          cat > android/keystore.properties <<EOF
+          storeFile=../../love-todo.keystore
+          storePassword=${KEYSTORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD}
+          EOF
+          echo "✓ keystore 已就位（$(wc -c < love-todo.keystore | tr -d ' ') 字节）"
+
+      - name: Fix Java home for CI
+        # android/gradle.properties 硬编码了本机 Mac 的 Java 路径（/Applications/Android Studio.app/...），
+        # CI 上不存在 → 不覆盖的话 gradle 会以"找不到 JDK"失败
+        run: |
+          sed -i "s|org.gradle.java.home=.*|org.gradle.java.home=$JAVA_HOME|" android/gradle.properties
+          echo "✓ Java home 已设为 $JAVA_HOME"
+
+      # 缺凭据就 fail-closed，不学 ci.yml 的「缺 E2E secrets 就跳过」——
+      # 发布流水线静默跳过会让人误以为「发布成功了」。
+      - name: 检查发布凭据
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::缺少仓库 Secrets：SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY"
+            exit 1
+          fi
+          echo "✓ 发布凭据已配置（URL 长度 ${#SUPABASE_URL}，key 长度 ${#SUPABASE_KEY}）"
+
+      # 预演：走完 cap sync → 生产库指认门禁 → meta 注入 → gradle 构建 → 三重守卫 → sha256，
+      # 只是不上传不写库。所以这一步失败 = 正式发布也一定会失败，在唤醒审批人之前就拦掉。
+      - name: 预演发布（release-apk.mjs --dry-run --build）
+        id: dryrun
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          args=("$VERSION" --dry-run --build)
+          # 用 if 而不是 `[ -n ... ] && ...`：后者在条件为假时返回 1，配合 set -e 会误判失败
+          if [ -n "$NOTES" ]; then args+=(--notes "$NOTES"); fi
+          node scripts/release-apk.mjs "${args[@]}"
+
+      - name: 校验 APK 签名（apksigner verify）
+        # 铁律三要求「打包后必须验证：构建时间 / 签名通过 / 改动已入包」。脚本已覆盖后两条
+        # （包内 meta + versionCode），签名这条放在工作流里 —— 因为它依赖 Android SDK 布局，
+        # 而工作流里 JDK/SDK 由 runner 保证，比塞进脚本更稳。
+        # 定位逻辑覆盖 CI 的 ANDROID_HOME 与本机（macOS）的默认 SDK 路径，同一段可直接拿去本地跑。
+        # ⚠️ 说清它到底防什么：它**不是**上传前的拦截（真要出 unsigned 包，gradle 产物会叫
+        #    app-release-unsigned.apk，脚本那一步「找不到 APK」就先拦掉了）。它是**确认**：
+        #    证明这次构建确实带上签名，而不是"没报错所以应该有签名"。
+        # 找不到 apksigner 直接 fail（不 warn）：静默跳过签名校验正是铁律三点名禁止的。
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          if [ ! -f "$APK" ]; then
+            echo "::error::找不到构建产物 $APK"
+            exit 1
+          fi
+          APKSIGNER=""
+          if command -v apksigner >/dev/null 2>&1; then APKSIGNER="$(command -v apksigner)"; fi
+          if [ -z "$APKSIGNER" ]; then
+            for root in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
+              [ -n "$root" ] || continue
+              cand="$(ls -d "$root"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1 || true)"
+              if [ -n "$cand" ] && [ -x "$cand" ]; then APKSIGNER="$cand"; break; fi
+            done
+          fi
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::找不到 apksigner（ANDROID_HOME=${ANDROID_HOME:-未设置}）—— 签名校验不能静默跳过"
+            exit 1
+          fi
+          echo "→ 使用 $APKSIGNER"
+          "$APKSIGNER" verify --print-certs "$APK"
+          echo "✓ 签名校验通过"
+
+      - name: 上传预演产物（APK，供人工安装验证）
+        # 刻意不用 if: always() + if-no-files-found: warn —— 那个组合会把「预演早就失败了、
+        # 这一步静默没东西可传」伪装成正常（CODE-REVIEW F2 点名的坑）。
+        # 改成「只有预演成功才期望有产物，且必须有」：预演失败时跳过（失败本身已经红在那了），
+        # 预演成功而产物缺失则**报错**。
+        if: steps.dryrun.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dryrun-apk-${{ inputs.version }}
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: 写入 Run Summary
+        if: always()
+        env:
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          DRYRUN_OUTCOME: ${{ steps.dryrun.outcome }}
+        run: |
+          set -euo pipefail
+          apk_info="（未产出）"
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          if [ -f "$APK" ]; then
+            # wc -c 而不是 GNU 专属的 stat -c%s：本地（BSD/macOS）也能跑同样的块
+            apk_info="$(wc -c < "$APK" | awk '{printf "%.1f MB", $1/1048576}')"
+          fi
+          {
+            echo "## 🧪 APK 预演报告（dry-run，未写生产）"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "|---|---|"
+            echo "| 目标壳版本 | \`${VERSION}\` |"
+            echo "| 构建产物 | ${apk_info} |"
+            echo "| 三重守卫 | $([ "$DRYRUN_OUTCOME" = "success" ] && echo '✓ 全部通过' || echo '✗ 失败（见上方日志）') |"
+            echo "| 更新说明 | ${NOTES:-（无）} |"
+            echo ""
+            echo "三重守卫 = ① version_name > 线上最新 ② versionCode > 历史最大（含已下线行）③ 包内 shell-version meta == ${VERSION}"
+            echo ""
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "**本次为预演模式，未写入生产。** 确认无误后，用 \`dry_run=false\` + \`confirm=${VERSION}\` 重跑即可正式发布。"
+            else
+              echo "**下一步：等「正式发布」作业的审批通过**（environment: production 的 required reviewers）。"
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # ============================================================
+  # 作业 2：正式发布（写生产 —— 审批门在这里）
+  # ============================================================
+  publish:
+    name: 正式发布（写生产）
+    needs: preflight
+    if: ${{ inputs.dry_run == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # 审批门：仓库 Settings → Environments 的 production 配 required reviewers 后，
+    # 本作业会停在「Waiting for review」等人点 Approve，之后才执行。
+    # 且因为 needs: preflight，预演失败时这个作业根本不会进入审批 —— 不会拿一份烂输入去叫人签字。
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Java 21
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Cache Gradle
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Restore keystore for release signing
+        # 与预演作业同一段逻辑（含那里的三条说明：为什么不用 sed、为什么用 openssl、为什么走 env）。
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for v in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!v}" ]; then
+              echo "::error::缺少 Secrets：${v}（APK 发布必须能签名，不接受 unsigned 包）"
+              exit 1
+            fi
+          done
+          printf '%s' "${KEYSTORE_BASE64}" | openssl base64 -d -A > love-todo.keystore
+          if [ ! -s love-todo.keystore ]; then
+            echo "::error::keystore 解码后为空 —— KEYSTORE_BASE64 可能不是有效的 base64"
+            exit 1
+          fi
+          cat > android/keystore.properties <<EOF
+          storeFile=../../love-todo.keystore
+          storePassword=${KEYSTORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD}
+          EOF
+          echo "✓ keystore 已就位（$(wc -c < love-todo.keystore | tr -d ' ') 字节）"
+
+      - name: Fix Java home for CI
+        run: |
+          sed -i "s|org.gradle.java.home=.*|org.gradle.java.home=$JAVA_HOME|" android/gradle.properties
+          echo "✓ Java home 已设为 $JAVA_HOME"
+
+      - name: 检查发布凭据
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::缺少仓库 Secrets：SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY"
+            exit 1
+          fi
+
+      - name: 正式发布（release-apk.mjs：cap sync + 构建 + 上传 Storage + 写版本表）
+        id: release
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          args=("$VERSION")
+          if [ -n "$NOTES" ]; then args+=(--notes "$NOTES"); fi
+          node scripts/release-apk.mjs "${args[@]}"
+
+      - name: 校验 APK 签名（apksigner verify）
+        # 与预演作业同一段逻辑。这里的意义略有不同：它证明**这次真正推给用户的那份构建**
+        # 是带签名的。配合下面回读校验的 SHA-256 断言，可传递地证明「用户下载到的那份字节」
+        # 就是这份已签名的构建（本地文件 → 记录 sha256 → Storage 字节匹配该 sha256）。
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          if [ ! -f "$APK" ]; then
+            echo "::error::找不到构建产物 $APK"
+            exit 1
+          fi
+          APKSIGNER=""
+          if command -v apksigner >/dev/null 2>&1; then APKSIGNER="$(command -v apksigner)"; fi
+          if [ -z "$APKSIGNER" ]; then
+            for root in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
+              [ -n "$root" ] || continue
+              cand="$(ls -d "$root"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1 || true)"
+              if [ -n "$cand" ] && [ -x "$cand" ]; then APKSIGNER="$cand"; break; fi
+            done
+          fi
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::找不到 apksigner —— 签名校验不能静默跳过"
+            exit 1
+          fi
+          "$APKSIGNER" verify --print-certs "$APK"
+          echo "✓ 签名校验通过"
+
+      - name: 上传已发布的 APK（供桌面留档 / 事后复核）
+        # 与预演同样不吞失败：只有发布成功才期望有产物，且必须有。
+        if: steps.release.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: released-apk-${{ inputs.version }}
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      # 写成功 ≠ 客户端拿得到。回读校验：版本行 enabled / SHA-256 与表里一致 / 包内 meta 一致。
+      # 其中 **SHA-256 这条是 APK 通道独有的关键项**：apk-update.js 在唤起系统安装器之前会比对它，
+      # 对不上就**拒绝安装** —— 用户侧表现是"下载完成后毫无反应"，服务端却全绿。
+      - name: 回读校验（verify-apk-release.mjs）
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VERSION: ${{ inputs.version }}
+        run: node scripts/verify-apk-release.mjs "$VERSION"
+
+      - name: 写入 Run Summary（发布结果）
+        if: success()
+        env:
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          {
+            echo ""
+            echo "## ✅ APK 发布完成：\`${VERSION}\`"
+            echo ""
+            echo "- 更新说明：${NOTES:-（无）}"
+            echo "- 生效时机：用户**冷启动** App 后弹出更新面板 → 下载 → sha256 校验 → 唤起系统安装器"
+            echo "- ⚠️ 安装是**用户手动点**的，且首次需允许「来自此来源的应用」⇒ 它不像热更新那样「发完就到」"
+            echo ""
+            echo "**如需止血**：把 \`app_native_versions\` 里该行 \`enabled\` 置 false（App 会退回上一个启用版本）。"
+            echo "注意这只**停止推送**，已经装了坏包的用户不会自动降级 ⇒ 坏包的正确处置是"
+            echo "**尽快发一个修好的更高版本**（且 versionCode 要更大）。"
+            echo ""
+            echo "**桌面留档**：CI 发布不会覆盖本机 \`~/Desktop/有爱.apk\`（runner 没有你的桌面）。"
+            echo "需要时从本次 run 的 artifact 下载，或本地跑一次 \`node scripts/release-apk.mjs\`。"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
