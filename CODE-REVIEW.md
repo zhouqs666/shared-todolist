@@ -119,6 +119,14 @@
 - 🟡 **同一个测试库/环境是否会被多个工作流并发使用？** 各套用例的「归零」会互删对方夹具。
   要么共用同一个仓库级 `concurrency.group`（同名即互斥），要么按命名空间精确隔离；
   「概率很低」不是设计，是运气。
+  **实测过（2026-09-15）**：定时全量回归与 APP E2E 时间重叠 → Appium 报 `no such element`，
+  同一次提交在**独跑时是绿的**（A/B 对照）。机制：归零删掉全部贴纸 → 被测 App 重新开奖 →
+  开奖 toast/特效盖住界面 → 找不到元素。**并发跑共享环境，红灯会变成随机噪声**。
+- 🔴 **`pull_request` 的 `paths` 是否漏了 workflow 自身？** 只改 workflow 的 PR 会因此
+  **一个相关 E2E 都不跑**，改动只能等合并后在 main 上第一次执行 —— 与「改完必须真跑过一次」直接冲突。
+  实测（2026-09-15）：`e2e-app.yml` 的 `push` 侧有 `.github/workflows/e2e-app.yml`、`pull_request` 侧没有；
+  给串行化改动推第一版时 `gh pr checks` 里根本没有 App E2E，补上该路径后 `Build Test APK` 立刻出现。
+  自查法：`on.push.paths` 与 `on.pull_request.paths` 是否**逐条对齐**（除非有意不同，且写明原因）。
 - 🟡 定时/全量回归是否被误加进 required checks？**不该** —— 它不在 PR 上运行，设成 required
   会让 check 永远停在 "Expected"（与上面 `paths` 过滤那条同因）。分层触发的分工是：
   PR 门禁要**快而稳**，全量回归可以**慢而全**。
