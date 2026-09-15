@@ -335,6 +335,7 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 - **结构性检查（CI required job 里跑，都是纯静态、秒级失败）**：`check-test-guards.mjs`（只读守卫）／
   `check-e2e-env-keys.mjs`（凭证键三方一致：代码读取 / 模板 / 两个工作流生成）／
   `check-actions-pinned.mjs`（**actions 必须固定到完整 SHA 且带 `# vX.Y.Z` 注释** —— 仓库设置里的
-  `sha_pinning_required` 也能拦，但它失败时**工作流根本不启动**（check 直接不出现，像"还没跑"），
-  这个脚本把同一件事提前成带报错的本地/CI 静态检查）
+  `sha_pinning_required` 也拦得住未固定（实测：该 job 在 "Set up job" 阶段就失败并给出明确报错）；
+  但它**不查版本注释**，而注释是 Dependabot 判断当前版本的唯一依据，缺了 = 安全补丁静默进不来。
+  所以本脚本的价值是「本地秒级反馈 + 补上开关查不了的那条规则」）
 - **埋点状态**：⚠️ 目前零埋点，无法回答"哪个功能最常用""两人一天互动几次"。补基础埋点（北极星 = 双端同日活跃天数）在路线图 P0。

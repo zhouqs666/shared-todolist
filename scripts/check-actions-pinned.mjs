@@ -4,13 +4,24 @@
  *
  * ## 为什么需要这个脚本（而不只是打开 GitHub 的开关）
  *
- * 仓库设置里有一项 `sha_pinning_required`（本仓库已开）：开启后，引用 tag 的工作流**根本不会启动**。
- * 但那种失败方式极其隐蔽 —— PR 上的 check 直接不出现，看起来像「还没跑」而不是「配错了」，
- * 与 2026-09-15 实测到的「`pull_request.paths` 漏配 workflow 自身 → 该 PR 零验证」是同一类
- * 隐形故障（见 CODE-REVIEW.md F2）。
+ * 仓库设置里有一项 `sha_pinning_required`（本仓库已开），实测它的行为是：
+ * **用到未固定 action 的那个 job 在 "Set up job" 阶段直接失败**，一个 step 都不会执行，
+ * 报错 `##[error]The action actions/checkout@v4 is not allowed in <repo>
+ * because all actions must be pinned to a full-length commit SHA.`
+ * （2026-09-15 在临时 canary 分支上 A/B 实测：同一个 run 里，含 `@v4` 的 job 这样挂掉，
+ *  另外两个只用固定 SHA 的 job 正常跑绿 —— 见 CODE-REVIEW.md 的审查记录。）
  *
- * 这个脚本把同一件事提前成「秒级、带明确报错、本地可跑」的静态检查，
- * 与 check-test-guards.mjs / check-e2e-env-keys.mjs 同一族。
+ * ⚠️ 我最初把这条写成了「工作流根本不启动、PR 上的 check 直接不出现」，**实测推翻了它** ——
+ * 失败是响亮的、per-job 的、带明确报错的。写文档时的推断必须被实测检验，否则就是在传播错误结论。
+ *
+ * 那这个脚本还剩下什么价值？（两条，第二条是开关**根本做不到**的）
+ *
+ * 1. **反馈更快更早**：GitHub 的开关只在 runner 上生效，你要先推代码、等 runner 起 job、
+ *    再看那条报错；本脚本是本地/CI 秒级、且直接打印「取 SHA 的命令」。
+ * 2. **它能查版本注释，开关查不了**（这条是它存在的真正理由）：
+ *    `# vX.Y.Z` 注释是 **Dependabot 判断当前版本的唯一依据** —— 少了它，
+ *    Dependabot 就看不到这个依赖，**永远不会给你提更新**（安全补丁静默进不来）。
+ *    `sha_pinning_required` 完全不管注释，只看 SHA 长度。
  *
  * ## 规则
  *
