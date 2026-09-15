@@ -51,6 +51,13 @@
 
 - 🔴 XSS：用户输入（todo 文案、留言 content、昵称）渲染时是否转义？`innerHTML` 是否吞了未转义内容？
 - 🔴 密钥：是否硬编码了不该出现的东西？—— 明确边界：`anon key` 可公开（靠 RLS），但 **`service_role key` 绝不允许进前端**。
+- 🔴 **`.example` / 模板 / 文档 / 测试夹具里是否出现了真实凭据或真实账号标识？**
+  真值只能放 `.env*`（已 gitignore）与 GitHub Secrets；仓库里一律占位符（`your-xxx` / `test-user@example.com`）。
+  自查：`git grep -nE "PASSWORD=[^y]|@todo\.local" -- '*.example' '*.md'` 应为空或仅注释/占位符。
+  **血泪（2026-09-15 发现）**：`admin/.env.test.example` 从 2026-09-08 起在 **public 仓库**里写着
+  真实账号邮箱 + 真实密码（`TodoTest@2026`），躺了一周才发现 —— 而生产账号用的是**同一个邮箱**，
+  只要密码复用，这就等价于把账号贴在公网。**教训**：删掉文件里的值不够，历史提交里还有 ⇒
+  发现即**先改密码**（让泄露值失效），再清理文件；且这类问题本该由 push protection 在推送时拦下（批次 D）。
 - 🔴 SQL 注入：本项目直连 PostgREST 风险低，但手写 SQL / RPC 函数要逐一检查。
 - 🟡 输入校验：长度、类型、emoji、图片 MIME。
 - 🟡 Storage：`todo-attachments` 公开读 bucket 是否会泄露不该公开的内容。
