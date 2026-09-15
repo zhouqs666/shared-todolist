@@ -40,6 +40,19 @@
 
 ### 维度 B：正确性
 
+- 🔴 **「记录」是否如实描述了「制品」？**（2026-09-15 从 APK 通道挖出的一类缺陷，值得当独立维度看）
+  凡是「数据库里写一行来描述某个即将被用户拿到的东西」，就要问：**这一行说的和那个东西里真的是同一件事吗？**
+  实测反例（APK 通道，两个都真实的差点漏过）：
+  - **`apk_native_versions.version_name` 可以和 APK 里真实的 `versionName` 不一致**：
+    表里的值来自发布命令的入参，而客户端判断"要不要更新"用的是 **APK manifest 里的 versionName**
+    （`App.getInfo().version`）。两者不一致 ⇒ App 反复提示同一次更新，**用户陷入无限重装**。
+    而这个不一致**一路绿灯**：`versionCode` 有守卫、包内 `shell-version` meta 也校验 ——
+    但那个 meta 是脚本自己注入的，**恒等于版本号、必然通过**（校验的是"我以为的值"，不是"制品里的值"）。
+  - **`--code` 能让表里的 versionCode 与 APK 里真实的 versionCode 脱钩**（真实值永远取自 build.gradle）。
+  ⇒ 判据：**校验必须锚在「制品本身」上，而不是锚在「我们写进去的变量」上**。
+  如果只能校验后者，那至少要有一条断言把两者钉在一起（本例的做法：直接读 `build.gradle`，
+  因为那正是 gradle 打在包里的那个值）。
+
 - 🔴 状态一致性：`completed_by` / `completed_at` 这类联动字段是否同步维护？（正例：`db.js setCompleted`）
 - 🔴 竞态：Realtime 自我回声是否会覆盖本地乐观状态？（正例：`state.js inFlight` 飞行追踪）
 - 🔴 错误处理：创建 / 删除 / 完成等关键路径是否 try/catch 或统一 `wrapError`？
