@@ -17,10 +17,12 @@ const SERVICE_ROLE_KEY = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY;
 
 export const E2E_PREFIX = 'E2E-APP-';
 
-// 邮箱→中文用户名反向映射（CI 的 E2E_TEST_EMAIL 可能是邮箱，需要转回用户名）
+// 邮箱→用户名反向映射（CI 的 E2E_TEST_EMAIL 可能是邮箱，需要转回用户名）
+// 测试账号已改为 ASCII 命名（e2e-alpha / e2e-beta），与生产账号刻意不同名，避免排查时看错对象。
+// 未列出的邮箱仍走下方兜底（`取 @ 前面部分`），所以新增测试账号无需改这里。
 const EMAIL_TO_USERNAME = {
-  'xiaobaobao@todo.local': '小宝宝',
-  'dabaobei@todo.local': '大宝贝',
+  'e2e-alpha@todo.local': 'e2e-alpha',
+  'e2e-beta@todo.local': 'e2e-beta',
 };
 function emailToUsername(email) {
   if (!email) return undefined;
@@ -31,11 +33,10 @@ function emailToUsername(email) {
 const TEST_USERNAME = process.env.E2E_TEST_USERNAME || emailToUsername(process.env.E2E_TEST_EMAIL);
 const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD;
 
-// 与 public/js/auth.js 的 usernameToEmail 保持一致（中文用户名 toLowerCase 不变，
-// 必须走拼音映射，否则在测试库里查不到用户）
+// 与 public/js/auth.js 的 usernameToEmail 保持一致（ASCII 用户名直接拼伪邮箱即可）
 const USERNAME_TO_EMAIL = {
-  小宝宝: 'xiaobaobao@todo.local',
-  大宝贝: 'dabaobei@todo.local',
+  'e2e-alpha': 'e2e-alpha@todo.local',
+  'e2e-beta': 'e2e-beta@todo.local',
 };
 
 function usernameToEmail(username) {

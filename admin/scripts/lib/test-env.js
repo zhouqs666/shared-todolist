@@ -40,10 +40,18 @@ export function loadTestEnv() {
   return { URL, ANON_KEY, SERVICE_ROLE_KEY, EMAIL, PASSWORD };
 }
 
-/** 两个固定测试账号（伪邮箱，独立测试项目注册，与生产账号无关） */
+/**
+ * 两个固定测试账号（伪邮箱，独立测试项目注册，**刻意与生产账号同名/同音**是禁止的）。
+ *
+ * 命名为什么用 ASCII 的 e2e-alpha / e2e-beta（2026-09-15 改）：
+ *   以前这里叫 xiaobaobao / dabaobei，和生产账号**同名同邮箱**（生产库那两个账号是
+ *   小宝宝/大宝贝）—— 排查事故时两套环境在日志/截图里长得一模一样，极易看错对象。
+ *   顺便说明：改成 ASCII 不需要动 App 代码，public/js/auth.js 与 admin 的
+ *   usernameToEmail 都有兜底 `${username.toLowerCase()}@todo.local`，能直接映射。
+ */
 export const TEST_USERS = [
-  { email: 'xiaobaobao@todo.local', username: 'xiaobaobao', display_name: '小宝宝' },
-  { email: 'dabaobei@todo.local', username: 'dabaobei', display_name: '大宝贝' },
+  { email: 'e2e-alpha@todo.local', username: 'e2e-alpha', display_name: 'E2E-Alpha' },
+  { email: 'e2e-beta@todo.local', username: 'e2e-beta', display_name: 'E2E-Beta' },
 ];
 
 /**
