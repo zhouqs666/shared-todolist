@@ -315,15 +315,26 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 - **Capacitor 插件**：`SystemBars` / `LocalNotifications` / `SplashScreen` / `CapacitorUpdater`（热更）/ 自研 `ApkInstaller`（APK 自更）
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
 - **测试**：Playwright（Python 双账号 E2E，连测试库）+ Node 局部回归（可 mock）
-- **CI/CD**：GitHub Actions 四个 workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** + 两个结构性检查）、
+- **CI/CD**：GitHub Actions **五个** workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** + 三个结构性检查）、
   `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，有 `paths` 过滤）、`release-web.yml`（热更新 CD，仅手动触发）、
-  `e2e-web-full.yml`（**定时全量回归**：每晚 02:00 北京 / `schedule` + `workflow_dispatch`，跑 4 个双账号 Python E2E）。
+  `e2e-web-full.yml`（**定时全量回归**：每晚 02:00 北京 / `schedule` + `workflow_dispatch`，跑 4 个双账号 Python E2E）、
+  `codeql.yml`（**静态代码扫描**：push / PR / 每周一定时；`security-events: write` 是它唯一需要的写权限）。
   main 已开**分支保护**，required checks 取 `ci.yml` 三个 job；改代码走分支 + PR（见「铁律五 → main 分支保护」）
   ⚠️ `schedule` 的 cron **按 UTC 解释**，且定时任务只在**默认分支**上运行（夜里跑的是 main 上已合并的代码）
+- **供应链安全（2026-09-15 批次 D 起）**：所有 `uses:` **固定到完整 commit SHA**（+ `# vX.Y.Z` 注释，Dependabot 靠它识别版本）；
+  仓库已开 `sha_pinning_required`（硬门禁）、secret scanning + push protection、Dependabot alerts / security updates、
+  私密漏洞上报（`SECURITY.md`）；依赖版本更新由 `.github/dependabot.yml` 驱动
+  （⚠️ **刻意不含 gradle**：`android/` 是 Capacitor 生成工程，兼容区间由上游定，盲升大概率红，
+  而"有没有 CVE"已由 alerts 覆盖 —— 原生层只要可见性，不要自动改代码）
+  ⚠️ **"固定 SHA" 与 "Dependabot 推更新" 是一对，缺一不可**：只固定 = 冻在旧版本、安全补丁进不来
+  ⚠️ 取 SHA：`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`（`type=tag` 时再解一层 `git/tags/<sha>`）
 - **本地服务**：`node scripts/serve.mjs`（端口 3000，**生产库**，仅手动自测）／`node scripts/serve-test.mjs`（端口 3100，**测试库**，跑 E2E 必须用这个）
 - **测试库维护**：`node scripts/reset-test-db.mjs`（归零，硬删 web 通道 E2E 残留 + 贴纸）／`node scripts/check-test-env.mjs`（隔离自检）／`node app-e2e/scripts/check-test-schema.mjs`（schema 契约）
 - **Web E2E 跑批**：`node scripts/run-web-e2e.mjs`（逐个归零 + 失败重试一次 + flaky 显式标记 + Run Summary；`--files` / `--keep-data` / `--no-retry` / `--fail-on-flaky`）；
   依赖钉在 `scripts/requirements-e2e.txt`（Python playwright，CI 与本地同版本）
 - **结构性检查（CI required job 里跑，都是纯静态、秒级失败）**：`check-test-guards.mjs`（只读守卫）／
-  `check-e2e-env-keys.mjs`（凭证键三方一致：代码读取 / 模板 / 两个工作流生成）
+  `check-e2e-env-keys.mjs`（凭证键三方一致：代码读取 / 模板 / 两个工作流生成）／
+  `check-actions-pinned.mjs`（**actions 必须固定到完整 SHA 且带 `# vX.Y.Z` 注释** —— 仓库设置里的
+  `sha_pinning_required` 也能拦，但它失败时**工作流根本不启动**（check 直接不出现，像"还没跑"），
+  这个脚本把同一件事提前成带报错的本地/CI 静态检查）
 - **埋点状态**：⚠️ 目前零埋点，无法回答"哪个功能最常用""两人一天互动几次"。补基础埋点（北极星 = 双端同日活跃天数）在路线图 P0。

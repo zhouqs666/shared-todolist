@@ -1,0 +1,130 @@
+# Dependabot 版本更新（批次 D · 供应链安全）
+# ============================================================================
+# 与「Dependabot alerts / security updates」的区别（面试常被问，也是这里配置的立论）：
+#
+#   - alerts           ：**看得见**。仓库已有依赖出现 CVE 时告警（本仓库已开）
+#   - security updates ：**能止血**。针对已告警的 CVE 自动开 PR 升级（本仓库已开）
+#   - version updates  ：**本文件**。不依赖 CVE，按排期主动把依赖升到新版本 ——
+#                        目的是「把落后的版本差一点点抹平」，而不是等出了 CVE 再追。
+#
+# 三者是递进关系，不是重复。前两者是反应式的，本文件是主动式的。
+#
+# ## 为什么这么配（每一条都有理由，不要随手改）
+#
+# 1. **minor/patch 合一个 PR，major 各自单独开**
+#    合组是降噪：一周开 15 个 PR 没人看，等于没有 Dependabot。
+#    但 major 刻意**不**合并 —— major 有 breaking change，合在一个 PR 里一旦 CI 红了
+#    没法二分定位是哪个依赖的问题，只能整个 PR 重来。
+#
+# 2. **排期 weekly + 固定时间（北京时间周一 09:00）**
+#    上班第一天就能看到本周的依赖 PR，而不是半夜醒来发现 15 个 PR。
+#    同时避开本仓库的定时全量回归（每晚 02:00 北京，见 e2e-web-full.yml）——
+#    两者都会往 main 推变更，错开时段能少一次无谓的排队。
+#
+# 3. **刻意不启用 gradle（android/）的版本更新** —— 这是有意的决定，不是遗漏
+#    理由：`android/` 是 Capacitor 生成的工程，AGP / Gradle 版本与 Capacitor 的兼容区间
+#    由 **Capacitor 上游**定义，盲升大概率红。而"知道有没有 CVE"这件事已经由
+#    Dependabot **alerts** 覆盖（它对 gradle 依赖一样会告警）。
+#    结论：原生层只要**可见性**（alerts），不要**自动改代码**（version updates）——
+#    自动 PR 的价值是省人力，这里省不下（升不动），只会留下没人能合的 PR。
+#
+# 4. **`open-pull-requests-limit` 压小**
+#    默认 5，但噪声预算是有限的：这些 PR 每个都要跑 required checks（ci.yml 三个 job），
+#    而 app-e2e / android 相关的改动还会触发 ~8 分钟模拟器套件。宁可少开几个、逐个看。
+# ============================================================================
+
+version: 2
+updates:
+  # ── 1. GitHub Actions：**本批次的主角** ────────────────────────────────────
+  # 四个工作流里的 action 已全部固定到完整 commit SHA（见 scripts/check-actions-pinned.mjs）。
+  # 固定的代价是「再也不会自动变新」—— 由一个不可变的 SHA 换来供应链安全，
+  # 但也就意味着**必须有 Dependabot 来推**，否则安全补丁永远进不来。
+  # 所以「SHA 固定」和「这条 ecosystem」是一对，缺一个都不成立。
+  #
+  # Dependabot 认 SHA 的方式：读行尾的 `# v4.4.0` 注释确定当前版本，
+  # 升级时**同时改写 SHA 与注释**（所以注释不是装饰，见 check-actions-pinned.mjs 的规则 2）。
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(ci)'
+    groups:
+      actions-minor-patch:
+        patterns: ['*']
+        update-types: ['minor', 'patch']
+
+  # ── 2. 主应用（public/ 侧）：Capacitor 插件 + Supabase SDK + 构建工具 ──────
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      root-minor-patch:
+        patterns: ['*']
+        update-types: ['minor', 'patch']
+
+  # ── 3. admin 后台 ──────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /admin
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      admin-minor-patch:
+        patterns: ['*']
+        update-types: ['minor', 'patch']
+
+  # ── 4. APP 自动化工程（app-e2e）────────────────────────────────────────────
+  # ⚠️ 这个目录的改动会触发 `e2e-app.yml`（约 8 分钟模拟器 + Appium）。
+  # 慢是真慢，但也是这里最该被跑一遍的地方：WebdriverIO / Appium 的升级
+  # 恰恰是最容易「本地没事、CI 上找不到元素」的那类变化。
+  - package-ecosystem: npm
+    directory: /app-e2e
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      app-e2e-minor-patch:
+        patterns: ['*']
+        update-types: ['minor', 'patch']
+
+  # ── 5. Python E2E 依赖（scripts/requirements-e2e.txt）─────────────────────
+  # 这个文件是钉版本的（CI 与本地同版本），Dependabot 会按 requirements 格式升级它。
+  # 注意 playwright 的 Python 包与浏览器二进制是一体两面：
+  # e2e-web-full.yml 的浏览器缓存 key 就是按这个文件的 hash 算的，
+  # 所以升它 = 缓存自动失效 + 浏览器重装，这是设计好的（避免旧浏览器配新库的诡异失败）。
+  - package-ecosystem: pip
+    directory: /scripts
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      python-minor-patch:
+        patterns: ['*']
+        update-types: ['minor', 'patch']

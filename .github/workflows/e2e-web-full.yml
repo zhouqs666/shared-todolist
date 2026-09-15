@@ -39,6 +39,11 @@ on:
         required: false
         default: false
 
+# 最小权限（批次 D）：本工作流只读代码；测试库凭据走 Secrets，且刻意只给 URL 不给写权限。
+# 仓库默认已是 read，但**显式声明 > 依赖仓库默认值**（默认值能在 Settings 里被改掉）。
+permissions:
+  contents: read
+
 # 并发组：**与 e2e-app.yml 共用同一个仓库级组名** —— 两个工作流都写同一个 Supabase 测试库，
 # 同时跑会互相干扰（GitHub 的并发组是仓库范围的，不同工作流同名即互斥）。
 # 实测：2026-09-15 本工作流的归零动作与 APP E2E 的模拟器套件撞上，Appium 侧报 `no such element`
@@ -65,16 +70,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: 'npm'
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -89,7 +94,7 @@ jobs:
       # 浏览器二进制约 150MB，缓存后省 1~2 分钟；key 跟着 requirements 走，
       # playwright 版本一变就自动换缓存（避免旧浏览器配新库的诡异失败）
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('scripts/requirements-e2e.txt') }}
@@ -163,7 +168,7 @@ jobs:
         # 失败时的第一动作是**看截图**（阶段 3 的方法论沉淀）：
         # 日志里的「元素找不到」永远只是表层现象。
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: web-e2e-screenshots
           path: /tmp/*.png
@@ -172,7 +177,7 @@ jobs:
 
       - name: Upload server log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: serve-test-log
           path: /tmp/serve-test.log

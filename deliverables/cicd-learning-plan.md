@@ -244,6 +244,36 @@
 >   （App 登录框收的是**用户名**，此前 CI 只注入了 `E2E_TEST_EMAIL`，python 侧必然拿不到凭证）。
 > ⑤ **把这次的坑变成机器判定**：新增 `scripts/check-e2e-env-keys.mjs`（凭证键三方一致：代码读取 /
 >   模板 / 两个工作流生成，已进 CI required job）—— 与 `check-test-guards.mjs`、`check-test-schema.mjs` 同一思路。
+>
+> **CI 侧已补（2026-09-15，批次 D）：供应链安全 —— 把「依赖/上游」当成攻击面**
+> ① **actions 全部固定到完整 commit SHA**（4 个既有 workflow 共 32 处 `uses:` + 新 CodeQL 3 处）。
+>   动机：tag 与分支都是**可变**的 —— 上游能把 `v4` 重新指向任意 commit，而你的工作流照跑不误
+>   （SolarWinds 式供应链攻击最省力的入口）。固定的是**当前 `@v4` 指向的那个 commit**，
+>   所以这是「只换不可变性、不换版本」的等价改动。
+>   ⚠️ 关键认知：**「固定 SHA」与「Dependabot 推更新」是一对，缺一不可** ——
+>   固定 = 再也不会自动变新，没有 Dependabot 就等于把安全补丁一起冻住。
+>   且行尾必须是 `# vX.Y.Z` 形态：Dependabot 靠这条注释判断当前版本，没有它 = 静默盲区。
+> ② **`scripts/check-actions-pinned.mjs`（新增，机器判定）**：把「必须固定」变成秒级静态检查。
+>   为什么仓库设置里的 `sha_pinning_required` 不够：它的失败方式是**工作流根本不启动** ——
+>   PR 上的 check 直接不出现，看起来像"还没跑"而不是"配错了"（与批次 C 的 `paths` 漏配同类隐形故障）。
+>   脚本已带正反用例实测（unpinned / 短 SHA / 缺注释 / 无 `@ref` 四种负向，
+>   外加"注释掉的行不算已声明"）。
+> ③ **`.github/workflows/codeql.yml`（新增，advanced setup）**。选 advanced 而非网页上的 default setup：
+>   后者的配置**不进仓库**（PR 里 review 不到、改不了），而本项目一贯的原则是 Pipeline as Code。
+>   **CodeQL 与 Dependabot 扫的不是同一样东西**（面试高频混淆点）：前者扫你自己写的代码
+>   （注入 / XSS / 路径穿越 —— 本应用大量操作 `innerHTML`，正当其靶心），后者扫依赖找已知 CVE；
+>   依赖全升到最新也挡不住自己写出的漏洞。
+>   刻意**不含 Python**（`scripts/*.py` 全是测试工具链，不随产品分发）。
+>   刻意**不进 required checks**：静态扫描的产出是"待定级的告警"，不是"通过与失败"；
+>   在没逐条定级之前设成 required，团队第一反应是给所有告警打 won't fix，门禁就成白纸了。
+> ④ **`.github/dependabot.yml`（新增）**：5 个 ecosystem（github-actions / 三个 npm / pip）。
+>   minor+patch **合组**降噪，major **各自单独开**（合在一起 CI 红了没法二分定位）；
+>   **刻意不启用 gradle**（`android/` 是 Capacitor 生成工程，AGP/Gradle 兼容区间由上游定义，
+>   盲升大概率红，而"有没有 CVE"已由 Dependabot **alerts** 覆盖）—— 原生层只要**可见性**，
+>   不要**自动改代码**。这条取舍本身就是个好答案：自动 PR 的价值是省人力，省不下就该不做。
+> ⑤ **最小权限**：三个只读 workflow 补显式 `permissions: contents: read`（仓库默认已是 read，
+>   但**默认值是能在 Settings 里被改掉的东西**，而文件里的声明会跟着代码一起被 review）；
+>   CodeQL 单独声明 `security-events: write`（上传 SARIF 必需）。
 
 ### 阶段 5：全链路整合 + 面试准备
 
