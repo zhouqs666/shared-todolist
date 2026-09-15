@@ -192,28 +192,12 @@ jobs:
             export DEVICE_NAME="emulator-5554"
             export ANDROID_HOME="$ANDROID_HOME"
 
-            # 运行测试（脚本内部管理 Appium 生命周期）
+            # 跑测试：外面套一层「失败重试一次」（重试原因与实测证据写在
+            # app-e2e/scripts/ci-run-with-retry.sh 的文件头；真回归仍会失败，只吸收环境抖动）
             #
-            # 失败重试一次（2026-09-15 加）：**模拟器/Appium 这条链本身不稳**，与业务代码无关 ——
-            # 实证：同一 commit（f12da3c）首跑失败、重跑通过；失败形态还在跳
-            #（一次是「登录页 60s 不出现 + 动画超时」，一次是「adb 报错 + 元素定位失败」），
-            # 而当天 main 自己（13:41）也失败过一次。这套抖动在 web 通道早就用"重试一次"消化
-            #（scripts/run-web-e2e.mjs），这里对齐同一策略。
-            # ⚠️ 真回归不会被掩盖：第二次仍会失败并让 job 红 —— 只吸收瞬时抖动。
-            # ci-run.sh 自带 trap cleanup（退出即停 Appium），所以重跑是安全的。
-            for attempt in 1 2; do
-              echo "=== Appium 第 $attempt 次尝试 ==="
-              if bash app-e2e/scripts/ci-run.sh; then
-                echo "✅ 第 $attempt 次通过"
-                exit 0
-              fi
-              if [ "$attempt" = "1" ]; then
-                echo "⚠️ 第 1 次失败，重试一次（按既往观测多为环境抖动；若第 2 次同样失败，则是真回归）"
-              else
-                echo "✗ 两次都失败：按真回归处理"
-                exit 1
-              fi
-            done
+            # ⚠️ 这个 script 是**逐行**交给 /usr/bin/sh -c 执行的：不要在这里写跨行的
+            # for/if 结构（会被拆断成语法错误 —— 2026-09-15 踩过），多行逻辑写进脚本文件。
+            bash app-e2e/scripts/ci-run-with-retry.sh
 
       - name: Upload Allure results
         if: always()
