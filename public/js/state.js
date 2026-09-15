@@ -40,8 +40,41 @@ export function getTodos() {
 }
 
 export function setTodos(next) {
-  todos = next;
+  // 已删除（墓碑）的待办**永不出现在列表里** —— 即使调用方把它塞进来。
+  // 为什么必须在这一层兜：全量重拉列表的路径不止一条（init 的首次加载、回前台的
+  // handleAppVisibility），它们拿到的可能是「删除请求还没落库」那一瞬间的旧数据，
+  // 整份 setTodos 进来就把刚删掉的待办又装回列表（2026-09-16 定位：E2E 10 次里 3 次复现，
+  // 栈显示是 init 的装载路径）。放在唯一入口上，调用方不必各自记得过滤。
+  todos = removedTodoIds.size ? next.filter((t) => !removedTodoIds.has(t.id)) : next;
   dispatch(renderFns, todos);
+}
+
+// ===== 本地已删除待办（tombstone）=====
+
+/**
+ * 为什么需要"墓碑"：Realtime 会把本端自己的操作**迟到**推回来（WebSocket 断线重连期间的事件
+ * 会随后补推，实测延迟可达数秒）。一条迟到的 INSERT/UPDATE 回声带着 `deleted_at = null`，
+ * 而 realtime.js 的两个分支都是"id 不在列表就追加" —— 于是用户刚删掉的待办会**复活**回主列表
+ * （2026-09-16 定位：test_offline 在 main 上 2/3 复现；删除后列表里又有它，而库里确实已软删除）。
+ *
+ * 所以删除动作留一个"墓碑"，同一会话内拒绝再把它加回来。恢复（撤销删除 / 回收站恢复）时清掉墓碑。
+ *
+ * 已知边界：**对方设备**恢复这条待办时，本端会因墓碑而忽略那次 UPDATE（不给本端"复活"回来，
+ * 因为无法区分"真恢复"与"迟到的旧回声" —— todos 表没有 updated_at 可供排序）。
+ * 本端下次冷启动会拉到正确状态。宁可"晚一点看到"，也不要"删了又自己冒出来"。
+ */
+const removedTodoIds = new Set();
+
+export function markTodoRemoved(id) {
+  if (id) removedTodoIds.add(id);
+}
+
+export function unmarkTodoRemoved(id) {
+  if (id) removedTodoIds.delete(id);
+}
+
+export function isTodoRemoved(id) {
+  return !!id && removedTodoIds.has(id);
 }
 
 export function isOnline() {

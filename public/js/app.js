@@ -27,6 +27,8 @@ import {
   getStickers,
   setStickers,
   addOrUpdateSticker,
+  markTodoRemoved,
+  unmarkTodoRemoved,
 } from './state.js';
 import { initRealtime, initPresence } from './realtime.js';
 import { initTheme } from './theme.js';
@@ -236,6 +238,7 @@ function hideLoading() {
     forceDeleteTodo: (id) => db.forceDeleteTodo(id),
     displayOf,
     onRestored: (todo) => {
+      unmarkTodoRemoved(todo.id); // 回收站恢复 = 用户明确要它回来，撤掉删除墓碑
       if (!getTodos().some((t) => t.id === todo.id)) {
         setTodos(sortTodos([...getTodos(), todo]));
       }
@@ -573,6 +576,7 @@ async function addTodo() {
 
 // ===== 离线写入（M2 MVP：仅 addTodo）=====
 let offlineReplayBound = false;
+let replaying = false; // 重放进行中标记（防并发重放把同一条 op 补发两次）
 
 /** 生成一条离线 pending 待办并本地显示 + 入队 */
 function stashOfflineTodo(text, rarity) {
@@ -607,27 +611,36 @@ function bindOfflineReplay() {
 
 /** 串行重放离线队列：每条成功则替换 pending 为真实待办并出队，失败则中断保留 */
 async function replayOfflineQueue() {
+  // 防重入：'online' 事件可能连续触发两次，而队列项要等 createTodo 回来才被移除 ——
+  // 两次并发重放会读到同一条 op，把它补发成**两条重复待办**。
+  // （2026-09-16 定位：E2E 偶发"删掉一条后列表里还有同文案的另一条"，探针抓到同文案两个 id。）
+  if (replaying) return;
   const queue = getOfflineQueue();
   if (!queue.length) return;
-  for (const op of queue) {
-    try {
-      const real = await db.createTodo(op.text, currentUser.id, null, op.rarity);
-      // 离线时开出的隐藏款：补上在线路径会做的解锁（stashOfflineTodo 分支跳过了这一步，
-      // 旧实现里这些隐藏款永远不解锁贴纸 —— 开出了却白开）
-      if (isHidden(real.rarity)) {
-        await onRollRarity(real, currentUser.id).catch((e) =>
-          console.warn('[app] 离线隐藏款补解锁失败:', e.message)
-        );
+  replaying = true;
+  try {
+    for (const op of queue) {
+      try {
+        const real = await db.createTodo(op.text, currentUser.id, null, op.rarity);
+        // 离线时开出的隐藏款：补上在线路径会做的解锁（stashOfflineTodo 分支跳过了这一步，
+        // 旧实现里这些隐藏款永远不解锁贴纸 —— 开出了却白开）
+        if (isHidden(real.rarity)) {
+          await onRollRarity(real, currentUser.id).catch((e) =>
+            console.warn('[app] 离线隐藏款补解锁失败:', e.message)
+          );
+        }
+        // 移除本地 pending；real 可能已由 Realtime 回推（按真实 id 幂等去重）
+        const withoutPending = getTodos().filter((t) => t.id !== op.localId);
+        const alreadyHas = withoutPending.some((t) => t.id === real.id);
+        setTodos(sortTodos(alreadyHas ? withoutPending : withoutPending.concat(real)));
+        removeOfflineOp(op.localId);
+      } catch (e) {
+        // 仍离线或其它失败：中断本轮，保留队列待下次
+        break;
       }
-      // 移除本地 pending；real 可能已由 Realtime 回推（按真实 id 幂等去重）
-      const withoutPending = getTodos().filter((t) => t.id !== op.localId);
-      const alreadyHas = withoutPending.some((t) => t.id === real.id);
-      setTodos(sortTodos(alreadyHas ? withoutPending : withoutPending.concat(real)));
-      removeOfflineOp(op.localId);
-    } catch (e) {
-      // 仍离线或其它失败：中断本轮，保留队列待下次
-      break;
     }
+  } finally {
+    replaying = false;
   }
 }
 
@@ -943,6 +956,8 @@ async function deleteTodo(id) {
     await new Promise((r) => setTimeout(r, 200));
   }
   setTodos(getTodos().filter((t) => t.id !== id));
+  // 留墓碑：删除前那条 INSERT/UPDATE 的回声可能几秒后才到，没有墓碑就会被"复活"回列表
+  markTodoRemoved(id);
   try {
     await db.deleteTodo(id);
     // 删除撤销：5 秒内可一键撤回软删除
@@ -952,6 +967,7 @@ async function deleteTodo(id) {
         onClick: async () => {
           try {
             const restored = await db.restoreTodo(id);
+            unmarkTodoRemoved(id); // 用户明确要它回来 → 撤掉墓碑
             if (!getTodos().some((t) => t.id === id)) {
               setTodos(sortTodos([...getTodos(), restored]));
             }
@@ -965,6 +981,7 @@ async function deleteTodo(id) {
       duration: 5000,
     });
   } catch (err) {
+    unmarkTodoRemoved(id); // 删除没成功 → 撤回墓碑，否则回滚回来的待办会被自己的守卫挡住
     setTodos(sortTodos([...getTodos(), target])); // 回滚
     handleError(toAppError(err), '删除失败');
   }

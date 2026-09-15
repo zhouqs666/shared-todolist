@@ -14,7 +14,7 @@
  */
 
 import { supabase } from './supabase.js';
-import { sortTodos } from './state.js';
+import { sortTodos, isTodoRemoved, markTodoRemoved } from './state.js';
 import { notify } from './notify.js';
 import { toExternal, toNote, toReaction, toSticker } from './transforms.js';
 
@@ -69,6 +69,9 @@ export function initRealtime({ getTodos, setTodos, notifyCompleted, setOnline, g
       (payload) => {
         const todo = toExternal(payload.new);
         const todos = getTodos();
+        // 拒绝"复活"本端已删掉的待办：迟到的 INSERT 回声带着 deleted_at=null，
+        // 而下面的 id 去重此时必然落空（它已不在列表里）→ 用户看到"删了又自己冒出来"。
+        if (isTodoRemoved(todo.id)) return;
         // 幂等去重（本端插入会回声）
         if (todos.some((t) => t.id === todo.id)) return;
         setTodos(sortTodos([...todos, todo]));
@@ -91,13 +94,18 @@ export function initRealtime({ getTodos, setTodos, notifyCompleted, setOnline, g
       (payload) => {
         const todo = toExternal(payload.new);
         const todos = getTodos();
-        // 软删除识别：deleted_at 从 null 变非 null，说明被移到回收站，从列表移除
+        // 软删除识别：deleted_at 从 null 变非 null，说明被移到回收站，从列表移除。
+        // 同时留墓碑：之后迟到的 UPDATE/INSERT 回声不许再把它加回来。
         if (payload.new.deleted_at) {
+          markTodoRemoved(todo.id);
           setTodos(todos.filter((t) => t.id !== todo.id));
           return;
         }
         const prev = todos.find((t) => t.id === todo.id);
         if (!prev) {
+          // 本端刚删掉它（有墓碑）→ 这是删除之前那条旧 UPDATE 的迟到回声，忽略。
+          // 否则（真·订阅前就存在）当作 insert 补上。
+          if (isTodoRemoved(todo.id)) return;
           // 没找到 prev（可能在订阅前已存在），当作 insert
           if (!todos.some((t) => t.id === todo.id)) {
             setTodos(sortTodos([...todos, todo]));
