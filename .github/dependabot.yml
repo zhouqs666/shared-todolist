@@ -28,9 +28,30 @@
 #    结论：原生层只要**可见性**（alerts），不要**自动改代码**（version updates）——
 #    自动 PR 的价值是省人力，这里省不下（升不动），只会留下没人能合的 PR。
 #
-# 4. **`open-pull-requests-limit` 压小**
-#    默认 5，但噪声预算是有限的：这些 PR 每个都要跑 required checks（ci.yml 三个 job），
+# 4. **`groups` 只管「版本更新」，「安全更新」永远是单开的** —— 这是 GitHub 的默认，也是本仓库有意的选择
+#    `groups` 的 `applies-to` 默认只含 `version-updates`。所以安全更新（security updates）会一条一个 PR：
+#    这是**好事，别去"修"它** —— 出了严重 CVE 时你要能立刻合那一个 PR，而不是被 7 个无关的小升级拖住，
+#    也不能因为其中 1 个红了就整批合不进去。看到 10+ 个单开 PR 时先看标题里有没有 CVE 相关的包名。
+#
+# 5. **首次运行会是"补课式爆发"**：本文件上线前依赖已经漂了一段时间，所以第一个周一就开出十几条 PR。
+#    **这是预期行为，不是噪声失控** —— 稳态每周只会是几条。另外 `open-pull-requests-limit` 是
+#    **按 ecosystem 各算各的**（5 个 ecosystem × 5 ≈ 最多 25 条并发），所以刻意压小（3~5）：
+#    噪声预算是有限的，这些 PR 每个都要跑 required checks（ci.yml 三个 job），
 #    而 app-e2e / android 相关的改动还会触发 ~8 分钟模拟器套件。宁可少开几个、逐个看。
+#
+# 6. ⚠️ **`update-types: [minor, patch]` 不等于"安全升级"，对 `0.x` 依赖尤其危险**
+#    semver 里 `0.x.y` 的**中间位就是 breaking 位**（`^0.21.5` 只允许 `<0.22.0`），
+#    而 Dependabot 仍可能把它归进 minor 组。**实测**：`esbuild` 的 `0.21.5 → 0.28.2` 就真的
+#    出现在 `root-minor-patch` 组里 —— 而 esbuild 正是打 `public/js/vendor/supabase-js.esm.js`
+#    那个**随产品分发**的 bundle 的工具。所以下面给它加了 `exclude-patterns`，让它单独开 PR。
+#
+# 7. ⚠️ **有些依赖 PR 不是"顺手合并"的**：本仓库的根 `package.json` 里混着两件东西 ——
+#    ① 纯开发工具（`@playwright/test`、`esbuild`、`typescript`）
+#    ② **随 APK/热更新分发到用户手机的运行时依赖**（`@supabase/supabase-js`、`@capacitor/*`、`@capgo/capacitor-updater`）
+#    第 ② 类走的是铁律二/铁律三：要真跑测试；动了 `@supabase/supabase-js` 还得**重新打 vendor bundle**
+#    才真正生效（`npm run bundle:supabase`），动了 `@capgo/capacitor-updater`（热更新插件本身）
+#    属**原生层**改动 ⇒ 走通道 B 打 APK，不能靠热更新交付。
+#    **判断法**：这个包会不会被打进 `public/` 或 `android/`？会 → 按产品改动对待，不是按"chore"对待。
 # ============================================================================
 
 version: 2
@@ -72,6 +93,10 @@ updates:
     groups:
       root-minor-patch:
         patterns: ['*']
+        # esbuild 单独开：0.x 的中间位就是 breaking 位（见上面第 6 条），
+        # 而它负责打那个随产品分发的 vendor bundle —— 不该跟着"安全组"混进来。
+        # 实测过：不排除时 `0.21.5 → 0.28.2` 确实被归进了本组。
+        exclude-patterns: ['esbuild']
         update-types: ['minor', 'patch']
 
   # ── 3. admin 后台 ──────────────────────────────────────────────────────────
