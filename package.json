@@ -35,7 +35,7 @@
     "@capacitor/android": "^8.4.2",
     "@capacitor/cli": "^8.4.2",
     "@playwright/test": "^1.62.1",
-    "esbuild": "^0.21.5",
+    "esbuild": "^0.28.1",
     "playwright": "^1.62.1",
     "sharp": "^0.35.4",
     "typescript": "^7.0.2"
