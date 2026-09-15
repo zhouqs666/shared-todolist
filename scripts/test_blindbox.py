@@ -61,7 +61,7 @@ with sync_playwright() as p:
 
     print()
     print("=" * 60)
-    print("2. 登录（小宝宝账号）")
+    print("2. 登录（测试账号 e2e-alpha）")
     print("=" * 60)
     # 原来是「点登录 → 睡 5 秒 → 判断 URL」，冷启动（auth+profiles 2~10s）时是在赌。
     # 改成等 body[data-app-ready]（app.js bindEvents 后的就绪标记）这个真实信号。
