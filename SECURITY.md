@@ -33,22 +33,33 @@
 Dependabot 的告警里，**没有任何一条属于随产品分发或生产运行的代码**。
 2026-09-15 复核时的存量是 10 条（5 high / 5 moderate），分布如下：
 
-| 包 | 位置 | 说明 |
-|---|---|---|
-| `vite` ×3 | `admin/package-lock.json` | 管理后台构建工具；修复需 major 升级（5.x → 6.x+） |
-| `esbuild` ×2 | `package-lock.json` | 用于打 `public/js/vendor/supabase-js.esm.js`；修复需 0.21 → 0.25 |
-| `glob` / `serialize-javascript` | `app-e2e/package-lock.json` | E2E 工具链 |
-| `extract-zip` ×2 | `app-e2e/package-lock.json` | **上游无已修复版本**（WebdriverIO 传递依赖）⇒ 只能等上游 |
+| 包 | 条数 | 位置 | 补丁 | 可达性（这条最关键） |
+|---|---|---|---|---|
+| `vite` | 3 | `admin/package-lock.json` | 6.4.2 / 6.4.3 | **可达**，但是 major（现为 `^5.4.11`）⇒ 走 major PR 由 CI 验证 |
+| `esbuild` | 2 | `package-lock.json` | 0.25.0 | **可达**（现为 `^0.21.5`；0.x 的 minor 视为 breaking，需一并验证 `bundle:supabase`） |
+| `glob` | 1 | `app-e2e/package-lock.json` | 10.5.0 | **可达**（现为 `^10.4.5`，落在同一 major 内，能直接打补丁） |
+| `serialize-javascript` | 2 | `app-e2e/package-lock.json` | 7.0.3 / 7.0.5 | ❌ **不可达**：`@wdio/mocha-framework` → `mocha@11.8.0` 把范围钉在 `^6.0.2`，7.x 装不进去 |
+| `extract-zip` | 2 | `app-e2e/package-lock.json` | **无** | ❌ **无补丁可打**：`@wdio/cli` → `@wdio/utils` → `@puppeteer/browsers` 传递依赖，上游尚无修复版本 |
 
-处置方式：交给 `.github/dependabot.yml` 的每周版本更新 PR 逐个评估（major 单独开 PR，由 CI 验证）。
-`extract-zip` 属「无补丁可打」，接受并在此登记。
+**关于 `serialize-javascript`：Dependabot 的 job 会周期性报红，这是预期行为，不是配置错误。**
+它的判定是 `security_update_not_possible` —— 补丁存在（7.0.5）但**升级路径被父依赖堵死**
+（`latest-resolvable-version: 6.0.2` vs `lowest-non-vulnerable-version: 7.0.5`，`fix_available: false`）。
+硬装的办法是 npm `overrides` 强制 7.x，但那等于绕过 mocha 声明的兼容范围 —— 对一个**只在本地/CI 跑的
+E2E 工具链**来说，收益（威胁模型里几乎没有真实攻击面）远小于风险（把 E2E 环境搞成非受支持组合，
+而 E2E 正是用来验证别的东西的）。**结论：接受，等上游放开范围**。
+（看到这条红不要"顺手修"，先读这段。）
 
-### 2. `sharp` 是未被引用的遗留 devDependency
+处置方式：可达的那 6 条交给 `.github/dependabot.yml` 的每周版本更新 PR 逐个评估（major 单独开、由 CI 验证）。
+不可达的 4 条在此登记为**已接受**。
+
+### 2. `sharp` 是未被引用的遗留 devDependency（已无告警）
 
 `package.json` 里声明了 `sharp`，但**全仓库没有任何地方 import 它**
-（`grep -rn "\bsharp\b"` 只命中 `package.json` 自己和 `release-web.yml` 里一句解释性注释）。
-它是历史遗留，带着 2 条告警。**留着不影响安全**（dev-only 且不执行），移除它属清理动作，
-留待后续 —— 修掉告警的正规路径是让 Dependabot 升版本，而不是顺手改 `package.json`（会污染依赖 PR 的可读性）。
+（`grep -rn "\bsharp\b"` 只命中 `package.json` 自己与 `release-web.yml` 里一句解释性注释；
+`npm ls sharp` 也只有一条直接边、没有传递使用者）。
+它是历史遗留 —— 原先带着 2 条告警，2026-09-15 由 Dependabot 升到 0.35.4 后告警已清零。
+**留着不影响安全**（dev-only 且从不执行），移除它纯属清理，留待后续：
+修掉告警的正规路径是让 Dependabot 升版本，而不是顺手改 `package.json`（那会污染依赖 PR 的可读性）。
 
 ## 已知的安全设计（先看这里，避免重复上报）
 
