@@ -4,10 +4,11 @@
   "description": "APP 自动化测试（Appium + WebdriverIO）",
   "type": "module",
   "scripts": {
-    "pretest": "node scripts/check-test-schema.mjs",
+    "pretest": "node scripts/check-test-schema.mjs && node scripts/check-rls.mjs",
     "test": "wdio run ./wdio.conf.js",
     "test:local": "wdio run ./wdio.conf.js",
-    "check:schema": "node scripts/check-test-schema.mjs"
+    "check:schema": "node scripts/check-test-schema.mjs",
+    "check:rls": "node scripts/check-rls.mjs"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.116.0",

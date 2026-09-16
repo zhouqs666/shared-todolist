@@ -60,10 +60,25 @@
     本地不跑也仍等于没覆盖 —— 夜里会跑，但**改动等待期内**要自己先跑一遍。
   - 另注意：**CI 绿灯 ≠ 交付物可用** —— 制品/发布结果要单独回读验证（见铁律三 `verify-release.mjs`）
 - ✅ 测试要真实验证结果（截图、断言、状态检查），不能只看"没报错"就算过
-- ✅ **测试前跑两个 preflight**：
+- ✅ **测试前跑三个 preflight**：
   - `node scripts/check-test-env.mjs` —— Web 通道隔离（测试库 ≠ 生产库）
   - `node app-e2e/scripts/check-test-schema.mjs` —— 测试库 schema 契约（从 `supabase/*.sql` 推导表/列/**函数**，漂移会打印修复 SQL）
+  - `node app-e2e/scripts/check-rls.mjs` —— 测试库 **RLS 是否真的生效**（anon 视角探针，见下方 2026-09-16）
   测试库缺列/缺表会导致 `listTodos()` 整体报错、界面静默空列表，E2E 只报「元素找不到」，极易误判成定位/时序问题（2026-09-14 烧了多轮 CI）。缺 RPC 函数同理（`increment_login_count` 缺失时冷启动 404）。
+
+**血泪教训（2026-09-16，RLS 被手工关掉却无人发现）：**
+Supabase 安全顾问对**测试项目**报 CRITICAL `rls_disabled_in_public`：`profiles` 的 RLS 没开 ⇒
+「拿到项目 URL 的任何人」可读可写该表（anon key 是公开的，硬编码在 `public/js/supabase.js`、随 APK 分发）。
+**根因不是仓库漏写** —— `supabase/schema.sql` 里 `profiles` 一直是 `ENABLE ROW LEVEL SECURITY`；
+是测试项目上被**手工改过**（同一时期那里还留着仓库里不存在的 `create_test_user` RPC，可佐证跑过 ad-hoc SQL），
+而建表/改表都靠「粘贴一次」，之后**没有任何回读校验**。
+**关键认知**：`ENABLE ROW LEVEL SECURITY`（开关）与 `CREATE POLICY`（策略）是两件事，缺任一个洞都在；
+「照文档粘贴过一次」挡不住漂移 —— 必须机器判定。对策：
+- `node app-e2e/scripts/check-rls.mjs` —— 探针：anon + **必然违反外键**的 INSERT（42501=策略拦下了 / 约束错误=RLS 没开；**不写任何数据**）
+- `node scripts/test_rls_migration.mjs` —— 用 PGlite（真 Postgres 的 WASM 版）把加固 SQL 跑一遍：复现洞 → 修复 → 幂等；不需要凭据，进 CI
+- `admin/scripts/init-test-env.mjs` 第 ④ 步跑 RLS 自检 ⇒ **CI required job 里合并前拦住**
+- ⚠️ 反向教训：两套环境的**手工配置会各自漂移**（实测：生产 `disable_signup=true`、测试项目 `false`）
+  ⇒ 每次都要回读校验，不能只看某一次
 
 **血泪教训（2026-09-14）：**
 Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `public/`（其中 `supabase.js` 硬编码生产库 URL），而 `test_*.py` 直连 `localhost:3000` = 生产库。调试撤销完成功能时，在生产库创建 27 条测试待办，并因盲盒开奖发生在「添加」瞬间，误解锁 `legendary_1` 传说贴纸 —— 清待办也撤不回贴纸。
@@ -403,7 +418,7 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
   ⚠️ **"固定 SHA" 与 "Dependabot 推更新" 是一对，缺一不可**：只固定 = 冻在旧版本、安全补丁进不来
   ⚠️ 取 SHA：`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`（`type=tag` 时再解一层 `git/tags/<sha>`）
 - **本地服务**：`node scripts/serve.mjs`（端口 3000，**生产库**，仅手动自测）／`node scripts/serve-test.mjs`（端口 3100，**测试库**，跑 E2E 必须用这个）
-- **测试库维护**：`node scripts/reset-test-db.mjs`（归零，硬删 web 通道 E2E 残留 + 贴纸）／`node scripts/check-test-env.mjs`（隔离自检）／`node app-e2e/scripts/check-test-schema.mjs`（schema 契约）
+- **测试库维护**：`node scripts/reset-test-db.mjs`（归零，硬删 web 通道 E2E 残留 + 贴纸）／`node scripts/check-test-env.mjs`（隔离自检）／`node app-e2e/scripts/check-test-schema.mjs`（schema 契约）／`node app-e2e/scripts/check-rls.mjs`（RLS 生效自检）
 - **Web E2E 跑批**：`node scripts/run-web-e2e.mjs`（逐个归零 + 失败重试一次 + flaky 显式标记 + Run Summary；`--files` / `--keep-data` / `--no-retry` / `--fail-on-flaky`）；
   依赖钉在 `scripts/requirements-e2e.txt`（Python playwright，CI 与本地同版本）
 - **结构性检查（CI required job 里跑，都是纯静态、秒级失败）**：`check-test-guards.mjs`（只读守卫）／
@@ -412,4 +427,7 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
   `sha_pinning_required` 也拦得住未固定（实测：该 job 在 "Set up job" 阶段就失败并给出明确报错）；
   但它**不查版本注释**，而注释是 Dependabot 判断当前版本的唯一依据，缺了 = 安全补丁静默进不来。
   所以本脚本的价值是「本地秒级反馈 + 补上开关查不了的那条规则」）
+- **安全回归（也需要凭据，但只读/不写数据）**：`scripts/test_rls_migration.mjs`（PGlite 真 Postgres 跑
+  `supabase/migration-rls-hardening.sql`：复现洞 → 修复 → 幂等；**不需要任何凭据**，所以能进 CI 的 Node 回归）／
+  `app-e2e/scripts/check-rls.mjs`（对真实测试库的 anon 探针；也由 `admin/scripts/init-test-env.mjs` 第 ④ 步调用 ⇒ 属 required job）
 - **埋点状态**：⚠️ 目前零埋点，无法回答"哪个功能最常用""两人一天互动几次"。补基础埋点（北极星 = 双端同日活跃天数）在路线图 P0。

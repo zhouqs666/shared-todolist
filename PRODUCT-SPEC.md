@@ -481,10 +481,19 @@
 
 | 角色 | `todos` / `reactions` / `stickers` / `daily_notes` | `profiles` |
 |------|---------------------------------------------------|-----------|
-| 未登录（anon） | 完全拒绝 | 可读（仅显示名） |
+| 未登录（anon） | 完全拒绝 | 完全拒绝 |
 | 已登录（authenticated） | 可读写**全部** | 可读全部，只能改自己 |
 
 > **为什么已登录用户能读写所有人的数据？** 因为这是"双人共享清单"——两个账号必须能看到并操作同一份数据。安全性由"**只有 2 个固定账号能注册**"这一前提保证。这是一个明确的架构权衡：**牺牲数据隔离，换取零权限复杂度**。一旦开放注册，此模型必须推翻重做。
+> ⚠️ 该前提在**生产**项目由 `disable_signup=true` 保证（2026-09-16 实测确认）；**测试项目**是 `false`（它的数据是一次性的，可接受，但别把这个差异套到生产）。
+
+> 📌 **2026-09-16 收紧**：`profiles` 的 SELECT 原为 `USING (true)` 且**没写 `TO ...`** ⇒ 对 PUBLIC（含 anon）开放。
+> 而 anon key 是公开的（硬编码在 `public/js/supabase.js`，随 APK/网页分发），等于任何人可列举两人的
+> 用户名 / 显示名 / 最后在线时间 / 打开计数。现统一限定为 `authenticated`（App 里读 `profiles` 只发生在登录之后：
+> `db.js listProfiles()/updateLastSeen()`，故对功能无影响）。
+> **同一时期发现的事故**：测试项目的 `profiles` 表 RLS 被手工关掉（仓库 `schema.sql` 里一直是开的），
+> 被 Supabase 安全顾问报 CRITICAL `rls_disabled_in_public` —— 修复见 `supabase/migration-rls-hardening.sql`，
+> 防复发见 §8.2 与 `app-e2e/scripts/check-rls.mjs`。
 
 ### 6.4 存储
 
@@ -577,6 +586,12 @@
 
 - 密码由 Supabase Auth 托管哈希存储，不明文
 - 所有数据表启用 RLS；未登录角色完全拒绝访问业务数据
+  - ⚠️ 这句话从 2026-09-16 起**是机器判定的**，不再只是声明：`node app-e2e/scripts/check-rls.mjs`
+    用 anon 视角探针（payload 必然违反外键、**不写任何数据**）验证每张业务表 —— 42501=策略拦下了，
+    约束错误=RLS 没开。它由 `admin/scripts/init-test-env.mjs` 第 ④ 步调用 ⇒ 属 **CI required job**。
+  - 血泪：测试项目的 `profiles` 曾被手工关掉 RLS 而无人发现（顾问报 `rls_disabled_in_public`）。
+    根因是「建表靠粘贴一次、之后没有回读校验」；对策即是上面这条 + `scripts/test_rls_migration.mjs`
+    （无凭据、用 PGlite 把 `supabase/migration-rls-hardening.sql` 真跑一遍）。
 - Storage 写入权限限制为 authenticated
 - APK 更新包带 **sha256 校验**，防止篡改
 - 修改他人数据的 RPC（`consume_login_count`）用 `SECURITY DEFINER` + `search_path` 锁定，避免权限提升
@@ -712,6 +727,11 @@ node scripts/verify-release.mjs [版本号]        # 不传版本号 = 校验线
 node scripts/backup-tables.mjs --reason "<原因>"
 node scripts/backup-tables.mjs --reason "<原因>" --dry-run   # 只报告行数，不落盘
 
+# 安全自检（2026-09-16）：RLS 是否真的生效 + 加固 SQL 是否可用
+node app-e2e/scripts/check-rls.mjs        # anon 视角探针，只读不写；RLS 没开时打印修复指引
+node scripts/test_rls_migration.mjs       # 用 PGlite 真 Postgres 跑加固 SQL（无需凭据，进 CI）
+# 修复用 SQL：supabase/migration-rls-hardening.sql（Dashboard → SQL Editor 整份粘贴 → Run，幂等）
+
 # 远程发布（GitHub Actions CD：预演 → 审批 → 发布 → 回读校验）
 gh workflow run release-web.yml -f version=<版本号> -f notes="<说明>" -f dry_run=true
 # 预演通过后正式发：-f dry_run=false -f confirm=<版本号>
@@ -733,6 +753,8 @@ npm run bundle:supabase
 | `scripts/test_compress.mjs` | 图片压缩策略验证（短边 1280 阈值） |
 | `scripts/test_pinch.mjs` | lightbox 双指缩放（mock Supabase，零生产写入） |
 | `scripts/test_sticker_wiggle.mjs` | 贴纸轻晃引导逻辑（上限 3 次） |
+| `scripts/test_rls_migration.mjs` | RLS 加固迁移（`supabase/migration-rls-hardening.sql`）：与仓库 SQL 逐字一致 + 在 PGlite（真 Postgres/WASM）里复现洞 → 修复 → 幂等；**不需要凭据** |
+| `app-e2e/scripts/check-rls.mjs` | 真实测试库的 RLS 生效自检（anon 探针，不写数据）；由 `admin/scripts/init-test-env.mjs` 第 ④ 步调用 ⇒ CI required job 里拦住 |
 
 ### 12.3 术语表
 

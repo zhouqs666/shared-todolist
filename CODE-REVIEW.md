@@ -35,7 +35,19 @@
 - 🔴 批量删除是否显式指定 id？—— 禁止 `.neq('id','全零')` 这种「删全部」模式。
 - 🔴 删除前是否备份？—— 任何删除操作前先查再删 / 导出备份。
 - 🔴 权限是否靠 RLS 兜底？—— 前端逻辑只做 UX，安全边界在数据库 RLS，不依赖前端判断。
+- 🔴 **RLS「开关」与「策略」是两件事，且必须有回读校验**（2026-09-16，顾问报 CRITICAL）
+  测试项目的 `profiles` 被报 `rls_disabled_in_public`（未登录可读可写），而仓库 `schema.sql`
+  里一直是 `ENABLE ROW LEVEL SECURITY` —— 说明是**项目上被手工改过**，且没人回读。
+  ⇒ 审查时问三句：① 这次改动动到表/策略了吗？② **目标项目**上 RLS 真的开着吗（不是"我写进 SQL 了"）？
+  ③ 策略的 `TO` 角色写全了吗（漏写 `TO authenticated` = 对 PUBLIC/anon 开放，而 anon key 是公开的）？
+  验证手段（都在仓库里，别靠肉眼）：`node app-e2e/scripts/check-rls.mjs`（anon 探针，不写数据）／
+  `node scripts/test_rls_migration.mjs`（PGlite 真 Postgres 里跑一遍加固 SQL）。
+  **共性**：凡「照文档在控制台粘贴一次」的配置（建表、策略、Auth 开关如 `disable_signup`），
+  都会随环境漂移 —— 只有机器判定才算验证过。
 - 🔴 迁移 SQL 是否幂等 + 是否在交付回复里贴出可复制版本？—— `ADD COLUMN IF NOT EXISTS` / `ON CONFLICT DO NOTHING`。
+  ⚠️ 另外两条同样容易漏：① **中途报错会整体回滚**（SQL Editor 一个事务）⇒ 必须给每个可能不存在的对象
+  加 `to_regclass(...) is null` 守卫，否则「修了一半」等于没修；② 交付前用**真解析器**过一遍
+  （`pglast` 的 `parse_sql` + `parse_plpgsql_json`，或 PGlite 真跑），别靠"看着对"。
 - 🟡 新增字段是否做了降级容错？—— 参考 `db.js` 的 `PGRST204` / `42703` 降级重查模式：迁移没执行时，老环境能不能继续跑？
 
 ### 维度 B：正确性

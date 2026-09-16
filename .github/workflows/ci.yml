@@ -99,7 +99,8 @@ jobs:
           for f in \
             scripts/test_compress.mjs \
             scripts/test_pinch.mjs \
-            scripts/test_sakura_colors.mjs; do
+            scripts/test_sakura_colors.mjs \
+            scripts/test_rls_migration.mjs; do
             echo "================================================"
             echo "Running: $f"
             echo "================================================"
@@ -188,6 +189,10 @@ jobs:
 
       - name: Run E2E tests
         env:
+          # 只用来「证明测试库 ≠ 生产库」（scripts/reset-test-db.mjs / check-test-env.mjs
+          # 同款约定；`npm run init:test-env` 里的 RLS 自检也拿它做 fail-closed 比对）。
+          # 这个地址不是秘密：它硬编码在 public/js/supabase.js 里，随客户端分发。
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           E2E_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
           E2E_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
           E2E_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
