@@ -2,7 +2,7 @@
 -- RLS 加固：把「表对全体公开」这类洞一次性堵死（幂等，可重复执行）
 --
 -- 执行位置：目标项目 → Supabase Dashboard → SQL Editor → 全选粘贴 → Run
---   · 测试项目 loveListTest：**必须执行**（2026-09-16 安全顾问告警就在这里）
+--   · 测试项目 loveListTest：**已执行（2026-09-16）**，见文件末尾「执行记录」
 --   · 生产项目：建议执行（幂等；对本项目的实际影响见文件末尾「预期影响」）
 --
 -- ------------------------------------------------------------
@@ -362,8 +362,31 @@ select c.relname                                  as "表名",
 --      与现状**逐字一致**，唯一变化是 profiles 的 SELECT 收紧为 authenticated。
 --      已知消费方只有 `public/js/db.js` 的 listProfiles()/updateLastSeen()（都在登录后），
 --      故对 App 无可见影响；但它**确实**改变了「未登录能否读 profiles」，属需知会的变化。
+--      ⚠️ 实测（2026-09-16，仅一次只读 GET）：生产 `profiles` 用 anon key 能读到行
+--      ⇒ 生产仍在泄露两名用户的用户名/显示名/最后在线时间/打开计数给「拿到公开 anon key 的任何人」。
+--      生产 `disable_signup=true`（已实测），所以不存在借注册放大成读写全库的路径。
 --   ② app_versions / app_native_versions → 只确保 RLS 开着，策略不动。
 --   ③ 若本项目 public schema 下还有**别的不在仓库里**的表，而它恰好 RLS 关闭：
 --      本脚本会把它开启，且因为没有任何 policy，它将变成「只有 service_role 能访问」。
 --      第 1 步的 Notices 会先打印出这些表名 —— 如果你的库里真有这种表，先看清楚再 Run。
+-- ============================================================
+
+
+-- ============================================================
+-- 执行记录（2026-09-16，测试项目 loveListTest / fsmzgpkldwulmzlukvke）
+--
+--   ① 修复前：anon 探针实测 `profiles` 返回 23503（穿过策略层）⇒ RLS 未生效；
+--      anon 直接读 profiles 能拿到 1 行 ⇒ 未登录可见。
+--   ② 执行本文件后，SQL Editor 回读结果：
+--        daily_notes  RLS=true  策略 4  适用角色 {authenticated}
+--        profiles     RLS=true  策略 3  适用角色 {authenticated}   ← 关键修复项
+--        reactions    RLS=true  策略 3  适用角色 {authenticated}
+--        stickers     RLS=true  策略 4  适用角色 {authenticated}
+--        todos        RLS=true  策略 4  适用角色 {authenticated}
+--   ③ 独立复验（不是看回读表格，而是重新用 anon 打一遍）：
+--      `node app-e2e/scripts/check-rls.mjs` → 5 张表全部 42501、anon 读 0 行，退出码 0
+--   ④ 附带修好的环境漂移：测试项目 `disable_signup` 由 false 改为 true（与生产一致）
+--
+--   注意：本记录只覆盖**测试项目**。生产项目未执行（顾问只报了测试项目），
+--   而其 `profiles` 的 SELECT 仍是旧的「对 PUBLIC 开放」——是否收紧见「预期影响」。
 -- ============================================================
