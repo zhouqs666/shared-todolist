@@ -13,8 +13,8 @@
   "devDependencies": {
     "@supabase/supabase-js": "^2.116.0",
     "@wdio/allure-reporter": "^9.0.0",
-    "@wdio/cli": "^9.0.0",
-    "@wdio/local-runner": "^9.0.0",
+    "@wdio/cli": "^9.31.8",
+    "@wdio/local-runner": "^9.31.8",
     "@wdio/mocha-framework": "^9.0.0",
     "@wdio/spec-reporter": "^9.0.0",
     "allure-commandline": "^2.32.0",
