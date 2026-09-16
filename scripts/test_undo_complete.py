@@ -2,7 +2,8 @@
 完成撤销 E2E 测试
 
 测试待办完成后的撤销功能：
-  - H1: 完成→庆祝toast撤销按钮→点击→恢复未完成
+  - H1: 完成→庆祝toast撤销按钮→点击→恢复未完成（**普通款与隐藏款各跑一次**，稀有度用
+        localStorage 钩子钉死 —— 隐藏款原来靠 15% 的随机命中，那正是它被漏测的原因）
   - H2: 完成→长按菜单→撤销完成→恢复未完成
 测试遵循 AGENTS.md 铁律一：跑在独立测试库（scripts/serve-test.mjs + e2e_common 隔离校验）。
 """
@@ -40,91 +41,81 @@ with sync_playwright() as p:
     print("== 1. 登录 ==", flush=True)
     check("登录成功进入主页", login(page, BASE, TEST_USER, TEST_PASSWORD), page.url)
 
-    test_text_h1 = 'E2E-测试-完成撤销-toast撤销'
     test_text_h2 = 'E2E-测试-完成撤销-菜单撤销'
 
-    # ===== H1: toast 撤销 =====
+    # ===== H1: toast 撤销（普通款 / 隐藏款各跑一次，稀有度用钩子钉死）=====
+    #
+    # ⚠️ 这里曾有一条**隔离分支**（2026-09-16 撤除，撤前先跑过验证）。原委：
+    #   confetti-effects.js 的 celebrateCompletion 先 showToast(带「撤销」)，紧接着
+    #   celebrateRarity() 又 showToast 一次 —— 而 showToast 复用单例 #toast，第二次调用
+    #   把内容连按钮一起清空 ⇒ 隐藏款完成时撤销入口**必然不可用**（不是时序问题，
+    #   快照实测 {cls: 'todo--rare', toastText: '✨ 开出稀有款！', actionButtons: 0}）。
+    #   当时的处置是「普通款断言 toast 撤销，隐藏款改走菜单撤销」。
+    # #41 已把 showToast 改成**串行排队**（上一条还在显示时新提示排队，不再覆盖），缺陷消失
+    # ⇒ 隔离随即变成**仓库在说谎**：那条路径只剩一个"绕行"断言，坏了也没人知道
+    # （它已经咬过两次：web 通道 + Appium 通道）。
+    # 撤除后做得比原来更强：两种稀有度都由 localStorage 钩子 `__e2e_force_rarity` 钉死
+    # （生产代码没有任何入口写这个 key，行为与不加钩子一致）—— 隐藏款不再靠 15% 的运气
+    # 被覆盖，而**恰恰是因为撞不到，当初才漏掉了这个缺陷**。
     print("\n== H1: toast 撤销 ==", flush=True)
 
-    print("  2a. 添加测试待办 ==", flush=True)
-    check("H1 测试待办已添加", add_todo(page, test_text_h1))
-    wait_add_settled(page, test_text_h1)
+    def h1_toast_undo(rarity, text):
+        """完成待办 → 断言 toast 上有「撤销」→ 点它 → 断言真的恢复未完成。"""
+        label = f"H1[{rarity}]"
+        page.evaluate("(r) => localStorage.setItem('__e2e_force_rarity', r)", rarity)
 
-    print("  3a. 点击完成 ==", flush=True)
-    todo_card = page.locator('.todo', has_text=test_text_h1).first
-    todo_card.locator('.todo__check').click()
+        print(f"  2a. 添加测试待办（{rarity}）==", flush=True)
+        check(f"{label} 测试待办已添加", add_todo(page, text))
+        wait_add_settled(page, text)
 
-    # 稀有度是随机的（约 15% 命中隐藏款），而隐藏款完成时产品存在**确定性缺陷**：
-    #   confetti-effects.js 的 celebrateCompletion 先 showToast(带「撤销」)，
-    #   紧接着 celebrateRarity() 又 showToast 一次（无操作按钮）——
-    #   showToast 复用单例 #toast（先 textContent='' 清空）→ 撤销按钮当场被抹掉。
-    # 诊断快照（实测）：{cls: 'todo todo--done todo--rare',
-    #                   toastText: '✨ 开出稀有款！', actionButtons: 0}
-    # 所以「隐藏款待办的 toast 撤销」在当前产品上**必然不可用**——不是时序问题。
-    # 本用例对它做隔离：普通款断言 toast 撤销；隐藏款走菜单撤销（与 H2 同一条路径）。
-    rarity_cls = todo_card.get_attribute('class') or ''
-    hidden = any(k in rarity_cls for k in ('todo--rare', 'todo--epic', 'todo--legendary'))
+        print(f"  3a. 点击完成（{rarity}）==", flush=True)
+        card = page.locator('.todo', has_text=text).first
+        card.locator('.todo__check').click()
 
-    print("  4a. 验证撤销按钮 ==", flush=True)
-    if hidden:
-        print(
-            "    ⚠️ 本条命中隐藏款 → 跳过 toast 撤销断言（已知产品缺陷：按钮被开奖 toast 抹掉，"
-            "见 confetti-effects.js:100-102），改走菜单撤销路径",
-            flush=True,
-        )
-        dump_dom_state(page, errors, tag="隐藏款完成现场")
-        todo_card.click(button='right')
-        page.wait_for_selector('.action-sheet__icon-btn[aria-label="撤销完成"]', timeout=5000)
-        page.locator('.action-sheet__icon-btn[aria-label="撤销完成"]').click()
-        restored_hidden = wait_until(
-            page,
-            lambda: 'todo--done' not in (
-                page.locator('.todo', has_text=test_text_h1).first.get_attribute('class') or ''
-            ),
-            timeout_ms=15000,
-            desc="隐藏款：菜单撤销后恢复未完成",
-        )
-        todo_after = page.locator('.todo', has_text=test_text_h1).first
-        check("H1（隐藏款）菜单撤销后待办恢复未完成", restored_hidden,
-              f"class: {todo_after.get_attribute('class')}")
-    else:
         # 等条件而不是裸 wait_for_selector：裸等待超时会以 TimeoutError **中止整个脚本**，
-        # 后面 3 个用例的结果全部丢失（只剩一个 traceback，现场也留不下来）。
+        # 后面用例的结果全部丢失（只剩一个 traceback，现场也留不下来）。
+        # 超时给 15s：隐藏款在点击前还可能有开奖/解锁提示在排队，串行展示会把它推到后面。
         toast_ok = wait_until(
             page,
             lambda: page.locator('.toast__action').count() > 0,
-            timeout_ms=8000,
-            desc="完成后出现带撤销按钮的 toast",
+            timeout_ms=15000,
+            desc=f"{label} 完成后出现带撤销按钮的 toast",
         )
         if toast_ok:
             toast_text = page.locator('.toast').inner_text()
-            check("H1 完成toast包含撤销按钮", '撤销' in toast_text, f"toast内容: {toast_text}")
+            check(f"{label} 完成toast包含撤销按钮", '撤销' in toast_text, f"toast内容: {toast_text}")
         else:
-            dump_dom_state(page, errors, tag="H1 无撤销 toast")
-            check("H1 完成toast包含撤销按钮", False, "未出现撤销按钮（现场见上）")
+            dump_dom_state(page, errors, tag=f"{label} 无撤销 toast")
+            check(f"{label} 完成toast包含撤销按钮", False, "未出现撤销按钮（现场见上）")
 
-        print("  5a. 点击撤销 ==", flush=True)
+        print(f"  4a. 点击撤销（{rarity}）==", flush=True)
         page.locator('.toast__action').first.click()
 
-        print("  6a. 验证恢复未完成 ==", flush=True)
+        print(f"  5a. 验证恢复未完成（{rarity}）==", flush=True)
         # 等状态成立，而不是「睡 2 秒再读 class」——后者在慢机器上读到的还是旧状态。
         # 超时给 15s（不是 10s）：撤销是一次网络往返，冷启动的 CI 上留足余量。
         restored = wait_until(
             page,
             lambda: 'todo--done' not in (
-                page.locator('.todo', has_text=test_text_h1).first.get_attribute('class') or ''
+                page.locator('.todo', has_text=text).first.get_attribute('class') or ''
             ),
             timeout_ms=15000,
-            desc="H1 撤销后待办恢复未完成",
+            desc=f"{label} 撤销后待办恢复未完成",
         )
-        todo_after = page.locator('.todo', has_text=test_text_h1).first
-        check("H1 撤销后待办恢复未完成", restored, f"class: {todo_after.get_attribute('class')}")
+        after = page.locator('.todo', has_text=text).first
+        check(f"{label} 撤销后待办恢复未完成", restored, f"class: {after.get_attribute('class')}")
 
-    # 清理 H1 测试数据
-    todo_after.click(button='right')
-    page.wait_for_selector('.action-sheet__icon-btn[aria-label="删除"]', timeout=5000)
-    page.locator('.action-sheet__icon-btn[aria-label="删除"]').click()
-    page.wait_for_timeout(1000)
+        print(f"  6a. 清理本条数据（{rarity}）==", flush=True)
+        after.click(button='right')
+        page.wait_for_selector('.action-sheet__icon-btn[aria-label="删除"]', timeout=5000)
+        page.locator('.action-sheet__icon-btn[aria-label="删除"]').click()
+        page.wait_for_timeout(1000)
+
+    h1_toast_undo('common', 'E2E-测试-完成撤销-toast撤销-普通款')
+    # legendary 是当初暴露该缺陷的那一档（稀有度 toast 文案与配色最重，顶掉撤销按钮最明显）
+    h1_toast_undo('legendary', 'E2E-测试-完成撤销-toast撤销-隐藏款')
+    # 钩子用完即清：别让它影响后续用例（H2 也会完成待办，虽不关心稀有度）
+    page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")
 
     # ===== H2: 长按菜单撤销 =====
     print("\n== H2: 长按菜单撤销 ==", flush=True)
