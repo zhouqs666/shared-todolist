@@ -38,7 +38,7 @@
     "@capacitor/cli": "^8.5.2",
     "@electric-sql/pglite": "^0.5.8",
     "@playwright/test": "^1.63.0",
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "playwright": "^1.62.1",
     "sharp": "^0.35.4",
     "typescript": "^7.0.2"
