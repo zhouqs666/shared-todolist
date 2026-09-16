@@ -3,14 +3,18 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>有爱 · 待办页改版方案（第二版提案）</title>
+<title>有爱 · 待办页改版：可切换样式方案</title>
 <!--
   这是一份「设计提案预览页」，不是产品代码，不参与打包（不在 public/ 下）。
   它直接引用 public/css/style.css —— 所有手机框里的卡片都是**真实的组件样式**，
   不是重画的示意图。凡方案里写「新样式」的部分，都在本文件 <style> 里以 .fv-* 作用域覆盖。
 
+  用法：打开后先看最上面的「同一台手机 · 原地切换」，点按钮换版本；
+  手机框里的圆勾可以真的点（会打勾/取消，Paper 版还有盖章动效），
+  折叠条可以真的收起展开 —— 都是能点的，不是静态图。
+
   数据说明：列表内容为**虚构示例**（生产待办内容是两人私密数据，不进仓库）；
-  纸面上方的「体量统计」是来自本地只读备份 backups/ 的**聚合数字**（只统计条数/分布，不含文本）。
+  「体量统计」是来自本地只读备份 backups/ 的**聚合数字**（只统计条数/分布，不含文本）。
 -->
 <link rel="stylesheet" href="../../public/css/style.css" />
 <style>
@@ -27,15 +31,15 @@ body.proposal { background: #f7f2f6; }
 .fact { background: #fff; border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 16px; min-width: 156px; }
 .fact__n { font-family: var(--font-mono); font-size: 21px; font-weight: 700; color: var(--rose-600); }
 .fact__l { font-size: 12px; color: var(--stone-500); margin-top: 3px; }
-.p-note { margin: 18px 0 0; padding: 12px 16px; background: rgba(255,255,255,.7); border-left: 3px solid var(--rose-300); border-radius: 0 10px 10px 0; font-size: 13px; line-height: 1.8; color: var(--stone-500); max-width: 860px; }
-.p-sec { margin-top: 60px; border-top: 1px solid var(--color-border); padding-top: 30px; }
+.p-note { margin: 18px 0 0; padding: 12px 16px; background: rgba(255,255,255,.7); border-left: 3px solid var(--rose-300); border-radius: 0 10px 10px 0; font-size: 13px; line-height: 1.8; color: var(--stone-500); max-width: 880px; }
+.p-sec { margin-top: 58px; border-top: 1px solid var(--color-border); padding-top: 28px; }
 .p-sec__h { font-family: var(--font-cn); font-size: 24px; font-weight: 600; margin: 0 0 6px; }
-.p-sec__sub { font-size: 14px; line-height: 1.9; color: var(--stone-500); max-width: 860px; }
+.p-sec__sub { font-size: 14px; line-height: 1.9; color: var(--stone-500); max-width: 880px; }
 
 /* 手机框 */
 .p-frames { display: flex; gap: 22px; overflow-x: auto; padding: 22px 4px 30px; align-items: flex-start; }
-.frame { flex: 0 0 auto; width: 390px; }
-.frame__screen { position: relative; width: 390px; height: 760px; border-radius: 34px; border: 1px solid #ecdfe6; background: var(--color-bg); overflow: hidden; box-shadow: 0 20px 44px -22px rgba(96,44,68,.45); }
+.frame { flex: 0 0 auto; width: 390px; max-width: 92vw; }
+.frame__screen { position: relative; width: 100%; height: 760px; border-radius: 34px; border: 1px solid #ecdfe6; background: var(--color-bg); overflow: hidden; box-shadow: 0 20px 44px -22px rgba(96,44,68,.45); }
 .frame__scroll { height: 100%; overflow-y: auto; scrollbar-width: none; }
 .frame__scroll::-webkit-scrollbar { display: none; }
 .frame .fab { position: absolute; right: 16px; bottom: 18px; z-index: 20; }
@@ -47,7 +51,43 @@ body.proposal { background: #f7f2f6; }
 .frame__desc { font-size: 13px; line-height: 1.8; color: var(--stone-500); }
 .frame__meta { font-size: 12px; line-height: 1.8; color: var(--stone-500); margin-top: 10px; border-left: 2px solid var(--color-border); padding-left: 11px; }
 .frame__meta b { color: var(--rose-700); font-weight: 600; }
-.frame__meta i { font-style: normal; color: var(--stone-900); font-weight: 600; }
+.frame__zoom { margin-top: 12px; border: 1px solid var(--color-border); background: rgba(255,255,255,.8); color: var(--stone-900); border-radius: 999px; padding: 7px 14px; font-family: var(--font-cn); font-size: 12.5px; cursor: pointer; }
+.frame__zoom:hover { border-color: var(--rose-300); color: var(--rose-700); }
+
+/* ============================================================
+   原地切换对比（核心工具：同一台手机里换版本，眼球不用移动）
+   ============================================================ */
+.cmp__bar { position: sticky; top: 0; z-index: 30; padding: 14px 0 12px; margin-bottom: 8px; background: rgba(247,242,246,.93); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-bottom: 1px solid var(--color-border); }
+.cmp__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 9px; }
+.cmp__row:last-child { margin-bottom: 0; }
+.cmp__rowl { flex: 0 0 auto; width: 150px; font-family: var(--font-en); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--stone-500); }
+.chip { border: 1px solid var(--color-border); background: #fff; color: var(--stone-900); border-radius: 999px; padding: 8px 15px; font-family: var(--font-cn); font-size: 13.5px; cursor: pointer; transition: transform .16s var(--ease), border-color .16s var(--ease), box-shadow .16s var(--ease); }
+.chip:hover { border-color: var(--rose-300); }
+.chip:active { transform: scale(.97); }
+.chip--on { background: linear-gradient(135deg, var(--rose-500), var(--rose-700)); color: #fff; border-color: transparent; box-shadow: 0 6px 16px -7px rgba(184,90,124,.6); }
+.cmp__stage { display: flex; gap: 36px; align-items: flex-start; flex-wrap: wrap; padding-top: 20px; }
+.cmp__side { flex: 1 1 300px; min-width: 280px; max-width: 520px; position: sticky; top: 168px; }
+.cmp__side .frame__name { font-size: 20px; margin-top: 12px; }
+.cmp__side .frame__desc { font-size: 14px; }
+.cmp__side .frame__meta { font-size: 13px; margin-top: 14px; }
+.cmp__hint { font-size: 12.5px; line-height: 1.8; color: var(--stone-500); margin-top: 16px; padding: 11px 14px; background: rgba(255,255,255,.6); border-radius: 10px; }
+
+/* 放大看单版（像装到手机上一样完整） */
+.zoom { position: fixed; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center; gap: 30px; padding: 26px; background: rgba(48,18,34,.66); -webkit-backdrop-filter: blur(9px); backdrop-filter: blur(9px); }
+.zoom[hidden] { display: none; }
+.zoom .frame__screen { height: min(844px, calc(100vh - 76px)); }
+.zoom__cap { max-width: 330px; color: rgba(255,255,255,.9); }
+.zoom__cap .frame__name { color: #fff; font-size: 20px; }
+.zoom__cap .frame__desc { color: rgba(255,255,255,.82); font-size: 13.5px; }
+.zoom__cap .frame__meta { color: rgba(255,255,255,.72); font-size: 12.5px; border-left-color: rgba(255,255,255,.28); }
+.zoom__cap .frame__meta b { color: #f7c9db; }
+.zoom__close { position: absolute; top: 20px; right: 24px; border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.12); color: #fff; border-radius: 999px; padding: 9px 18px; font-family: var(--font-cn); font-size: 13.5px; cursor: pointer; }
+.zoom__close:hover { background: rgba(255,255,255,.22); }
+@media (max-width: 900px) {
+  .cmp__rowl { width: 100%; }
+  .cmp__side { position: static; max-width: none; }
+  .zoom { flex-direction: column; gap: 14px; overflow-y: auto; }
+}
 
 /* ============================================================
    共用小组件：分区标题 / 折叠条 / 归档入口 / 日期分隔 / 紧凑完成行
@@ -162,6 +202,10 @@ body.proposal { background: #f7f2f6; }
 .fv-rec .gwrap { box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(184,90,124,.05), 0 16px 30px -20px rgba(184,90,124,.45); }
 .fv-rec .gwrap--muted { box-shadow: none; }
 .fv-rec .todo--done .todo__text { text-decoration-color: rgba(232,132,168,.3); }
+
+/* 附加版式开关（在对比器上直接叠加，方便现场微调判断） */
+.sw-no-meta .todo__meta { display: none; }
+.sw-dense .todo { padding-top: 11px !important; padding-bottom: 11px !important; }
 </style>
 </head>
 <body class="proposal">
@@ -169,11 +213,11 @@ body.proposal { background: #f7f2f6; }
 
   <header class="p-head">
     <div class="p-kicker">Proposal · 2026-09-16 · 供选择</div>
-    <h1 class="p-h1">待办页改版 · 第二版提案</h1>
+    <h1 class="p-h1">待办页改版 · 可切换的样式方案</h1>
     <p class="p-lead">
-      两个问题：<b>①列表该显示哪些待办</b>（信息架构）、<b>②视觉能不能有质的飞跃</b>（视觉语言）。
-      下面各给 4 版方案。所有手机框都直接引用 <code>public/css/style.css</code> 并复用真实的卡片 DOM 结构，
-      所以「现状」那一屏就是你手机上此刻的样子，改版方案的差异也是真实可比的。
+      全部是<b>真实样式</b>：手机框直接引用 <code>public/css/style.css</code> 并复用真实的卡片 DOM 结构，
+      所以「现状」那一屏就是你手机上此刻的样子。<b>框里的圆勾能真的点</b>（打勾 / 取消，Paper 版还有盖章动效）、
+      <b>折叠条能真的收起展开</b> —— 打开就能按，不用脑补。
     </p>
     <div class="p-facts">
       <div class="fact"><div class="fact__n">63</div><div class="fact__l">存活待办（含已完成）</div></div>
@@ -190,33 +234,38 @@ body.proposal { background: #f7f2f6; }
     </p>
   </header>
 
-  <!-- ================= 现状 ================= -->
+  <!-- ================= 核心：原地切换 ================= -->
   <section class="p-sec">
-    <h2 class="p-sec__h">当前实现（对照基准）</h2>
+    <h2 class="p-sec__h">同一台手机 · 原地切换（先玩这个）</h2>
     <p class="p-sec__sub">
-      一条扁平 <code>ul.todo-list</code>，排序是「置顶 → 未完成 → 已完成」，已完成的卡片**不下沉出视野、也不收起**，
-      只是文字划线 + 背景转白 + 阴影收一线。列表下方可滚动区域（本框里可以真的滚一下）就是那 60 张卡片的坟场。
+      点下面任意一个按钮，右边这台手机就换成那一版 —— 眼球不用移动，两次点击之间就是「前后对比」。
+      最下面一排是<b>版式开关</b>：可以直接叠加「隐藏元信息行」和「行内距收紧」，用来现场试「如果那条时间戳不要了会怎样」。
     </p>
-    <div class="p-frames" id="frames-now"></div>
+    <div class="cmp__bar" id="cmp-bar"></div>
+    <div class="cmp__stage">
+      <div id="cmp-frame"></div>
+      <div class="cmp__side" id="cmp-side"></div>
+    </div>
   </section>
 
-  <!-- ================= Q1 ================= -->
+  <!-- ================= 四宫格：并排比密度 ================= -->
   <section class="p-sec">
-    <h2 class="p-sec__h">问题一 · 列表显示什么（4 版）</h2>
+    <h2 class="p-sec__h">问题一 · 列表显示什么（四版并排）</h2>
     <p class="p-sec__sub">
       目标：让打开 App 的第一屏就等于「我接下来要做什么」，而不是「我做过什么」。
       四版的分野只有一句话 —— <b>已完成的那些，是收起、是搬家、是变薄、还是变成数字</b>。
+      每版下方标注了首屏能看到多少、改动面多大。
     </p>
     <div class="p-frames" id="frames-q1"></div>
   </section>
 
   <!-- ================= Q2 ================= -->
   <section class="p-sec">
-    <h2 class="p-sec__h">问题二 · 视觉语言（4 版）</h2>
+    <h2 class="p-sec__h">问题二 · 视觉语言（四版并排）</h2>
     <p class="p-sec__sub">
       现状的视觉问题不在配色（樱粉体系 + 三轨字体是成立的），而在 <b>「每一条都是一个盒子」</b>：
-      1px 边框 + 投影 + 15/16 内距 + 12 外距 ≈ 84px/条，一屏只能 8 条，而卡片里的信息（7 个字）根本撑不满。
-      四版方案按「外壳」的激进程度排序，从去壳到强化壳，都顺手修掉同一个现网缺陷：
+      1px 边框 + 投影 + 15/16 内距 + 12 外距 ≈ 80px/条，一屏只能 8 条，而卡片里的信息（7 个字）根本撑不满。
+      四版按「外壳」的激进程度排序，从去壳到强化壳，都顺手修掉同一个现网缺陷：
       <b>完成态把复选框藏成 opacity:0，导致「取消完成」这个操作在视觉上不存在</b>（只能去长按菜单里找「撤销完成」）。
     </p>
     <table style="border-collapse:collapse;margin:18px 0 4px;font-size:13px">
@@ -227,7 +276,7 @@ body.proposal { background: #f7f2f6; }
       </tr></thead>
       <tbody style="font-family:var(--font-mono)">
         <tr><td style="padding:5px 18px 5px 0">现状（卡片 + 12px 外距）</td><td style="padding:5px 18px 5px 0">80px</td><td style="padding:5px 18px 5px 0">8 条</td></tr>
-        <tr><td style="padding:5px 18px 5px 0">Ⅰ Quiet（行 + 分隔线）</td><td style="padding:5px 18px 5px 0">74px → 53px<span style="font-family:var(--font-cn);color:#7a6572">（元信息收单行）</span></td><td style="padding:5px 18px 5px 0">9 → 12 条</td></tr>
+        <tr><td style="padding:5px 18px 5px 0">Ⅰ Quiet（行 + 分隔线）</td><td style="padding:5px 18px 5px 0">74px → 53px<span style="font-family:var(--font-cn);color:#7a6572">（元信息收掉）</span></td><td style="padding:5px 18px 5px 0">9 → 12 条</td></tr>
         <tr><td style="padding:5px 18px 5px 0">Ⅱ Editorial（放大排版）</td><td style="padding:5px 18px 5px 0">95px</td><td style="padding:5px 18px 5px 0">7 条</td></tr>
         <tr><td style="padding:5px 18px 5px 0">Ⅲ Paper 2.0（材质加深）</td><td style="padding:5px 18px 5px 0">93px</td><td style="padding:5px 18px 5px 0">7 条</td></tr>
         <tr><td style="padding:5px 18px 5px 0">Ⅳ Inset Grouped（容器化）</td><td style="padding:5px 18px 5px 0">69px</td><td style="padding:5px 18px 5px 0">10 条</td></tr>
@@ -236,20 +285,30 @@ body.proposal { background: #f7f2f6; }
     </table>
     <p class="p-sec__sub" style="margin-top:6px;font-size:13px">
       数字用 Playwright 量自本页真实渲染结果（每条含外边距）。注意看最后一行的反差：
-      <b>真正让列表"变薄"的不是去掉边框，而是别让每条都占两行</b> —— 现状的 80px 里，有 24px 是那句
-      「小宝宝 · 今天 09:12」，而中位文本只有 7 个字。所以四版视觉方案里，密度提升最大的一步其实都很朴素：
-      <b>把元信息降级/收成单行</b>。
+      <b>真正让列表「变薄」的不是去掉边框，而是别让每条都占两行</b> —— 现状的 80px 里，有 24px 是那句
+      「小宝宝 · 今天 09:12」，而中位文本只有 7 个字。所以在对比器里叠加「隐藏元信息行」那一下，
+      密度提升比换任何一版视觉都明显。
     </p>
     <div class="p-frames" id="frames-q2"></div>
+  </section>
+
+  <!-- ================= 现状 ================= -->
+  <section class="p-sec">
+    <h2 class="p-sec__h">对照基准 · 现状</h2>
+    <p class="p-sec__sub">
+      一条扁平 <code>ul.todo-list</code>，排序是「置顶 → 未完成 → 已完成」，已完成的卡片<b>不下沉出视野、也不收起</b>，
+      只是文字划线 + 背景转白 + 阴影收一线。下面框里可以真的滚一下 —— 那就是那 60 张卡片的坟场。
+    </p>
+    <div class="p-frames" id="frames-now"></div>
   </section>
 
   <!-- ================= 推荐 ================= -->
   <section class="p-sec">
     <h2 class="p-sec__h">推荐组合（如果只挑一套）</h2>
     <p class="p-sec__sub">
-      <b>方案二（双区分离）+ 方案四的摘要 + Q2-Ⅳ（容器化）+ Q2-Ⅲ 的材质</b>：
+      <b>Q1 方案二（双区分离）+ 方案四的摘要 + Q2-Ⅳ（容器化）+ Q2-Ⅲ 的材质</b>：
       未完成是「一张亮卡片」、已完成是「一张淡卡片里的若干细行」、更早的进归档页。
-      第一屏恒定为 3～8 条，且两种状态在视觉上是两个物种 —— 这就是「质的飞跃」最省力的落点。
+      第一屏恒定为 3～8 条，且两种状态在视觉上是两个物种 —— 这是「质的飞跃」最省力的落点。
     </p>
     <div class="p-frames" id="frames-rec"></div>
   </section>
@@ -260,6 +319,13 @@ body.proposal { background: #f7f2f6; }
     <div id="plan" class="p-sec__sub"></div>
   </section>
 
+</div>
+
+<!-- 放大看单版（像装到手机上一样完整） -->
+<div id="zoom" class="zoom" hidden>
+  <button id="zoomClose" class="zoom__close" type="button">✕ 关闭（Esc）</button>
+  <div id="zoom-frame"></div>
+  <div class="zoom__cap" id="zoom-cap"></div>
 </div>
 
 <script>
@@ -292,12 +358,13 @@ const SVG_HEART = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:13px
 const SVG_PIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M12 17v5"/><path d="M9 11l-4 4h14l-4-4"/><path d="M15 3.5a2 2 0 0 1 2 2V9l-5 5-5-5V5.5a2 2 0 0 1 2-2h6z"/></svg>';
 const SVG_IMG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
 const SVG_TOPHEART = '<svg viewBox="0 0 32 32" width="24" height="24" role="img" aria-label="爱心"><defs><linearGradient id="th1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f3b9cd"/><stop offset="100%" stop-color="#e884a8"/></linearGradient></defs><path d="M16 28s-11-6.6-11-14.2C5 9.2 7.9 6.5 11.3 6.5c2 0 3.8 1 4.7 2.6.9-1.6 2.7-2.6 4.7-2.6C24.1 6.5 27 9.2 27 13.8 27 21.4 16 28 16 28z" fill="url(#th1)"/><path d="M13 11c-1.6 0-3 1.3-3 3" stroke="rgba(255,255,255,0.55)" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>';
+const SVG_FAB = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
 
 function topbar() {
   return '<header class="topbar">'
     + '<div class="topbar__title"><span class="topbar__heart">' + SVG_TOPHEART + '</span>'
     + '<span class="topbar__anni"><span class="topbar__anni-label">在一起</span><span class="topbar__anni-days">412</span><span class="topbar__anni-unit">天</span></span></div>'
-    + '<div class="topbar__right"><span id="me" class="topbar__me"><img class="topbar__avatar" src="' + ME + '" alt=""></span></div>'
+    + '<div class="topbar__right"><span class="topbar__me"><img class="topbar__avatar" src="' + ME + '" alt=""></span></div>'
     + '</header>';
 }
 
@@ -321,7 +388,7 @@ function card(t, opts) {
     + (opts.watermark ? '<span class="todo__watermark">' + opts.watermark + '</span>' : '')
     + '</li>';
 }
-const doneCard = (t, opts) => card(t, Object.assign({ done: true, watermark: t.time }, opts || {}));
+const doneCard = (t, opts) => card(t, Object.assign({ done: true }, opts || {}));
 
 /** 紧凑完成行（时间轴 / 归档页） */
 function drow(t, time) {
@@ -332,58 +399,32 @@ function drow(t, time) {
 const secH = (label, n, soft) => '<div class="sec' + (soft ? ' sec--soft' : '') + '"><span>' + label + '</span><span class="sec__n">· ' + n + '</span></div>';
 const archRow = (label, n) => '<button class="arch-row" type="button"><span>' + label + '</span><b>' + n + '</b><span>›</span></button>';
 const oldDone = () => OLD.map((t, i) => ({ text: t, av: i % 2 ? ME : TA, time: (4 + i) + 'd' }));
-
-/** 手机框 */
-function frame(variant, bodyHTML, opts) {
-  opts = opts || {};
-  return '<div class="frame"><div class="frame__screen ' + (variant || '') + '"><div class="frame__scroll">'
-    + topbar() + '<main class="container">' + bodyHTML + '</main>'
-    + '</div><button class="fab" type="button" aria-label="添加待办"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div>'
-    + '<div class="frame__cap"><span class="frame__tag ' + (opts.tagCls || '') + '">' + opts.tag + '</span>'
-    + '<div class="frame__name">' + opts.name + '</div>'
-    + '<div class="frame__desc">' + opts.desc + '</div>'
-    + '<div class="frame__meta">' + opts.meta + '</div></div></div>';
-}
 const ul = (inner) => '<ul class="todo-list">' + inner + '</ul>';
 
 /* ============================================================
-   现状
+   各版「身体」（列表内容）
    ============================================================ */
 const nowBody = ul(OPEN.map((t) => card(t)).join('') + DONE.map((t) => doneCard(t)).join('')
   + oldDone().slice(0, 12).map((t) => doneCard(t)).join('')
   + '<li style="text-align:center;font-size:12px;color:#7a6572;padding:14px 0">⋯ 下面还有 43 条已完成的（真实数据里还有 29 条超过 30 天）</li>');
 
-document.getElementById('frames-now').innerHTML =
-  frame('', nowBody, {
-    tag: '现状', tagCls: 'frame__tag--alt', name: '一条扁平列表，63 条全平铺',
-    desc: '3 条可做的藏在最上面，下面是 60 张「已完成、不可点、只划线」的卡片。你每天打开它、滚过它，然后关掉。',
-    meta: '<b>一屏可见</b> 8 条 ｜ <b>首屏可操作</b> 3 条（占 4%）<br><b>改动面</b> —（对照基准）'
-  });
-
-/* ============================================================
-   Q1 · 四版信息架构
-   ============================================================ */
-/* ① 折叠：已完成整段收进一个条 */
 const q1aBody = ul(OPEN.map((t) => card(t)).join(''))
   + '<div class="grp"><button class="grp__bar" type="button"><span>已完成</span><b>60</b><span class="grp__caret">▾</span></button>'
-  + '<div class="grp__body"><ul class="todo-list">' + DONE.map((t) => doneCard(t)).join('')
-  + '<li style="text-align:center;font-size:12px;color:#7a6572;padding:12px 0">⋯ 其余 55 条点开可见（或跳归档页）</li></ul></div></div>';
+  + '<div class="grp__body">' + ul(DONE.map((t) => doneCard(t)).join('')
+  + '<li style="text-align:center;font-size:12px;color:#7a6572;padding:12px 0">⋯ 其余 55 条点开可见（或跳归档页）</li>') + '</div></div>';
 
-/* ② 双区 + 归档页 */
 const q1bBody = secH('未完成', 3) + ul(OPEN.map((t) => card(t)).join(''))
   + secH('最近完成', 5, true) + ul(DONE.map((t) => doneCard(t)).join(''))
   + archRow('更早完成的记录', 55);
 
-/* ③ 按天分组 + 完成项变细 */
 const q1cBody = '<div class="day-h"><span class="day-h__cn">今天</span><span class="day-h__en">Sep 16</span></div>'
-  + ul(OPEN.map((t) => card(t)).join('') + DONE.slice(0, 1).map((t) => drow(t)).join(''))
+  + ul(OPEN.map((t) => card(t)).join('') + drow(DONE[0]))
   + '<div class="day-h"><span class="day-h__cn">昨天</span><span class="day-h__en">Sep 15</span></div>'
-  + ul(DONE.slice(1, 3).map((t, i) => drow(t, ['21:10', '18:42'][i])).join(''))
+  + ul(drow(DONE[1], '21:10') + drow(DONE[2], '18:42'))
   + '<div class="day-h"><span class="day-h__cn">更早</span><span class="day-h__en">Sep 13 —</span></div>'
   + ul(DONE.slice(3).map((t) => drow(t)).join('') + oldDone().slice(0, 8).map((t) => drow(t)).join('')
   + '<li style="text-align:center;font-size:12px;color:#7a6572;padding:12px 0">⋯ 还有 47 条</li>');
 
-/* ④ 摘要 + 归档 */
 const q1dBody = '<div class="digest">'
   + '<div class="digest__c"><div class="digest__n">3</div><div class="digest__l">未完成</div></div>'
   + '<div class="digest__c"><div class="digest__n">5</div><div class="digest__l">本周一起完成</div></div>'
@@ -391,106 +432,172 @@ const q1dBody = '<div class="digest">'
   + ul(OPEN.map((t) => card(t)).join(''))
   + archRow('全部完成记录', 60);
 
-document.getElementById('frames-q1').innerHTML = [
-  frame('', q1aBody, {
-    tag: '方案一', name: '折叠 · 已完成整段收起',
-    desc: '未完成照旧在最上面，已完成收进一根虚线折叠条，默认收起（点一下原位展开最近 5 条）。「完成 →卡片滑进下面」的当下反馈还在。',
-    meta: '<b>首屏</b> 3 条 + 1 根条 ｜ <b>改动面</b> 小（DOM 包一层 + 折叠状态存 localStorage）<br><b>代价</b> 只是把坟场盖了块布，列表仍会随时间越积越多（除非点开就懒渲染）'
-  }),
-  frame('', q1bBody, {
-    tag: '方案二', name: '分离 · 双区 + 归档页',
-    desc: '主列表只保留「未完成 + 最近 7 天完成的」。更早的一律进归档页（复用回收站那套全屏列表 + 按月分组），主列表长度从此恒定，不再随时间增长。',
-    meta: '<b>首屏</b> 8 条，恒定为 8 条 ｜ <b>改动面</b> 中（多一个归档页 + 路由）<br><b>代价</b> 想看「上个月做了什么」要多点一次 ｜ <b>收益</b> 顺手把路线图里 P2 的「已完成归档」做掉'
-  }),
-  frame('', q1cBody, {
-    tag: '方案三', name: '变薄 · 按天分组 + 完成项转细行',
-    desc: '不隐藏任何数据，靠「变薄」降噪：未完成用卡片，已完成压成 30px 的细行（约卡片的 40% 高），按今天/昨天/更早分组。一屏能看 20+ 条，且自带「我们一起做过什么」的叙事感。',
-    meta: '<b>首屏</b> 3 条卡片 + 约 17 条细行（细行实测 35px，一屏 19 行）｜ <b>改动面</b> 中大（分组渲染 + 细行是新的渲染分支）<br><b>代价</b> 细行点击区只有 30px（需补长按菜单入口）；日期分组要新增字段排序（现表只有 created_at，缺 completed_at 索引）'
-  }),
-  frame('', q1dBody, {
-    tag: '方案四', name: '变数字 · 摘要 + 一键归档',
-    desc: '把「已完成」从列表项降级成统计数字：顶部一张「未完成 3 · 本周完成 5 · 累计 60」摘要卡，下面只列未完成，已完成只剩一行入口。信息密度最高、最安静。',
-    meta: '<b>首屏</b> 4 条（含摘要卡）｜ <b>改动面</b> 中（摘要统计 + 归档页）<br><b>代价</b> 完成一条后「它去哪了」的反馈消失，得靠动画补（卡片飞出→数字 +1）｜ <b>收益</b> 每天打开都有新数字，把平坦的列表换成会变化的摘要'
-  }),
-].join('');
-
-/* ============================================================
-   Q2 · 四版视觉语言
-   ============================================================ */
 function visualBody(opts) {
   opts = opts || {};
   const doneCardW = (t) => card(t, { done: true, watermark: t.time }); // 完成态带等宽体时间水印
   const openHTML = ul(OPEN.map((t) => card(t)).join(''));
   const doneHTML = ul(DONE.map(doneCardW).join('') + oldDone().slice(0, 6).map(doneCardW).join(''));
   if (!opts.grouped) return openHTML + doneHTML;
-  // 容器化：两张「大卡」分别装未完成与已完成（这才是该视觉语言的实际用法）
   return secH('未完成', 3) + '<div class="gwrap">' + openHTML + '</div>'
     + secH('最近完成', 5, true) + '<div class="gwrap gwrap--muted">' + doneHTML + '</div>';
 }
 
-document.getElementById('frames-q2').innerHTML = [
-  frame('fv-quiet', visualBody(), {
-    tag: 'Ⅰ', name: 'Quiet List · 去卡片化',
-    desc: '删掉边框、阴影、圆角、卡片底色 —— 只剩「行 + 一条细分隔线」。勾选框回到左侧、22px、始终可见（完成态也在，点它就是撤销完成）。',
-    meta: '<b>一屏</b> 9 条（实测单条 74px）｜ <b>改动面</b> 纯 CSS（结构不动）<br><b>还能更密</b> 把元信息那一行收成单行 → 53px → 一屏 12 条<br><b>代价</b> 与现有「暖奢纸片」调性有断裂感，卡片上的隐藏款渐变背景会失去承载物（需给稀有款单独的行内标记）'
-  }),
-  frame('fv-edit', visualBody(), {
-    tag: 'Ⅱ', name: 'Editorial · 杂志排版',
-    desc: '借已确立的字体三轨：中文衬线放到 21px、行高 1.6，时间戳用等宽体；未完成是「正文」，已完成降为 15px 的「注脚」，中间用日期 overline 与发丝线分隔。像在读一页日记。',
-    meta: '<b>一屏</b> 7 条（实测单条 95px，比现状还疏）｜ <b>改动面</b> 纯 CSS + 日期 overline<br><b>代价</b> 密度没有提升，收益全在情绪 ｜ <b>收益</b> 情感浓度最高的一版，最贴合「有爱」的品牌定位'
-  }),
-  frame('fv-paper', visualBody(), {
-    tag: 'Ⅲ', name: 'Paper 2.0 · 材质与仪式',
-    desc: '保留卡片形态但把材质做"贵"：双层暖影 + inset 白高光（纸的厚度）+ 左侧状态色书脊；完成瞬间对勾「盖章」回弹、卡片压平并浮出一枚等宽体的完成时间水印。',
-    meta: '<b>一屏</b> 7 条（实测单条 93px）｜ <b>改动面</b> 纯 CSS + 一个 class 的动画<br><b>代价</b> 结构没变，所以"质的飞跃"来自冲击力而非效率 ｜ <b>优势</b> DOM 结构零改动，E2E 风险最低，可独立先上'
-  }),
-  frame('fv-group', visualBody({ grouped: true }), {
-    tag: 'Ⅳ', name: 'Inset Grouped · 容器化',
-    desc: '从「N 张卡片」变成「一张大卡装 N 行」（iOS 设置页那种 inset grouped）：外层一张圆角大卡 + 内部行分隔线，行内不再有独立阴影。勾选框回左侧、始终可见。',
-    meta: '<b>一屏</b> 10 条（实测单条 69px，是四版里最密的卡片式方案）｜ <b>改动面</b> 纯 CSS（需给列表包一层容器 div）<br><b>代价</b> 稀有款（隐藏款）不能再靠"整张卡换渐变底"表达 ｜ <b>收益</b> 与任何分区方案天然契合（未完成组 / 已完成组两张卡），密度与质感双升'
-  }),
-].join('');
-
-/* ============================================================
-   推荐组合
-   ============================================================ */
 const recBody = '<div class="digest" style="margin-bottom:22px">'
   + '<div class="digest__c"><div class="digest__n">3</div><div class="digest__l">未完成</div></div>'
   + '<div class="digest__c"><div class="digest__n">5</div><div class="digest__l">本周完成</div></div>'
   + '<div class="digest__c"><div class="digest__n">60</div><div class="digest__l">累计完成</div></div></div>'
   + secH('未完成', 3) + '<div class="gwrap">' + ul(OPEN.map((t) => card(t)).join('')) + '</div>'
-  + secH('最近完成', 5, true) + '<div class="gwrap gwrap--muted">' + ul(DONE.map((t) => card(t, { done: true })).join('')) + '</div>'
+  + secH('最近完成', 5, true) + '<div class="gwrap gwrap--muted">' + ul(DONE.map((t) => doneCard(t)).join('')) + '</div>'
   + archRow('全部完成记录 · 按月归档', 60);
 
-document.getElementById('frames-rec').innerHTML =
-  frame('fv-group fv-rec', recBody, {
-    tag: '推荐', tagCls: 'frame__tag--rec', name: '摘要 + 双区组 + 容器化材质',
+/* ============================================================
+   版本登记表（对比器、并排区、放大视图共用同一份）
+   ============================================================ */
+const CFG = {
+  now: { tag: '现状', tagCls: 'frame__tag--alt', variant: '', body: () => nowBody,
+    name: '现状 · 63 条全平铺',
+    desc: '3 条可做的藏在最上面，下面是 60 张「已完成、点不动、只划线」的卡片。你每天打开它、滚过它、然后关掉。',
+    meta: '<b>一屏可见</b> 8 条 ｜ <b>首屏可操作</b> 3 条（仅 4%）<br><b>改动面</b> —（对照基准）' },
+  q1a: { tag: '方案一', variant: '', body: () => q1aBody,
+    name: '折叠 · 已完成整段收起',
+    desc: '未完成照旧在最上面，已完成收进一根虚线折叠条，默认收起（框里那根条可以点，原位展开）。「完成 → 卡片滑进下面」的当下反馈还在。',
+    meta: '<b>首屏</b> 3 条 + 1 根条 ｜ <b>改动面</b> 小（DOM 包一层 + 折叠状态存 localStorage）<br><b>代价</b> 只是把坟场盖了块布，列表仍会随时间越积越多（除非展开时也懒渲染）' },
+  q1b: { tag: '方案二', variant: '', body: () => q1bBody,
+    name: '分离 · 双区 + 归档页',
+    desc: '主列表只保留「未完成 + 最近 7 天完成的」。更早的一律进归档页（复用回收站那套全屏列表 + 按月分组），主列表长度从此恒定，不再随时间增长。',
+    meta: '<b>首屏</b> 8 条，恒定为 8 条 ｜ <b>改动面</b> 中（多一个归档页 + 路由）<br><b>代价</b> 想看「上个月做了什么」要多点一次 ｜ <b>收益</b> 顺手把路线图里 P2 的「已完成归档」做掉' },
+  q1c: { tag: '方案三', variant: '', body: () => q1cBody,
+    name: '变薄 · 按天分组 + 完成项转细行',
+    desc: '不隐藏任何数据，靠「变薄」降噪：未完成用卡片，已完成压成 35px 的细行（约卡片的 40% 高），按今天/昨天/更早分组。一屏能看约 19 行，且自带「我们一起做过什么」的叙事感。',
+    meta: '<b>首屏</b> 3 条卡片 + 约 17 条细行 ｜ <b>改动面</b> 中大（分组渲染 + 细行是新的渲染分支）<br><b>代价</b> 细行点击区只有 35px（需补长按菜单入口）；分组要按 completed_at 排，且它是新的一层视觉语言' },
+  q1d: { tag: '方案四', variant: '', body: () => q1dBody,
+    name: '变数字 · 摘要 + 一键归档',
+    desc: '把「已完成」从列表项降级成统计数字：顶部一张「未完成 3 · 本周完成 5 · 累计 60」摘要卡，下面只列未完成，已完成只剩一行入口。信息密度最高、最安静。',
+    meta: '<b>首屏</b> 4 条（含摘要卡）｜ <b>改动面</b> 中（摘要统计 + 归档页）<br><b>代价</b> 完成一条后「它去哪了」的反馈消失，得靠动画补（卡片飞出 → 数字 +1）｜ <b>收益</b> 每天打开都有新数字，把平坦列表换成会变的摘要' },
+  quiet: { tag: 'Ⅰ', variant: 'fv-quiet', body: () => visualBody(),
+    name: 'Quiet List · 去卡片化',
+    desc: '删掉边框、阴影、圆角、卡片底色 —— 只剩「行 + 一条细分隔线」。勾选框回到左侧、22px、始终可见（完成态也在，点它就是撤销完成）。',
+    meta: '<b>一屏</b> 9 条（实测单条 74px）｜ <b>改动面</b> 纯 CSS（结构不动）<br><b>还能更密</b> 把元信息那一行收掉 → 53px → 一屏 12 条<br><b>代价</b> 与现有「暖奢纸片」调性有断裂感，卡片上的隐藏款渐变背景会失去承载物（需给稀有款单独的行内标记）' },
+  edit: { tag: 'Ⅱ', variant: 'fv-edit', body: () => visualBody(),
+    name: 'Editorial · 杂志排版',
+    desc: '借已确立的字体三轨：中文衬线放到 21px、行高 1.6，时间戳用等宽体；未完成是「正文」，已完成降为 15px 的「注脚」，中间用日期 overline 与发丝线分隔。像在读一页日记。',
+    meta: '<b>一屏</b> 7 条（实测单条 95px，比现状还疏）｜ <b>改动面</b> 纯 CSS + 日期 overline<br><b>代价</b> 密度没有提升，收益全在情绪 ｜ <b>收益</b> 情感浓度最高的一版，最贴合「有爱」的品牌定位' },
+  paper: { tag: 'Ⅲ', variant: 'fv-paper', body: () => visualBody(),
+    name: 'Paper 2.0 · 材质与仪式',
+    desc: '保留卡片形态但把材质做「贵」：双层暖影 + inset 白高光（纸的厚度）+ 左侧状态色书脊；完成瞬间对勾「盖章」回弹、卡片压平并浮出一枚等宽体的完成时间水印。框里点勾试试。',
+    meta: '<b>一屏</b> 7 条（实测单条 93px）｜ <b>改动面</b> 纯 CSS + 一个 class 的动画<br><b>代价</b> 结构没变，所以「质的飞跃」来自冲击力而非效率 ｜ <b>优势</b> DOM 结构零改动，E2E 风险最低，可独立先上' },
+  group: { tag: 'Ⅳ', variant: 'fv-group', body: () => visualBody({ grouped: true }),
+    name: 'Inset Grouped · 容器化',
+    desc: '从「N 张卡片」变成「一张大卡装 N 行」（iOS 设置页那种 inset grouped）：外层一张圆角大卡 + 内部行分隔线，行内不再有独立阴影。勾选框回左侧、始终可见。',
+    meta: '<b>一屏</b> 10 条（实测单条 69px，四版里最密的卡片式方案）｜ <b>改动面</b> 纯 CSS（需给列表包一层容器 div）<br><b>代价</b> 稀有款（隐藏款）不能再靠「整张卡换渐变底」表达 ｜ <b>收益</b> 与任何分区方案天然契合（未完成组 / 已完成组两张卡），密度与质感双升' },
+  rec: { tag: '推荐', tagCls: 'frame__tag--rec', variant: 'fv-group fv-rec', body: () => recBody,
+    name: '摘要 + 双区组 + 容器化材质',
     desc: '第一屏恒定为「3 条可做 + 5 条刚做完 + 1 行归档入口」，不用滚。未完成组是纸白高光卡，已完成组是压平的淡底卡 —— 两种状态在视觉上是两个物种，而不是同一种卡片改了个颜色。',
-    meta: '<b>首屏</b> 9 个元素、0 次滚动 ｜ <b>改动面</b> 中：state.js 排序 + app.js render() 分组渲染 + 新增归档页 + CSS<br><b>硬要求</b> 完成态必须保留可见的撤销入口（现在藏成 opacity:0 → 只能长按找「撤销完成」）'
-  });
+    meta: '<b>首屏</b> 9 个元素、0 次滚动 ｜ <b>改动面</b> 中：state.js 排序 + app.js render() 分组渲染 + 新增归档页 + CSS<br><b>硬要求</b> 完成态必须保留可见的撤销入口（现在藏成 opacity:0，只能长按找「撤销完成」）' },
+};
 
 /* ============================================================
-   实施计划文本 + 交互
+   渲染
    ============================================================ */
-document.getElementById('plan').innerHTML = [
-  '<p><b>建议的实施顺序</b>（每步独立可发布、可回滚，符合「一次只发一类改动」）：</p>',
-  '<ol style="line-height:2;padding-left:22px;margin:10px 0">',
-  '<li><b>先修缺陷</b>（约 0.5 天，纯 CSS）：完成态的复选框从 <code>opacity:0</code> 改为可见的「撤销完成」入口。这是现网真实的可发现性问题，不依赖任何方案选择。</li>',
-  '<li><b>Q2-Ⅲ Paper 2.0 或 Q2-Ⅰ Quiet List</b>（1 天，纯 CSS）：先只动视觉、不动结构，验证新调性在你的手机上是否成立。这一步就能回答"有没有质变"。</li>',
-  '<li><b>Q1 的折叠或双区</b>（1～2 天）：改 <code>state.js</code> 的 <code>sortTodos</code> 与 <code>app.js</code> 的 <code>render()</code>，把已完成分段渲染。折叠状态存 localStorage。</li>',
-  '<li><b>归档页 + 摘要数字</b>（1～2 天）：复用 <code>trash.js</code> 的全屏列表样式；摘要数字由前端从已加载的 todos 算，不需要新表、不需要新埋点。</li>',
-  '</ol>',
-  '<p style="margin-top:18px"><b>三条必须一起处理的工程约束（否则会踩在已有测试上）：</b></p>',
-  '<ol style="line-height:2;padding-left:22px;margin:10px 0">',
-  '<li><b>E2E 会红</b>：<code>scripts/test_undo_complete.py</code> 与 <code>test_trash.py</code> 靠 <code>.todo</code>（带文本匹配）+ <code>.todo__check</code> 断言"完成→沉底→撤销"。若完成后卡片被 <code>display:none</code> 收起，<code>count()</code> 仍能找到、但 <code>click()</code> 会因不可见失败。<b>要么用"节点仍在 DOM、仅视觉收起"的实现，要么同 PR 一起改这两个用例</b>；发布前必须跑 <code>node scripts/run-web-e2e.mjs</code>。</li>',
-  '<li><b>隐藏款盲盒的视觉承载物</b>：稀有/史诗/传说三档现在是"整张卡片渐变底 + 四边彩边"（<code>.todo--rare/.todo--epic/.todo--legendary</code>）。容器化或去卡片化后，这个表达没有落点 —— 需要为开奖决定一个替代载体（左侧书脊染色 / 行首四角星光 / 文字微渐变），否则盲盒这个核心卖点会被改版稀释掉。</li>',
-  '<li><b>数据从哪来（比加索引更值得先想清楚）</b>：<code>db.js</code> 的 <code>listTodos()</code> 现在一次性拉回全部未删除的待办（无分页、无上限），排序由 <code>(pinned, completed, created_at)</code> 完成，已有对应索引 <code>idx_todos_pinned_completed_created</code>。<b>好处是</b>：摘要数字、最近 7 天过滤、归档页全都能直接用内存里已有的 todos 算，<b>不需要新表、新字段、新查询</b>。"按天分组"需要 <code>completed_at</code>（字段已有、但没索引）—— 在 63 行的规模下<b>不需要加索引</b>，别提前加；只有将来归档改成"按需分页从服务端取"时才需要 <code>(completed, completed_at DESC) WHERE deleted_at IS NULL</code>。</li>',
-  '</ol>',
-  '<p style="margin-top:18px"><b>我的建议</b>：先只做第 1、2 步（缺陷 + 纯 CSS 视觉），把手机装上跑一周。Q1 的信息架构改动牵动 E2E 与盲盒表达，值得在看到视觉升级的实际效果之后再定 —— 很可能你会发现"变好看 + 完成项变细"就已经解决了 80% 的问题。</p>',
-].join('');
+/** 说明块（tag + 名称 + 一句话 + 改动面） */
+function capHTML(cfg) {
+  return '<span class="frame__tag ' + (cfg.tagCls || '') + '">' + cfg.tag + '</span>'
+    + '<div class="frame__name">' + cfg.name + '</div>'
+    + '<div class="frame__desc">' + cfg.desc + '</div>'
+    + '<div class="frame__meta">' + cfg.meta + '</div>';
+}
+const ALL = Object.keys(CFG).map((k) => Object.assign({ id: k }, CFG[k]));
+const byId = (id) => ALL.find((c) => c.id === id);
+const frameOf = (id) => '<div class="frame"><div class="frame__screen ' + byId(id).variant + '">'
+  + '<div class="frame__scroll">' + topbar() + '<main class="container">' + byId(id).body() + '</main></div>'
+  + '<button class="fab" type="button" aria-label="添加待办">' + SVG_FAB + '</button></div>'
+  + '<div class="frame__cap">' + capHTML(byId(id))
+  + '<button class="frame__zoom" type="button" data-zoom="' + id + '">⤢ 放大看这一版</button></div></div>';
 
-/* 交互：点勾 = 切换完成（含盖章动画）；点折叠条 = 收起/展开 */
+/* 并排区 */
+document.getElementById('frames-now').innerHTML = ['now'].map(frameOf).join('');
+document.getElementById('frames-q1').innerHTML = ['q1a', 'q1b', 'q1c', 'q1d'].map(frameOf).join('');
+document.getElementById('frames-q2').innerHTML = ['quiet', 'edit', 'paper', 'group'].map(frameOf).join('');
+document.getElementById('frames-rec').innerHTML = ['rec'].map(frameOf).join('');
+
+/* ============================================================
+   原地切换对比器
+   ============================================================ */
+const GROUPS = [
+  { label: '基准', ids: ['now'] },
+  { label: '问题一 · 显示什么', ids: ['q1a', 'q1b', 'q1c', 'q1d'] },
+  { label: '问题二 · 视觉语言', ids: ['quiet', 'edit', 'paper', 'group'] },
+  { label: '组合', ids: ['rec'] },
+];
+const SWITCHES = [
+  { id: 'noMeta', label: '隐藏元信息行', hint: '把「小宝宝 · 今天 09:12」整行去掉 —— 密度提升最大的一步' },
+  { id: 'dense', label: '行间距收紧', hint: '每条再压 8px，换取一屏多放 1 条' },
+];
+let current = 'now';
+const active = { noMeta: false, dense: false };
+
+function extraClass() {
+  return (active.noMeta ? ' sw-no-meta' : '') + (active.dense ? ' sw-dense' : '');
+}
+function render() {
+  const cfg = byId(current);
+  document.getElementById('cmp-frame').innerHTML =
+    '<div class="frame"><div class="frame__screen ' + (cfg.variant || '') + extraClass() + '">'
+    + '<div class="frame__scroll">' + topbar() + '<main class="container">' + cfg.body() + '</main></div>'
+    + '<button class="fab" type="button" aria-label="添加待办">' + SVG_FAB + '</button></div></div>';
+  const on = SWITCHES.filter((s) => active[s.id]).map((s) => s.label);
+  document.getElementById('cmp-side').innerHTML = capHTML(cfg)
+    + (on.length ? '<div class="cmp__hint"><b>已叠加开关：</b>' + on.join(' + ') + '</div>' : '')
+    + '<div class="cmp__hint">框里的圆勾<b>可以点</b>（真的会打勾 / 取消，Paper 版有盖章动效）；Q1 方案一的折叠条<b>可以点</b>；面板本身就是可滚动的 —— 滚一下能看到已完成那 60 条的去向。<br>右下角「⤢ 放大」按钮把当前这版铺满全屏（844px 高，等于 iPhone 14 的一屏）。</div>'
+    + '<button class="frame__zoom" type="button" data-zoom="' + cfg.id + '" style="margin-top:14px">⤢ 放大当前这一版</button>';
+  // 按钮态
+  document.querySelectorAll('#cmp-bar .chip[data-cfg]').forEach((b) => {
+    b.classList.toggle('chip--on', b.dataset.cfg === current);
+  });
+  document.querySelectorAll('#cmp-bar .chip[data-sw]').forEach((b) => {
+    b.classList.toggle('chip--on', !!active[b.dataset.sw]);
+  });
+}
+
+document.getElementById('cmp-bar').innerHTML = GROUPS.map((g) =>
+  '<div class="cmp__row"><span class="cmp__rowl">' + g.label + '</span>'
+  + g.ids.map((id) => '<button class="chip" type="button" data-cfg="' + id + '">' + byId(id).name + '</button>').join('')
+  + '</div>').join('')
+  + '<div class="cmp__row"><span class="cmp__rowl">版式开关</span>'
+  + SWITCHES.map((s) => '<button class="chip" type="button" data-sw="' + s.id + '">' + s.label + '</button>').join('')
+  + '</div>';
+render();
+
+/* ============================================================
+   放大视图
+   ============================================================ */
+const zoomEl = document.getElementById('zoom');
+function openZoom(id) {
+  const cfg = byId(id);
+  document.getElementById('zoom-frame').innerHTML =
+    '<div class="frame"><div class="frame__screen ' + (cfg.variant || '') + '">'
+    + '<div class="frame__scroll">' + topbar() + '<main class="container">' + cfg.body() + '</main></div>'
+    + '<button class="fab" type="button" aria-label="添加待办">' + SVG_FAB + '</button></div></div>';
+  document.getElementById('zoom-cap').innerHTML = capHTML(cfg)
+    + '<div class="frame__meta" style="border:none;padding:0;margin-top:14px">点框里的圆勾可以打勾 / 取消；Esc 或右上角关闭。</div>';
+  zoomEl.hidden = false;
+}
+function closeZoom() { zoomEl.hidden = true; document.getElementById('zoom-frame').innerHTML = ''; }
+document.getElementById('zoomClose').addEventListener('click', closeZoom);
+zoomEl.addEventListener('click', (e) => { if (e.target === zoomEl) closeZoom(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeZoom(); });
+
+/* ============================================================
+   交互总入口（水印/折叠/切换/放大/打勾）
+   ============================================================ */
 document.addEventListener('click', (e) => {
+  const chipCfg = e.target.closest('.chip[data-cfg]');
+  if (chipCfg) { current = chipCfg.dataset.cfg; render(); return; }
+  const chipSw = e.target.closest('.chip[data-sw]');
+  if (chipSw) { active[chipSw.dataset.sw] = !active[chipSw.dataset.sw]; render(); return; }
+  const zoomBtn = e.target.closest('[data-zoom]');
+  if (zoomBtn) { openZoom(zoomBtn.dataset.zoom); return; }
+
   const chk = e.target.closest('.todo__check');
   if (chk) {
     const li = chk.closest('.todo');
@@ -505,6 +612,26 @@ document.addEventListener('click', (e) => {
   const bar = e.target.closest('.grp__bar');
   if (bar) bar.closest('.grp').classList.toggle('grp--collapsed');
 });
+
+/* ============================================================
+   实施计划文本
+   ============================================================ */
+document.getElementById('plan').innerHTML = [
+  '<p><b>建议的实施顺序</b>（每步独立可发布、可回滚，符合「一次只发一类改动」）：</p>',
+  '<ol style="line-height:2;padding-left:22px;margin:10px 0">',
+  '<li><b>先修缺陷</b>（约 0.5 天，纯 CSS）：完成态的复选框从 <code>opacity:0</code> 改为可见的「撤销完成」入口。这是现网真实的可发现性问题，不依赖任何方案选择。</li>',
+  '<li><b>视觉一版</b>（1 天，纯 CSS，Ⅲ Paper 2.0 或 Ⅳ 容器化）：只动视觉、不动结构，装到你手机上用一周，看新调性是否成立。</li>',
+  '<li><b>元信息降级</b>（半天，纯 CSS）：把「创建者 · 时间」从独立一行收进标题行或直接省掉（对比器里那个「隐藏元信息行」开关就是它的效果）。这是密度提升最大的一步。</li>',
+  '<li><b>Q1 的折叠或双区</b>（1～2 天）：改 <code>state.js</code> 的 <code>sortTodos</code> 与 <code>app.js</code> 的 <code>render()</code>，把已完成分段渲染。折叠状态存 localStorage。</li>',
+  '<li><b>归档页 + 摘要数字</b>（1～2 天）：复用 <code>trash.js</code> 的全屏列表样式；摘要数字由前端从已加载的 todos 算，不需要新表、不需要新埋点。</li>',
+  '</ol>',
+  '<p style="margin-top:18px"><b>三条必须一起处理的工程约束（否则会踩在已有测试上）：</b></p>',
+  '<ol style="line-height:2;padding-left:22px;margin:10px 0">',
+  '<li><b>E2E 会红</b>：<code>scripts/test_undo_complete.py</code> 与 <code>test_trash.py</code> 靠 <code>.todo</code>（带文本匹配）+ <code>.todo__check</code> 断言「完成→沉底→撤销」。若完成后卡片被 <code>display:none</code> 收起，<code>count()</code> 仍能找到、但 <code>click()</code> 会因不可见失败。<b>要么用「节点仍在 DOM、仅视觉收起」的实现，要么同 PR 一起改这两个用例</b>；发布前必须跑 <code>node scripts/run-web-e2e.mjs</code>。</li>',
+  '<li><b>隐藏款盲盒的视觉承载物</b>：稀有/史诗/传说三档现在是「整张卡片渐变底 + 四边彩边」（<code>.todo--rare/.todo--epic/.todo--legendary</code>）。容器化或去卡片化后这个表达没有落点 —— 需要为开奖决定一个替代载体（左侧书脊染色 / 行首四角星光 / 文字微渐变），否则盲盒这个核心卖点会被改版稀释掉。</li>',
+  '<li><b>数据从哪来（比加索引更值得先想清楚）</b>：<code>db.js</code> 的 <code>listTodos()</code> 现在一次性拉回全部未删除的待办（无分页、无上限），排序由 <code>(pinned, completed, created_at)</code> 完成，已有对应索引 <code>idx_todos_pinned_completed_created</code>。<b>好处是</b>：摘要数字、最近 7 天过滤、归档页全都能直接用内存里已有的 todos 算，<b>不需要新表、新字段、新查询</b>。「按天分组」需要 <code>completed_at</code>（字段已有、但没索引）—— 在 63 行的规模下<b>不需要加索引</b>，别提前加。</li>',
+  '</ol>',
+].join('');
 </script>
 </body>
 </html>
