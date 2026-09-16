@@ -146,6 +146,17 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
   因为壳安装是用户手动点的，止损对"已经点了安装的人"无效。
   ❌ 它**不能把已经更新的设备退回去**：那些设备本地版本已经更高，服务端"最新"比它低 → 判定无更新 → 永远停在那儿。
   （旧版 `rollback.mjs` 打印的"客户端会落到上一条 enabled 版本"就是这句话的错误来源，现已更正。）
+- **回滚锚点用 tag，不要用本地分支**（2026-09-16 定型，实测过）：
+  `--from-git` 收的是任意 git ref（`release.mjs` 用 `git rev-parse --verify <ref>^{commit}` 解析，
+  所以 **annotated tag 也能直接用**）。但**锚点的存放方式有对错**：
+  - ✅ 正确：`git tag -a anchor/<版本或日期>-<主题> <sha>` **并 `git push origin <tag>`**。
+    tag 不可变、可随仓库走、别人也拿得到；实测用 `anchor/v2.7.57-history-page` 跑
+    `release.mjs 2.7.68 --from-git <tag> --dry-run` 全流程通过（打印回退差异 + 包内 meta 注入新号）。
+  - ❌ 错误：本地 `backup/*` 分支。**本地分支不是备份** —— 2026-09-16 清点时发现本机堆了 12 个
+    `backup/pre-*`，一个都没推到远端；其中 11 个的内容早已在 main 历史里（删了无损），
+    但 `backup/v2.7.57-history-page` **是那份功能代码的唯一副本**（main 里查不到该功能）。
+    名称叫 backup 却只活在硬盘上，这种"备份"在换机/丢盘时等于零。
+  - 命名建议 `anchor/<版本>-<主题>`，正文写清"为什么留"（参照现有的那条 tag 的 message）。
 - **真回滚 / 恢复**：`node scripts/release.mjs <新版本号> --from-git <旧 ref>` ——
   ⚠️ **只覆盖通道 A（热更新）**。通道 B 的对应能力（`release-apk.mjs --from-git`）
   **决定暂不实现（2026-09-16 决策，非遗漏）**，理由与触发条件见下。
