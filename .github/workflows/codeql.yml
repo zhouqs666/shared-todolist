@@ -74,7 +74,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3.38.0
+        # ⚠️ init 与 analyze 必须**同版本**（2026-09-16 实测）：
+        # Dependabot 的配置里只登记了 `codeql-action/analyze`，所以它只会单升 analyze
+        # —— 结果是 PR 上 CodeQL 直接红：
+        #   `Loaded a configuration file for version '3.38.0', but running version '4.38.0'`
+        # （init 写出的配置版本与 analyze 的运行版本必须一致）。
+        # 因此升 CodeQL 时要手动把本文件里**两处** `codeql-action/*` 一起改，
+        # 并关闭 Dependabot 那个只动 analyze 的 PR（已并入本改动）。
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           languages: ${{ matrix.language }}
           # ── 查询集：留在默认档，但这是**量过之后**的决定，不是没想过 ──────────────
@@ -109,7 +116,7 @@ jobs:
       # （若将来加了 java/kotlin 语言项，这里需要补 autobuild 或手写 gradle 构建 ——
       #  这是 advanced setup 相对 default setup 唯一真正多出来的心智负担。）
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3.38.0
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           # category 决定结果在 Security 页面里的分组名。
           # 单语言时它只是好看；一旦加了第二种语言，没有它两路结果会互相覆盖。
