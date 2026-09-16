@@ -11,4 +11,4 @@
 # 升级步骤（不要只改版本号）：改这里 → 本地重跑 node scripts/run-web-e2e.mjs 全绿 → 再改 CI。
 # 版本漂移会让「本地绿 / CI 红」重新变成玄学，正好是本批次要消灭的东西。
 
-playwright==1.60.0
+playwright==1.62.0

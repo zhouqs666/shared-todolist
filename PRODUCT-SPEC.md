@@ -256,6 +256,7 @@
 | 删除 | 软删除 + 撤销 Toast（5 秒内可撤回） |
 | 回收站 | 头像长按 → 账号菜单 → 回收站，列出已删除待办，支持**恢复**与**彻底删除**（两段式确认） |
 | 物理删除 | 彻底删除前自动清理该待办关联的图片（Storage bucket），避免存储泄漏 |
+| 删除不会被"复活" | 本地对已删除待办打**墓碑**：迟到的 Realtime 回声（WebSocket 重连期间的事件会补推）与"全量重拉列表"都不能再把它装回主列表（2026-09-16 修）。用户在回收站/撤销里明确恢复时才撤墓碑 |
 
 ### 5.6 实时同步 `F-06` ✅
 
@@ -290,10 +291,15 @@
 | 触发时机 | **添加待办时** |
 | 触发概率 | 15% |
 | 稀有度分档 | 命中后按 60 / 30 / 10 分配 `rare`（稀有）/ `epic`（史诗）/ `legendary`（传说） |
-| 已见标记 | `rarity_seen` 控制对方端首次见到时是否播放惊喜提示 |
+| 已见标记 | `rarity_seen` 控制对方端首次见到时是否播放惊喜提示。**创建隐藏款时写 `false`**（2026-09-16 修：此前恒为 `true`，导致对方端的揭晓提示从未触发过）；对方端播完提示回标 `true`；若对方当时不在线，本端下次冷启动会补播一次（只播最新一条） |
 | 庆祝表现 | rare：专属文案 Toast；epic/legendary：撒花 + 震动 + `burstCardRing` 卡片光环（legendary 三圈 + 金光） |
+| 提示合并 | 开奖文案与"解锁了哪张贴纸"**合成一条**提示（2026-09-16 修）。旧实现是两条独立提示，共用一个 toast 节点、后一条当场顶掉前一条，于是"图鉴已集齐""图片上传失败"这类信息用户看不到 |
+| 提示串行 | 全局 Toast 改为**串行展示**（上一条还在显示时，新提示排队等它消失，不再互相覆盖）。错误类提示用 `urgent` 抢占 |
 
 > ✅ **已确认**（2026-09-07 核实）：贴纸解锁时机是**添加待办开出隐藏款时**（`onRollRarity`），完成隐藏款待办时只播庆祝动画、不重复解锁。`migration-blindbox-stickers.sql` 的注释已同步修正。
+>
+> ✅ **2026-09-16 修正**：完成隐藏款待办时，完成提示（含"图鉴 n/12"与「撤销」按钮）此前会被开奖提示当场清掉，
+> 用户看到的是语义错误的"开出X款！"且没有撤销入口；现在 `celebrateRarity` 只放特效、不再自己弹提示。
 
 ### 5.9 收集图鉴 `F-09` ✅
 
@@ -301,6 +307,8 @@
 |----|------|
 | 图鉴规模 | **12 张**——rare / epic / legendary 各 4 张 |
 | 共享性 | **两人共享一本图鉴**（`stickers` 表 `sticker_key` 全局唯一，重复解锁忽略） |
+| 序号分配 | 从"本地已知该档解锁数 + 1"起**逐个试到该档上限**，撞上已占用序号就试下一个（2026-09-16 修）。旧实现"数出 next 就直接插"，一旦本地状态滞后于数据库（冷启动时列表还没拉回来、双端同刻开奖）就会撞唯一约束并**静默放弃** —— 那次开奖白开（线上 2026-08-08 有 5 次开奖、之后 8 天一张贴纸都没解锁）。逐个试还顺带补上历史空洞、让"是否集齐"以插入结果为准 |
+| 解锁失败可见 | 解锁出错不再只写 console，会提示"图鉴解锁没成功，下次开出同档会自动补上"（下次开同档隐藏款时按计数自然补上） |
 | 展示 | 分档网格：已解锁显示彩色贴纸 + 名称 + 解锁日期 + 「新」角标，未解锁显示灰色剪影 + `???` |
 | 进度 | 分档图例「稀有 x/4 · 史诗 x/4 · 传说 x/4」+ 总进度条 + `x / 12` |
 | 专属短句 | 点击已解锁贴纸弹出该贴纸的专属文案（故事卡） |
@@ -388,7 +396,19 @@
 - APK 版本比对读 `App.getInfo()` 的**真实 versionName**，避免被热更新快照误导（meta 仅作浏览器/调试兜底）
 - 强更机制：`is_force_update=true` 或本地版本 < `min_supported_version` 时，更新面板不可关闭
 - 检查时机：冷启动 + 前台切回（60 秒节流）
-- 回滚：热更新把 `app_versions.enabled` 置 `false` 即下线；插件 `resetWhenUpdate:true` 连续崩溃 3 次自动回退
+- **下线 vs 回滚是两件事**（2026-09-16 更正）：
+  - **下线**（`node scripts/rollback.mjs <版本号>`，把 `app_versions.enabled` 置 `false`）：效果是**止损**——
+    还没更新的设备 + 新装机不会再拿到这个版本。但它**不能把已经更新的设备退回去**：客户端判定更新的
+    依据是「服务端版本 ≤ 本地版本 → 无更新」，那些设备本地版本已经更高了，会一直停在上面。
+    旧文档把这条写成"回滚"，且 `rollback.mjs` 打印的"客户端会落到上一条 enabled 版本"是错的（已更正）。
+  - **真回滚**（`node scripts/release.mjs <新版本号> --from-git <旧 ref>`）：内容取自旧 ref 的 `public/`、
+    版本号用更高的新号、meta 注入到新号上 —— 于是已更新的设备会正常下载并退回旧代码。
+    这是唯一能把线上退回去的手段；`--dry-run` 可先预演（会打印"本次将回退掉哪些改动"）。
+  - 自动兜底只有一种：插件 `resetWhenUpdate:true` 连续启动崩溃 3 次自动回退——**只覆盖崩溃类故障**，
+    UI/文案/逻辑类问题（不崩溃）不触发。
+- **版本号守卫的基准是"历史上出现过的最大的号"，不只是 enabled**（2026-09-16 改）：已下线的版本号也算"用过"
+  （如 2.7.65 是回滚演练留下的 `enabled=false` 行）。只跟 enabled 行比会放行一个曾经下发过的号，
+  导致那批设备永远收不到更新。`assertNewerThanLatest()` 现在扫全表取最大值。
 - 桌面 APK **固定文件名** `~/Desktop/有爱.apk`，每次覆盖，不产生带时间戳的历史文件
 - **CD 通道**（`.github/workflows/release-web.yml`）：手动触发（`workflow_dispatch`），工序为「预演出报告 → 静默期 + `production` 环境审批 → 执行 `release.mjs` → `verify-release.mjs` 回读校验」。四道门：手动触发 + `confirm` 逐字确认版本号 + `assertNewerThanLatest` 版本守卫 + 环境审批人。写生产库属高风险动作，**刻意不做 push 自动发版**
 - **回读校验**（`scripts/verify-release.mjs`，只读）：发布后必须验证「交付物可用」而非「脚本没报错」——版本行 `enabled`、Storage 对象可下载、包内 `index.html` 的 meta 与版本号一致，三项缺一即视为发布失败
@@ -408,6 +428,10 @@
 | 离线能力 | 浏览器 PWA 可离线打开 app shell，但**数据仍需联网** |
 
 > ⚠️ **部分实现**：`addTodo` 已支持离线暂存补发（断网时乐观显示「待同步」待办，联网后自动补发）。完成 / 编辑 / 删除离线时仍提示「当前离线」，无法暂存（见 §9 T-06）。
+>
+> ✅ **补发幂等**（2026-09-16）：重放加了防重入 —— `online` 事件可能连续触发两次，而队列项要等
+> `createTodo` 回来才出队，并发重放会把同一条补发成**两条重复待办**（表现为"删掉一条后列表里还有
+> 同文案的另一条"）。隐藏款也会在补发时补做图鉴解锁（旧实现里离线开出的隐藏款永远不解锁）。
 
 ### 5.17 已建未接入的能力 `F-17` 🔒
 
@@ -457,10 +481,19 @@
 
 | 角色 | `todos` / `reactions` / `stickers` / `daily_notes` | `profiles` |
 |------|---------------------------------------------------|-----------|
-| 未登录（anon） | 完全拒绝 | 可读（仅显示名） |
+| 未登录（anon） | 完全拒绝 | 完全拒绝 |
 | 已登录（authenticated） | 可读写**全部** | 可读全部，只能改自己 |
 
 > **为什么已登录用户能读写所有人的数据？** 因为这是"双人共享清单"——两个账号必须能看到并操作同一份数据。安全性由"**只有 2 个固定账号能注册**"这一前提保证。这是一个明确的架构权衡：**牺牲数据隔离，换取零权限复杂度**。一旦开放注册，此模型必须推翻重做。
+> ⚠️ 该前提在**生产**项目由 `disable_signup=true` 保证（2026-09-16 实测确认）；**测试项目**是 `false`（它的数据是一次性的，可接受，但别把这个差异套到生产）。
+
+> 📌 **2026-09-16 收紧**：`profiles` 的 SELECT 原为 `USING (true)` 且**没写 `TO ...`** ⇒ 对 PUBLIC（含 anon）开放。
+> 而 anon key 是公开的（硬编码在 `public/js/supabase.js`，随 APK/网页分发），等于任何人可列举两人的
+> 用户名 / 显示名 / 最后在线时间 / 打开计数。现统一限定为 `authenticated`（App 里读 `profiles` 只发生在登录之后：
+> `db.js listProfiles()/updateLastSeen()`，故对功能无影响）。
+> **同一时期发现的事故**：测试项目的 `profiles` 表 RLS 被手工关掉（仓库 `schema.sql` 里一直是开的），
+> 被 Supabase 安全顾问报 CRITICAL `rls_disabled_in_public` —— 修复见 `supabase/migration-rls-hardening.sql`，
+> 防复发见 §8.2 与 `app-e2e/scripts/check-rls.mjs`。
 
 ### 6.4 存储
 
@@ -553,6 +586,21 @@
 
 - 密码由 Supabase Auth 托管哈希存储，不明文
 - 所有数据表启用 RLS；未登录角色完全拒绝访问业务数据
+  - ⚠️ 这句话从 2026-09-16 起**是机器判定的**，不再只是声明：`node app-e2e/scripts/check-rls.mjs`
+    用 anon 视角探针（payload 必然违反外键、**不写任何数据**）验证每张业务表 —— 42501=策略拦下了，
+    约束错误=RLS 没开。它由 `admin/scripts/init-test-env.mjs` 第 ④ 步调用 ⇒ 属 **CI required job**。
+  - 血泪：测试项目的 `profiles` 曾被手工关掉 RLS 而无人发现（顾问报 `rls_disabled_in_public`）。
+    根因是「建表靠粘贴一次、之后没有回读校验」；对策即是上面这条 + `scripts/test_rls_migration.mjs`
+    （无凭据、用 PGlite 把 `supabase/migration-rls-hardening.sql` 真跑一遍）。
+- **函数执行权限同样收紧**（2026-09-16 补）：PostgreSQL 默认把函数 EXECUTE 授予 `PUBLIC`，
+  于是 public schema 里每个 `SECURITY DEFINER` 函数默认「拿到公开 anon key 的任何人可调用」。
+  实测踩中三个：`create_test_user`（**测试项目已删除**，anon 可调 ⇒ 任何人可建账号）、
+  `increment_login_count` / `consume_login_count`（anon 可调 ⇒ 未登录就能写 `profiles`）。
+  已按 `supabase/migration-rpc-execute-hardening.sql` 收回 PUBLIC/anon，只留 authenticated + service_role。
+  ⚠️ 两个必须记住的坑：`revoke ... from anon` 是**空动作**（权限来自 PUBLIC），必须 `from public, anon` 并补
+  `grant ... to authenticated`；反过来只写 `GRANT ... TO authenticated` 也不移除 PUBLIC 的默认授权。
+  机器判定：`app-e2e/scripts/check-rls.mjs` 会断言「anon 调 RPC 必须被拒」+「暴露面白名单」，
+  由 `admin/scripts/init-test-env.mjs` 第 ④ 步带进 CI required job。
 - Storage 写入权限限制为 authenticated
 - APK 更新包带 **sha256 校验**，防止篡改
 - 修改他人数据的 RPC（`consume_login_count`）用 `SECURITY DEFINER` + `search_path` 锁定，避免权限提升
@@ -688,6 +736,11 @@ node scripts/verify-release.mjs [版本号]        # 不传版本号 = 校验线
 node scripts/backup-tables.mjs --reason "<原因>"
 node scripts/backup-tables.mjs --reason "<原因>" --dry-run   # 只报告行数，不落盘
 
+# 安全自检（2026-09-16）：RLS 是否真的生效 + 加固 SQL 是否可用
+node app-e2e/scripts/check-rls.mjs        # anon 视角探针，只读不写；RLS 没开时打印修复指引
+node scripts/test_rls_migration.mjs       # 用 PGlite 真 Postgres 跑加固 SQL（无需凭据，进 CI）
+# 修复用 SQL：supabase/migration-rls-hardening.sql（Dashboard → SQL Editor 整份粘贴 → Run，幂等）
+
 # 远程发布（GitHub Actions CD：预演 → 审批 → 发布 → 回读校验）
 gh workflow run release-web.yml -f version=<版本号> -f notes="<说明>" -f dry_run=true
 # 预演通过后正式发：-f dry_run=false -f confirm=<版本号>
@@ -703,12 +756,15 @@ npm run bundle:supabase
 
 | 脚本 | 用途 |
 |------|------|
-| `scripts/test_blindbox.py` | 盲盒概率验证（约 15% 隐藏款）、图鉴 12 格、稀有度视觉截图 |
+| `scripts/test_blindbox.py` | 盲盒概率验证（约 15% 隐藏款）、图鉴 12 格、稀有度视觉截图；**强制开奖钩子下的完整链路**（提示合并/不互顶、序号递增与撞车自愈、集齐、完成时撤销按钮、提示串行）；**双账号对方端揭晓**（第二个账号 `e2e-beta` 收到「（某某 开出的）」提示 + 回标 + 共享图鉴同步） |
 | `scripts/test_trash.py` | 回收站 + 删除撤销 E2E |
-| `scripts/test_offline.py` | 离线添加待办 → 待同步 → 联网补发 E2E |
+| `scripts/test_offline.py` | 离线添加待办 → 待同步 → 联网补发 E2E（含"补发只有一条"与"删除后不会自己冒回列表"两条回归断言） |
 | `scripts/test_compress.mjs` | 图片压缩策略验证（短边 1280 阈值） |
 | `scripts/test_pinch.mjs` | lightbox 双指缩放（mock Supabase，零生产写入） |
 | `scripts/test_sticker_wiggle.mjs` | 贴纸轻晃引导逻辑（上限 3 次） |
+| `scripts/test_rls_migration.mjs` | RLS 加固迁移（`supabase/migration-rls-hardening.sql`）：与仓库 SQL 逐字一致 + 在 PGlite（真 Postgres/WASM）里复现洞 → 修复 → 幂等；**不需要凭据** |
+| `app-e2e/scripts/check-rls.mjs` | 真实测试库的**安全自检**：表 RLS + RPC 执行权限 + PostgREST 暴露面白名单（anon 探针，不写数据）；由 `admin/scripts/init-test-env.mjs` 第 ④ 步调用 ⇒ CI required job 里拦住 |
+| `scripts/test_rpc_migration.mjs` | 函数权限加固迁移（`supabase/migration-rpc-execute-hardening.sql`）：PGlite 真 Postgres 里断言 anon 收干净 / authenticated 仍可用 / 注册触发器链路完好 / 幂等；**不需要凭据** |
 
 ### 12.3 术语表
 

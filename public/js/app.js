@@ -27,6 +27,8 @@ import {
   getStickers,
   setStickers,
   addOrUpdateSticker,
+  markTodoRemoved,
+  unmarkTodoRemoved,
 } from './state.js';
 import { initRealtime, initPresence } from './realtime.js';
 import { initTheme } from './theme.js';
@@ -212,6 +214,10 @@ function hideLoading() {
   try {
     const todos = await db.listTodos();
     setTodos(sortTodos(todos));
+    // 补播「本端不在线时对方开出的隐藏款」（Realtime 只在线的瞬间推一次）
+    if (todos.some((t) => isHidden(t.rarity) && t.raritySeen === false && t.createdBy !== currentUser.id)) {
+      setTimeout(() => revealUnseenRarityFromPartner(getTodos()), 800);
+    }
   } catch (err) {
     handleError(toAppError(err), '加载列表失败');
     render(getTodos());
@@ -232,6 +238,7 @@ function hideLoading() {
     forceDeleteTodo: (id) => db.forceDeleteTodo(id),
     displayOf,
     onRestored: (todo) => {
+      unmarkTodoRemoved(todo.id); // 回收站恢复 = 用户明确要它回来，撤掉删除墓碑
       if (!getTodos().some((t) => t.id === todo.id)) {
         setTodos(sortTodos([...getTodos(), todo]));
       }
@@ -536,13 +543,14 @@ async function addTodo() {
     }
     // Realtime 也会推回来（幂等去重），这里直接加上不等回声
     setTodos(sortTodos([...getTodos(), todo]));
-    // 隐藏款开奖庆祝：命中隐藏款时 Toast + 高稀有度撒花（待办已渲染，特效叠在卡片上）
+    // 隐藏款开奖：命中时叠庆祝特效（待办已渲染，特效叠在卡片上）。
+    // 提示不在这里给 —— onRollRarity 会把它和解锁结果合成一条，避免两条互相顶掉。
     if (isHidden(todo.rarity)) {
       // 稍延迟让卡片先入场动画播完，再叠开奖特效
-      setTimeout(() => celebrateRarity(todo.rarity, text), 60);
-      // 开出即解锁图鉴贴纸（无需完成）。fire-and-forget，失败静默。
+      setTimeout(() => celebrateRarity(todo.rarity), 60);
+      // 开出即解锁图鉴贴纸（无需完成）。失败会自行提示，不再静默。
       onRollRarity(todo, currentUser.id).catch((e) =>
-        console.warn('[app] 贴纸解锁失败（已忽略）:', e.message)
+        console.warn('[app] 贴纸解锁失败:', e.message)
       );
     }
     todoInput.value = '';
@@ -568,6 +576,7 @@ async function addTodo() {
 
 // ===== 离线写入（M2 MVP：仅 addTodo）=====
 let offlineReplayBound = false;
+let replaying = false; // 重放进行中标记（防并发重放把同一条 op 补发两次）
 
 /** 生成一条离线 pending 待办并本地显示 + 入队 */
 function stashOfflineTodo(text, rarity) {
@@ -602,20 +611,36 @@ function bindOfflineReplay() {
 
 /** 串行重放离线队列：每条成功则替换 pending 为真实待办并出队，失败则中断保留 */
 async function replayOfflineQueue() {
+  // 防重入：'online' 事件可能连续触发两次，而队列项要等 createTodo 回来才被移除 ——
+  // 两次并发重放会读到同一条 op，把它补发成**两条重复待办**。
+  // （2026-09-16 定位：E2E 偶发"删掉一条后列表里还有同文案的另一条"，探针抓到同文案两个 id。）
+  if (replaying) return;
   const queue = getOfflineQueue();
   if (!queue.length) return;
-  for (const op of queue) {
-    try {
-      const real = await db.createTodo(op.text, currentUser.id, null, op.rarity);
-      // 移除本地 pending；real 可能已由 Realtime 回推（按真实 id 幂等去重）
-      const withoutPending = getTodos().filter((t) => t.id !== op.localId);
-      const alreadyHas = withoutPending.some((t) => t.id === real.id);
-      setTodos(sortTodos(alreadyHas ? withoutPending : withoutPending.concat(real)));
-      removeOfflineOp(op.localId);
-    } catch (e) {
-      // 仍离线或其它失败：中断本轮，保留队列待下次
-      break;
+  replaying = true;
+  try {
+    for (const op of queue) {
+      try {
+        const real = await db.createTodo(op.text, currentUser.id, null, op.rarity);
+        // 离线时开出的隐藏款：补上在线路径会做的解锁（stashOfflineTodo 分支跳过了这一步，
+        // 旧实现里这些隐藏款永远不解锁贴纸 —— 开出了却白开）
+        if (isHidden(real.rarity)) {
+          await onRollRarity(real, currentUser.id).catch((e) =>
+            console.warn('[app] 离线隐藏款补解锁失败:', e.message)
+          );
+        }
+        // 移除本地 pending；real 可能已由 Realtime 回推（按真实 id 幂等去重）
+        const withoutPending = getTodos().filter((t) => t.id !== op.localId);
+        const alreadyHas = withoutPending.some((t) => t.id === real.id);
+        setTodos(sortTodos(alreadyHas ? withoutPending : withoutPending.concat(real)));
+        removeOfflineOp(op.localId);
+      } catch (e) {
+        // 仍离线或其它失败：中断本轮，保留队列待下次
+        break;
+      }
     }
+  } finally {
+    replaying = false;
   }
 }
 
@@ -931,6 +956,8 @@ async function deleteTodo(id) {
     await new Promise((r) => setTimeout(r, 200));
   }
   setTodos(getTodos().filter((t) => t.id !== id));
+  // 留墓碑：删除前那条 INSERT/UPDATE 的回声可能几秒后才到，没有墓碑就会被"复活"回列表
+  markTodoRemoved(id);
   try {
     await db.deleteTodo(id);
     // 删除撤销：5 秒内可一键撤回软删除
@@ -940,19 +967,21 @@ async function deleteTodo(id) {
         onClick: async () => {
           try {
             const restored = await db.restoreTodo(id);
+            unmarkTodoRemoved(id); // 用户明确要它回来 → 撤掉墓碑
             if (!getTodos().some((t) => t.id === id)) {
               setTodos(sortTodos([...getTodos(), restored]));
             }
             showToast('已恢复');
           } catch (e) {
             console.error('[app] 撤销删除失败:', e.message);
-            showToast('撤销失败，请到回收站恢复');
+            showToast('撤销失败，请到回收站恢复', { urgent: true });
           }
         },
       },
       duration: 5000,
     });
   } catch (err) {
+    unmarkTodoRemoved(id); // 删除没成功 → 撤回墓碑，否则回滚回来的待办会被自己的守卫挡住
     setTodos(sortTodos([...getTodos(), target])); // 回滚
     handleError(toAppError(err), '删除失败');
   }
@@ -1649,15 +1678,42 @@ function handleRemoteCompleted(todo) {
  * 隐藏款揭晓回调：对方开出的隐藏款首次推来（raritySeen=false 且非自己创建）。
  * 本端播一次惊喜提示，然后回标 rarity_seen=true（避免重复提示）。
  */
+/**
+ * 隐藏款揭晓回调：对方开出的隐藏款首次推来（raritySeen=false 且非自己创建）。
+ * 本端播一次惊喜提示，然后回标 rarity_seen=true（避免重复提示）。
+ * 同一会话内按 id 去重：Realtime 推送与冷启动补播可能指向同一条（本端刚订阅上就补播）。
+ */
+const revealedRarityIds = new Set();
+
 function handleRarityReveal(todo) {
   if (!todo || !isHidden(todo.rarity)) return;
+  if (revealedRarityIds.has(todo.id)) return;
+  revealedRarityIds.add(todo.id);
   const meta = RARITY_META[todo.rarity];
   const name = displayOf(todo.createdBy).name || '对方';
   showToast(`${meta.toast.replace(/[！]/g, '')}（${name} 开出的）`);
-  // 高稀有度也撒花（和开奖同等仪式感）
-  celebrateRarity(todo.rarity, todo.text);
+  // 高稀有度也撒花（和开奖同等仪式感）。celebrateRarity 只放特效，不会再弹一条把上面这条顶掉
+  celebrateRarity(todo.rarity);
   // 回标已看过，避免再次提示（失败静默）
   db.markRaritySeen(todo.id).catch(() => {});
+}
+
+/**
+ * 冷启动补播：Realtime 只在「本端当时在线且订阅已建立」时推送揭晓，
+ * 对方开出的隐藏款若那一刻本端没开着，提示就永久错过了 —— 这里在首屏列表拿到后补一次。
+ * 只播最新一条（避免一次冷启动连环弹），其余静默回标已看。
+ */
+function revealUnseenRarityFromPartner(list) {
+  if (!currentUser || !Array.isArray(list)) return;
+  const unseen = list.filter(
+    (t) => isHidden(t.rarity) && t.raritySeen === false && t.createdBy !== currentUser.id
+  );
+  if (unseen.length === 0) return;
+  const newest = unseen.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+  for (const t of unseen) {
+    if (t.id !== newest.id) db.markRaritySeen(t.id).catch(() => {});
+  }
+  handleRarityReveal(newest);
 }
 
 /**
@@ -1693,5 +1749,6 @@ function handleError(err, fallback) {
   else if (code === 'TOO_LONG') msg = '内容太长（最多 200 字）';
   else if (code === 'INVALID_INPUT') msg = '内容不能为空';
   else if (code === 'INVALID_CREDENTIALS') msg = '用户名或密码错误';
-  showToast(msg);
+  // urgent：错误提示不排队，立刻打断当前提示（否则可能延迟几秒才出现，用户对不上是哪步失败了）
+  showToast(msg, { urgent: true });
 }

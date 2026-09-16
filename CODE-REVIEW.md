@@ -35,16 +35,72 @@
 - 🔴 批量删除是否显式指定 id？—— 禁止 `.neq('id','全零')` 这种「删全部」模式。
 - 🔴 删除前是否备份？—— 任何删除操作前先查再删 / 导出备份。
 - 🔴 权限是否靠 RLS 兜底？—— 前端逻辑只做 UX，安全边界在数据库 RLS，不依赖前端判断。
+- 🔴 **RLS「开关」与「策略」是两件事，且必须有回读校验**（2026-09-16，顾问报 CRITICAL）
+  测试项目的 `profiles` 被报 `rls_disabled_in_public`（未登录可读可写），而仓库 `schema.sql`
+  里一直是 `ENABLE ROW LEVEL SECURITY` —— 说明是**项目上被手工改过**，且没人回读。
+  ⇒ 审查时问三句：① 这次改动动到表/策略了吗？② **目标项目**上 RLS 真的开着吗（不是"我写进 SQL 了"）？
+  ③ 策略的 `TO` 角色写全了吗（漏写 `TO authenticated` = 对 PUBLIC/anon 开放，而 anon key 是公开的）？
+  验证手段（都在仓库里，别靠肉眼）：`node app-e2e/scripts/check-rls.mjs`（anon 探针，不写数据）／
+  `node scripts/test_rls_migration.mjs`（PGlite 真 Postgres 里跑一遍加固 SQL）。
+  **共性**：凡「照文档在控制台粘贴一次」的配置（建表、策略、Auth 开关如 `disable_signup`），
+  都会随环境漂移 —— 只有机器判定才算验证过。
 - 🔴 迁移 SQL 是否幂等 + 是否在交付回复里贴出可复制版本？—— `ADD COLUMN IF NOT EXISTS` / `ON CONFLICT DO NOTHING`。
+  ⚠️ 另外两条同样容易漏：① **中途报错会整体回滚**（SQL Editor 一个事务）⇒ 必须给每个可能不存在的对象
+  加 `to_regclass(...) is null` 守卫，否则「修了一半」等于没修；② 交付前用**真解析器**过一遍
+  （`pglast` 的 `parse_sql` + `parse_plpgsql_json`，或 PGlite 真跑），别靠"看着对"。
 - 🟡 新增字段是否做了降级容错？—— 参考 `db.js` 的 `PGRST204` / `42703` 降级重查模式：迁移没执行时，老环境能不能继续跑？
 
 ### 维度 B：正确性
+
+- 🔴 **「记录」是否如实描述了「制品」？**（2026-09-15 从 APK 通道挖出的一类缺陷，值得当独立维度看）
+  凡是「数据库里写一行来描述某个即将被用户拿到的东西」，就要问：**这一行说的和那个东西里真的是同一件事吗？**
+  实测反例（APK 通道，两个都真实的差点漏过）：
+  - **`apk_native_versions.version_name` 可以和 APK 里真实的 `versionName` 不一致**：
+    表里的值来自发布命令的入参，而客户端判断"要不要更新"用的是 **APK manifest 里的 versionName**
+    （`App.getInfo().version`）。两者不一致 ⇒ App 反复提示同一次更新，**用户陷入无限重装**。
+    而这个不一致**一路绿灯**：`versionCode` 有守卫、包内 `shell-version` meta 也校验 ——
+    但那个 meta 是脚本自己注入的，**恒等于版本号、必然通过**（校验的是"我以为的值"，不是"制品里的值"）。
+  - **`--code` 能让表里的 versionCode 与 APK 里真实的 versionCode 脱钩**（真实值永远取自 build.gradle）。
+  ⇒ 判据：**校验必须锚在「制品本身」上，而不是锚在「我们写进去的变量」上**。
+  如果只能校验后者，那至少要有一条断言把两者钉在一起（本例的做法：直接读 `build.gradle`，
+  因为那正是 gradle 打在包里的那个值）。
 
 - 🔴 状态一致性：`completed_by` / `completed_at` 这类联动字段是否同步维护？（正例：`db.js setCompleted`）
 - 🔴 竞态：Realtime 自我回声是否会覆盖本地乐观状态？（正例：`state.js inFlight` 飞行追踪）
 - 🔴 错误处理：创建 / 删除 / 完成等关键路径是否 try/catch 或统一 `wrapError`？
 - 🔴 幂等：连点、重放是否安全？（正例：`unlockSticker` 用 `onConflict + ignoreDuplicates`；`addReaction` 处理 `23505`）
 - 🔴 离线队列：离线重放是否可能重复 / 乱序 / 丢操作？
+  ⚠️ **重放必须防重入**（2026-09-16）：队列项是"`createTodo` 回来之后"才出队的，两次并发重放会
+  读到同一条 op → 补发出**两条重复待办**。触发条件并不罕见：`online` 事件连续触发两次即可。
+  正例见 `app.js` 的 `replaying` 守卫。**验证方式**：不看代码看数据 —— 让 E2E 断言"补发后同文案
+  只有一条"（本次就是这么抓到的：断言一加，偶发失败立刻暴露）。
+- 🔴 **本地列表的权威性：已删除的项会不会被"装回来"？**（2026-09-16，用户可见 bug）
+  删除是"从本地列表移除 + 异步落库"，中间有窗口。这个窗口里任何一次**整份 setTodos** 都会把
+  已删项复活 —— 本项目有两条这样的路径：`init` 的首次加载、回前台的 `handleAppVisibility`
+  （`db.listTodos()` 拿到的是删除落库前的旧数据）。Realtime **迟到的回声**同理（WebSocket 重连
+  期间的事件会补推，实测延迟数秒）。
+  ⇒ 做法：删除动作留**墓碑**（session 内记住已删 id），并在 state 的**唯一入口** `setTodos` 上
+  过滤墓碑 —— 放在入口而不是各调用方，是因为"再加一条重拉列表的路径"时没人会记得过滤。
+  恢复（撤销 / 回收站）时撤墓碑。
+  ⚠️ 这类 bug **只在数据层核对时才会现形**：本地列表有它、库里已经没有了（截图看着"删除没生效"，
+  实际是界面对不上）。定位手法：在 state 的写入口插桩 + 打调用栈，一次就指名道姓。
+- 🔴 **「文档/注释宣称的行为」是否真有一条写入方链路？**（2026-09-16 从盲盒揭晓链路挖出）
+  一个特性写在文档和注释里，不等于它真的会发生。判据是**两端都能指出来**：谁**写入**触发条件、
+  谁**读取**并做出反应。反例：`rarity_seen` 号称控制"对方端揭晓提示"，但客户端**只写 `true`、
+  从不写 `false`**，而 realtime 守卫要求 `=== false` —— 这条链路从上线起一次都没触发过
+  （生产库只读实证：12 条隐藏款、`rarity_seen` 全为 true、0 条播过提示；文档却把它列为已实现功能）。
+  ⇒ 验证手法（三条缺一条都可能漏）：
+  ① 全仓库 grep 写入点（`grep -rn "字段名" public/`，看清写的是 true 还是 false）；
+  ② 全历史 grep（`git log --all -S"<可疑写法>"`，确认不是"曾经有过、后来改坏"）；
+  ③ **生产库只读统计**（取值分布 + 相关计数对不对得上）——③ 是压舱石：
+  代码看不出「有没有真的发生过」，数据能。
+- 🔴 **UI 提示类：是否共用一个单例节点、后写的会覆盖先写的？**（2026-09-16）
+  本项目 Toast 是单节点 + 单 timer，`showToast()` 每次重置 `className/textContent`。
+  于是「一次操作连发两条提示」= 后一条把前一条整条清掉，用户**永远看不到**先写的那条 ——
+  本次实际被吞掉的信息：「图鉴已集齐」「图片上传失败，可长按补图」、完成待办提示里的
+  **「撤销」按钮**（误完成后没有撤回入口，只留下语义相反的"开出X款！"）。
+  ⇒ 判据：新增提示前先问「它会和同一动作里的另一条撞在同一秒吗」；会撞就合并成一条或走队列，
+  不要指望"用户两条都能看到"。
 - 🟡 边界：空列表、空字符串、超长文本（schema `CHECK char_length <= 200`）、`null` 图片路径。
 
 ### 维度 C：安全
@@ -59,6 +115,16 @@
   只要密码复用，这就等价于把账号贴在公网。**教训**：删掉文件里的值不够，历史提交里还有 ⇒
   发现即**先改密码**（让泄露值失效），再清理文件；且这类问题本该由 push protection 在推送时拦下（批次 D）。
 - 🔴 SQL 注入：本项目直连 PostgREST 风险低，但手写 SQL / RPC 函数要逐一检查。
+- 🔴 **函数权限：PostgreSQL 默认把函数的 EXECUTE 授予 `PUBLIC`**（2026-09-16 实测）
+  于是 public schema 里每个 `SECURITY DEFINER` 函数默认都是「拿到公开 anon key 的任何人可调用」——
+  而 anon key 是公开的（硬编码在客户端、随 APK 分发）。本次实测踩中三个：
+  `create_test_user`（anon 可调 ⇒ 任何人能在测试项目建账号，而在"有账号即可读写全部数据"的模型下
+  等于全库沦陷）、`increment_login_count` / `consume_login_count`（anon 可调 ⇒ 未登录就能写 `profiles`）。
+  两个必须记住的点：① `revoke ... from anon` 是**空动作**（权限来自 PUBLIC），必须
+  `from public, anon` **并补** `grant ... to authenticated`（漏了后半句，App 自己就调不动了）；
+  ② 只写 `GRANT ... TO authenticated` 同样不移除 PUBLIC 的默认授权 —— 看着像加固，其实没堵上。
+  验证：`node app-e2e/scripts/check-rls.mjs`（anon 调 RPC 必须 42501 + 暴露面白名单：多出任何函数都失败）
+  ／`node scripts/test_rpc_migration.mjs`（PGlite 真跑一遍权限迁移，含"注册触发器没被弄坏"）。
 - 🟡 输入校验：长度、类型、emoji、图片 MIME。
 - 🟡 Storage：`todo-attachments` 公开读 bucket 是否会泄露不该公开的内容。
 - 🟡 **供应链：本次是否新增了依赖？** 新增前先问「这个依赖值不值得引入」——维护状态、下载量、
@@ -68,6 +134,22 @@
     正是 XSS 类查询覆盖的地方）
   ⇒ **把依赖全升到最新，也挡不住自己写出的漏洞**，两者不能互相替代。
   CI 里 actions 的固定策略见 F2 的供应链两条。
+
+### 维度 B 补充：「下线 / 失效」能力的自带要求（2026-09-16）
+
+- 🔴 **任何让某个东西"失效"的能力，必须同时给出一条可执行的 undo。**
+  反例（本仓库真实缺失过）：`rollback.mjs --native` 若只能把壳版本置 `enabled=false`，
+  而壳只有一行启用 —— 关掉之后没有任何脚本能恢复，只能手工写 SQL。
+  正例：`--restore` 一个开关撤销。**没有 undo 的"下线"不是止损能力，是单向陷阱。**
+- 🔴 **演练必须被证明是「状态中性」的**，而不是"跑完没报错"。
+  做法：变更前**逐字段**存基线（含 `released_at` 这类"看起来无关但决定排序"的列），
+  恢复后逐字段比对，打印"11 个字段完全一致"。
+  血泪点：本项目客户端的挑版逻辑是「enabled 里按 `released_at` 倒序取第一条」——
+  只比 `enabled` 字段会漏掉"released_at 被顺手动过 ⇒ 谁是最新变了"这类变化。
+- 🟡 **破坏性动作的后果要"先打出来"，而不是事后解释**：`--dry-run` 与真跑共用同一段后果计算，
+  所以预演看到的告警（如「已无任何启用版本 ⇒ 所有设备都不再收到壳更新提示」）与真跑一字不差。
+- 🟡 **未知参数必须报错退出**，不能静默忽略：`--nativ`（打错字）若被忽略会 fallback 到默认通道，
+  于是"想操作壳表"变成"操作了热更新表"。**手滑 + 默认值 = 改错表。**
 
 ### 维度 D：可维护性
 
@@ -88,6 +170,13 @@
 ### 维度 F：测试（对应铁律二）
 
 - 🔴 核心流程（添加 / 完成 / 删除 / 双端同步）是否过了 E2E？—— Playwright 双账号 `小宝宝` / `大宝贝`。
+- 🔴 **低概率 / 难触发路径有没有测试钩子？**（2026-09-16 加）
+  "这条路径有测试"不等于"它被测到了"。盲盒的隐藏款是 15% 概率，E2E 随机跑根本撞不到，
+  于是「开出 → 解锁贴纸」整条链**零覆盖**，三个真实缺陷（提示互相顶掉、序号撞车静默放弃、
+  完成时撤销按钮被清掉）全都测不出来 —— 其中一个在生产库丢了 8 天的解锁量。
+  ⇒ 做法：给随机性/外部条件留一个**只在测试里设置**的确定性开关（本次是 localStorage 的
+  `__e2e_force_rarity`，生产没有任何入口写它），然后针对该路径写断言。开钩子本身也算改动，
+  必须有"生产行为与不加钩子一致"的论证 + 清理断言（测完要删掉钩子）。
 - 🔴 涉及 Realtime 的改动是否验证了双端同步（不是只看「没报错」）？
 - 🟡 边界 + 错误处理是否覆盖。
 - 🔴 无法验证的硬限制，交付时必须明确列出「未验证 X / 原因 Y」，禁止把「没测」说成「已验证」。
@@ -118,8 +207,41 @@
   + 版本守卫 + 环境评审人，任何一条都不要为了「自动化得更彻底」而拆掉。
 - 🟡 上传制品路径含隐藏目录（点开头）时，是否显式 `include-hidden-files: true`？
 - 🟡 是否在 CI 里执行上游脚本（`bash <(curl .../main/scripts/...`）？应改为下 pinned 版本的二进制/产物。
+- 🟡 **`run:` 块里的「仪式性代码」是不是空操作？** 照抄同一段 shell 时先确认它在当前环境真的做事。
+  实测（2026-09-15）：`e2e-app.yml` 的 keystore 块里有 `sed -i 's/^          //'` 去 heredoc 缩进 ——
+  但 **YAML 的 `run: |` 块标量会先按公共缩进 dedent**，进到 shell 时 heredoc 每行已经没有前导空格，
+  所以那行是**空操作**（已用 Ruby 解析 YAML 实测），它的注释「移除 heredoc 缩进」也是错的。
+  更实际的问题是 `sed -i` 在 macOS 上必须写成 `sed -i ''`，照抄会让那段**在本地根本跑不起来**
+  （报 `command a expects \ followed by text` —— 因为 BSD sed 把脚本参数当成了备份后缀）。
+  判据：**这段 run 块能不能原样在本地执行一遍？** 不能 → 它要么在 CI 才第一次被执行（返工风险），
+  要么本来就是死代码。同一批还顺手统一了 `openssl base64 -d -A`（BSD 的 `base64` 历史参数是 `-D`，
+  只有较新 macOS 才认 `-d`），把「本地与 CI 行为不一致」的坑一起消掉。
+- 🟡 **「预演」是否真的覆盖了要验的那条断言？** 带 `--dry-run` 的预演若跳过了关键步骤，
+  它证明的只是「前几行没报错」。实测：APK 通道的 `--dry-run` 原先**跳过 gradle 构建** ⇒
+  没有 APK ⇒ 三重守卫里最关键的「包内 meta == 本次版本」（防"发了个旧包"）**根本没被执行**，
+  而报告却是绿的。修法是加 `--build` 让它预演时也真构建 —— **预演的价值取决于它跑到了哪一步**，
+  不是取决于它绿了。
 - 🟡 静态检查工具「某条规则被静默跳过」是否被察觉？`actionlint` 缺 `shellcheck` 时只在 `-verbose` 里
   说一句 `Rule "shellcheck" was disabled` —— 不看 verbose 会误以为已经全查过。
+  **2026-09-15 补：这个缺口已经可以彻底关掉，不要再靠「逐块抽出来手跑」兜底** ——
+  下个 shellcheck 静态二进制即可（无需 brew）：
+  ```bash
+  # 装到 ~/.local/bin 而不是 /tmp：/tmp 会被系统或工具清掉，清掉之后 actionlint 又会**静默退化**
+  # 成「不查 run 块」—— 而这个退化的表现恰好就是「本地绿、CI 红」。
+  # 把工具装在会被清理的地方，等于给这个坑装了个定时器（2026-09-16 实测被清过）。
+  mkdir -p ~/.local/bin
+  curl -sSfL -o /tmp/sc.tar.xz https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.x86_64.tar.xz
+  tar -xJf /tmp/sc.tar.xz -C /tmp && mv /tmp/shellcheck-v0.11.0/shellcheck ~/.local/bin/ && chmod +x ~/.local/bin/shellcheck
+  PATH="$HOME/.local/bin:$PATH" actionlint -verbose .github/workflows/*.yml   # verbose 里不再出现 "was disabled"
+  ```
+  **代价与收益的实测对照**：装之前，我新写的 workflow 本地 actionlint **exit 0**、CI 上却 5 秒红
+  （`SC2012: Use find instead of ls`）—— 一次 push 白跑。装之后同一份文件本地立刻报出全部 run 块问题。
+  **结论：本地工具缺一条规则 ≠ 少一个提示，而是「本地绿灯的可信度」被悄悄扣掉一块。**
+- 🟡 **`run:` 块里别让任何一行以 `# shellcheck` 开头** —— 那是 shellcheck 的**指令**语法，
+  它会把该行当指令解析并报 `SC1072/SC1073 Couldn't parse this shellcheck directive`。
+  实测踩到（2026-09-15）：我写了一段注释解释「没装 shellcheck 时 actionlint 会静默跳过 run 块」，
+  **换行后正好断在「# shellcheck」处**，于是这条注释自己把 lint 弄红了。改写措辞即可，
+  不需要禁用规则。**这条也是「装了本地 shellcheck 才看得见」的那一类** —— 与本文件 F2 的另一条同源。
 - 💭 失败诊断是否可从 CLI 读到？Run Summary 用 `tee -a "$GITHUB_STEP_SUMMARY"` 同时进日志，
   `gh run view --log` 即可核查，不必开浏览器。
 - 🔴 **CI 生成的环境文件是否与本地「同形」？** 本地 `.env.test` 是手写的、什么都有；CI 那份是
@@ -272,6 +394,19 @@
   · 三个只读 workflow 补显式 `permissions: contents: read`
   · 顺带确认：`secret_scanning_non_provider_patterns` / `validity_checks` **API 不接受**（第二次实测，
     返回 200 但值仍为 disabled）⇒ 需人工在 Settings → Code security 勾选，已列入待办
+[2026-09-16] 通道 B 下线能力 + 真实演练（`rollback.mjs --native / --restore / --dry-run`）：🔴0 🟡0 → 通过
+  · 与业主并行会话的术语对齐：`#41` 把「回滚」重定义为两层（**下线/止损** = `rollback.mjs`；
+    **真回滚/恢复** = `release.mjs --from-git`），但两者当时**都只覆盖 web**。
+    本批按该术语体系给通道 B 补上「下线」这一层，并在文档中明确「通道 B 的真回滚尚未实现」。
+  · 真实演练（写生产，两次；均为业务动作，见铁律一「适用范围」）：
+    下线 `2.1.28 --native` → **反向验证**（`verify-apk-release.mjs` 无参以「线上没有任何 enabled
+    壳版本」失败 ⇒ 效果在客户端视角可见，不是脚本自报）→ `--restore` 恢复 → 正向验证通过 →
+    **逐字段比对基线：11 个字段完全一致（含 `released_at`）** ⇒ 演练状态中性。
+  · 只读/负向用例：`--help` exit 0；**无参数 exit 1**（原脚本行为，曾被我改成 0 后自查修回 ——
+    按退出码判断成败的包装脚本会把"忘传参数"当成"下线完成"）；格式错 / 版本不存在 / 未知参数
+    全部 exit 1 且报对原因；`--dry-run` 不写生产。
+  · 顺带结清 `_lib-env.mjs` 头部挂了很久的待办：`rollback.mjs` 迁移（当初留的理由正是
+    "迁移应当配一次真实下线演练一起做"，本批配着做了）。
 [2026-09-15] 批次 D 收尾：实测证据 + 一处**文档推断被推翻**
   · **正向**：PR #15 七个 check 全绿（含 `Analyze (javascript-typescript)` 1m6s、APP E2E 8m55s ——
     第三方 `reactivecircus/android-emulator-runner` 固定 SHA 后照常跑通，证明固定是**行为等价**改动）；

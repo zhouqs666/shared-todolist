@@ -13,7 +13,7 @@
 import confetti from './vendor/canvas-confetti.esm.min.js';
 import { isFxEnabled } from './theme.js';
 import { db } from './db.js';
-import { getStickers, addOrUpdateSticker } from './state.js';
+import { getStickers, setStickers, addOrUpdateSticker } from './state.js';
 import { showToast } from './toast.js';
 
 // ===== 概率配置 =====
@@ -147,9 +147,20 @@ export function isHidden(rarity) {
 
 /**
  * 开奖：返回本次添加的稀有度。
+ *
+ * E2E 测试钩子：localStorage 里显式放着 `__e2e_force_rarity`（'rare'/'epic'/'legendary'/'common'）
+ * 时直接返回该值。为什么需要它：隐藏款是 15% 概率，E2E 无法稳定复现「开出隐藏款 → 解锁贴纸」
+ * 这条链，于是这条链此前完全没有测试覆盖（2026-09-16 补）。生产环境没有任何入口写这个 key，
+ * 行为与不加钩子时完全一致。
  * @returns {'rare'|'epic'|'legendary'|'common'} 85% 返回 'common'
  */
 export function rollRarity() {
+  let forced = null;
+  try {
+    forced = localStorage.getItem('__e2e_force_rarity');
+  } catch (_) { /* 隐私模式等场景下 localStorage 不可用，按正常随机走 */ }
+  if (forced === 'common' || (forced && RARITY_META[forced])) return forced;
+
   if (Math.random() >= HIDDEN_RATE) return 'common';
   // 命中隐藏款，按权重分稀有度
   const total = RARITY_WEIGHTS.rare + RARITY_WEIGHTS.epic + RARITY_WEIGHTS.legendary;
@@ -181,15 +192,19 @@ export function applyRarity(li, todo) {
 }
 
 /**
- * 隐藏款开奖庆祝：rare 仅 Toast，epic/legendary 撒花 + 音效 + 震动。
- * 复用 confetti + isFxEnabled + prefers-reduced-motion 守卫。
+ * 隐藏款特效：epic/legendary 撒花 + 震动（rare 保持克制，不放特效）。
+ *
+ * 【2026-09-16 改】本函数**不再自己弹提示**：提示统一由调用方给出，因为一次开奖
+ * 「开奖文案 + 解锁贴纸结果」必须合成一条（两条会互相顶掉，且旧实现里完成待办时
+ * 这条提示会覆盖掉带「撤销」按钮的完成提示）。
+ *   - 添加待办开奖 → onRollRarity 给出合并提示
+ *   - 对方开出揭晓 → handleRarityReveal 给出带归属的提示
+ *   - 完成隐藏款 → celebrateCompletion 给出带图鉴进度/撤销的提示
  * @param {string} rarity 'rare'|'epic'|'legendary'
- * @param {string} text 待办文本（Toast 用）
  */
-export function celebrateRarity(rarity, text) {
+export function celebrateRarity(rarity) {
   if (!isHidden(rarity)) return;
   const meta = RARITY_META[rarity];
-  showToast(meta.toast);
 
   if (!meta.confettiColors) return; // rare 不撒花
   if (!isFxEnabled()) return;
@@ -219,41 +234,77 @@ export function celebrateRarity(rarity, text) {
 
 /**
  * 开出隐藏款时解锁图鉴贴纸（添加待办时即解锁，无需完成）。
- * 根据该稀有度已解锁数量，算出下一个 stickerKey（如 'epic_2'），调 db.unlockSticker。
- * 幂等：重复开出不会重复解锁（db 层 UNIQUE 约束）。
+ *
+ * 序号分配：从「本地已知该档解锁数 + 1」起逐个试到该档上限（4 张）——
+ * 撞上已存在的序号就试下一个，全试完即该档已集齐。
+ * 为什么不是「数出 next 就直接插」：本地状态可能滞后于数据库（冷启动时 listStickers 还没
+ * 回来、或双端同刻开出同一档隐藏款），旧实现此时会撞 UNIQUE 约束、静默返回 null，
+ * 那次开奖就白开了 —— 生产库 2026-08-08 有 5 次开奖、之后 8 天一张贴纸都没解锁，无人察觉。
+ * 逐个试顺带修好两件事：历史遗留的序号空洞会被补上；「是否集齐」以插入结果为准，
+ * 不再依赖可能过期的本地计数。
+ *
+ * 提示由本函数给出（把「开奖文案 + 解锁结果」合成一条）：两条独立提示会互相顶掉，
+ * 旧实现里用户几乎只看得到后发的那条。
  *
  * @param {Object} todo 刚开出的隐藏款 todo 对象（含 id）
  * @param {string} userId 当前用户 id（解锁人）
- * @returns {Promise<Object|null>} 新解锁的贴纸；已存在则 null
+ * @returns {Promise<Object|null>} 新解锁的贴纸；已集齐或失败则 null
  */
 export async function onRollRarity(todo, userId) {
   if (!isHidden(todo.rarity)) return null;
   const rarity = todo.rarity;
-
-  // 数该稀有度已解锁几张 → 下一个序号
-  const count = getStickers().filter((s) => s.rarity === rarity).length;
-  const next = count + 1;
-  // 超过该稀有度上限（集满了）：不重复解锁，给个温和提示
-  if (next > STICKERS_PER_RARITY) {
-    showToast(`${RARITY_META[rarity].label}图鉴已集齐，继续探索其它稀有度吧`);
-    return null;
-  }
-
-  const stickerKey = `${rarity}_${next}`;
   const meta = RARITY_META[rarity];
-  const name = meta.stickerNames[next - 1] || `${meta.label}${next}`;
+  const total = STICKERS_PER_RARITY * 3;
 
-  try {
-    const sticker = await db.unlockSticker(stickerKey, rarity, userId, todo.id);
-    if (sticker) {
-      // 本端立即更新图鉴状态（Realtime 也会推回来，addOrUpdateSticker 幂等）
-      addOrUpdateSticker(sticker);
-      showToast(`🎨 解锁贴纸「${name}」！图鉴 ${getStickers().length}/${STICKERS_PER_RARITY * 3}`);
+  // 本地已知该档解锁数：只当起点，不当结论（可能滞后于数据库）
+  const known = getStickers().filter((s) => s.rarity === rarity).length;
+  let staleLocal = false;
+
+  for (let n = known + 1; n <= STICKERS_PER_RARITY; n++) {
+    const stickerKey = `${rarity}_${n}`;
+    let sticker;
+    try {
+      sticker = await db.unlockSticker(stickerKey, rarity, userId, todo.id);
+    } catch (err) {
+      // 解锁失败必须让用户看见：旧实现只 console.warn，界面上毫无痕迹
+      console.warn('[blindbox] 解锁贴纸失败:', err.message);
+      showToast(`${meta.toast} 图鉴解锁没成功，下次开出同档会自动补上`, rollToastOpts(rarity));
+      return null;
     }
-    // sticker === null 表示已存在（重复解锁），静默
+    if (!sticker) { staleLocal = true; continue; } // 该序号已被占用 → 试下一个
+
+    // 本端立即更新图鉴状态（Realtime 也会推回来，addOrUpdateSticker 幂等）
+    addOrUpdateSticker(sticker);
+    if (staleLocal) {
+      // 撞过已占用的序号 = 本地状态本来就落后于数据库（冷启动/并发开奖）。
+      // 只补这一张会让图鉴进度显示出偏小的数字（如 1/12 实际是 2/12），所以拉一次全量对齐。
+      try {
+        setStickers(await db.listStickers());
+      } catch (err) {
+        console.warn('[blindbox] 对齐图鉴失败（已忽略）:', err.message);
+      }
+    }
+    const name = meta.stickerNames[n - 1] || `${meta.label}${n}`;
+    showToast(
+      `${meta.toast} 解锁「${name}」· 图鉴 ${getStickers().length}/${total}`,
+      rollToastOpts(rarity, stickerKey)
+    );
     return sticker;
-  } catch (err) {
-    console.warn('[blindbox] 解锁贴纸失败（已忽略）:', err.message);
-    return null;
   }
+
+  // 该档 4 张都已解锁：本次不再产生新贴纸（图鉴不会出现重复条目）
+  showToast(`${meta.toast} ${meta.label}图鉴已集齐，继续探索其它稀有度吧`, rollToastOpts(rarity));
+  return null;
+}
+
+/** 开奖提示的样式：稀有度配色 + 图标（解锁时用该张贴纸的图标，未解锁用该档首张） */
+function rollToastOpts(rarity, stickerKey) {
+  const meta = RARITY_META[rarity];
+  return {
+    variant: 'rarity',
+    accent: meta.colors[0],
+    icon: stickerKey
+      ? getStickerIcon(stickerKey)
+      : (meta.stickerIcons ? meta.stickerIcons[0] : ''),
+  };
 }

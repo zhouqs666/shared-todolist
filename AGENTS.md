@@ -60,10 +60,25 @@
     本地不跑也仍等于没覆盖 —— 夜里会跑，但**改动等待期内**要自己先跑一遍。
   - 另注意：**CI 绿灯 ≠ 交付物可用** —— 制品/发布结果要单独回读验证（见铁律三 `verify-release.mjs`）
 - ✅ 测试要真实验证结果（截图、断言、状态检查），不能只看"没报错"就算过
-- ✅ **测试前跑两个 preflight**：
+- ✅ **测试前跑三个 preflight**：
   - `node scripts/check-test-env.mjs` —— Web 通道隔离（测试库 ≠ 生产库）
   - `node app-e2e/scripts/check-test-schema.mjs` —— 测试库 schema 契约（从 `supabase/*.sql` 推导表/列/**函数**，漂移会打印修复 SQL）
+  - `node app-e2e/scripts/check-rls.mjs` —— 测试库**表 RLS + 函数执行权限**是否真的生效（anon 视角探针，见下方 2026-09-16）
   测试库缺列/缺表会导致 `listTodos()` 整体报错、界面静默空列表，E2E 只报「元素找不到」，极易误判成定位/时序问题（2026-09-14 烧了多轮 CI）。缺 RPC 函数同理（`increment_login_count` 缺失时冷启动 404）。
+
+**血泪教训（2026-09-16，RLS 被手工关掉却无人发现）：**
+Supabase 安全顾问对**测试项目**报 CRITICAL `rls_disabled_in_public`：`profiles` 的 RLS 没开 ⇒
+「拿到项目 URL 的任何人」可读可写该表（anon key 是公开的，硬编码在 `public/js/supabase.js`、随 APK 分发）。
+**根因不是仓库漏写** —— `supabase/schema.sql` 里 `profiles` 一直是 `ENABLE ROW LEVEL SECURITY`；
+是测试项目上被**手工改过**（同一时期那里还留着仓库里不存在的 `create_test_user` RPC，可佐证跑过 ad-hoc SQL），
+而建表/改表都靠「粘贴一次」，之后**没有任何回读校验**。
+**关键认知**：`ENABLE ROW LEVEL SECURITY`（开关）与 `CREATE POLICY`（策略）是两件事，缺任一个洞都在；
+「照文档粘贴过一次」挡不住漂移 —— 必须机器判定。对策：
+- `node app-e2e/scripts/check-rls.mjs` —— 探针：anon + **必然违反外键**的 INSERT（42501=策略拦下了 / 约束错误=RLS 没开；**不写任何数据**）
+- `node scripts/test_rls_migration.mjs` —— 用 PGlite（真 Postgres 的 WASM 版）把加固 SQL 跑一遍：复现洞 → 修复 → 幂等；不需要凭据，进 CI
+- `admin/scripts/init-test-env.mjs` 第 ④ 步跑 RLS 自检 ⇒ **CI required job 里合并前拦住**
+- ⚠️ 反向教训：两套环境的**手工配置会各自漂移**（实测：生产 `disable_signup=true`、测试项目 `false`）
+  ⇒ 每次都要回读校验，不能只看某一次
 
 **血泪教训（2026-09-14）：**
 Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `public/`（其中 `supabase.js` 硬编码生产库 URL），而 `test_*.py` 直连 `localhost:3000` = 生产库。调试撤销完成功能时，在生产库创建 27 条测试待办，并因盲盒开奖发生在「添加」瞬间，误解锁 `legendary_1` 传说贴纸 —— 清待办也撤不回贴纸。
@@ -111,20 +126,86 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
   ⚠️ 因此**发布后不再需要任何 meta 补提交**（旧设计下的「补 PR + 11 分钟模拟器 CI」已随设计一并消失）
 
 **⚠️ 版本号必须比线上高（血泪教训）：**
-- 发布前**必须先查线上最新版本**：`node scripts/query-latest-version.mjs`（只读）
-- 新版本号必须**语义化大于**线上最新（如线上 2.2.4，新发要 ≥ 2.2.5）
+- 发布前**必须先查线上版本信息**：`node scripts/query-latest-version.mjs`（只读，打印两个口径：
+  最新 enabled 版本 + **历史最高版本**）
+- 新版本号必须**语义化大于「历史上出现过的最高版本」**，不只是大于 enabled 的最新的那个（2026-09-16 收紧）：
+  已下线的版本号也算"用过" —— 客户端判定更新是「服务端版本 ≤ 本地版本 → 无更新」，而设备本地版本
+  可能是某个曾经下发、后来被下线的版本（回滚演练留下的 2.7.65 就是这种行）。只跟 enabled 行比会放行它，
+  那批设备就永远收不到更新了
 - ❌ 禁止拍脑袋猜版本号。**`index.html` 的 meta 不是权威**（2026-09-14 更正原措辞）：本地发布后
   它会被同步成最新版本，但 CI 发布后它会滞后 —— 唯一权威是 `app_versions` 表。
   好在这步已自动化：`release.mjs` 内置 `assertNewerThanLatest()`，版本号不够高会直接拒绝发布
 - **血泪教训：** 2026-08-07，没查线上版本直接发 2.0.1，但线上已经 2.2.4，版本号低导致 App 判定"无更新"，用户连开几次都没变化。从此发布前必查线上版本。
 
+**⚠️ 「下线」≠「回滚」（2026-09-16 定性，别再把前者当后者）：**
+
+- **下线 / 止损**：`node scripts/rollback.mjs <版本号>`（热更新）/ `... <版本号> --native`（APK 壳）
+  —— 把对应版本表的 `enabled` 置 `false`。另有 `--restore`（撤销误下线）与 `--dry-run`（只看影响不写生产）。
+  效果是**还没更新的设备 + 新装机不会再拿到这个版本**。
+  ⚠️ 通道 B 特有：关掉**唯一**的启用壳版本后，**所有设备都不再收到壳更新提示**（脚本会把这个后果先打出来）；
+  因为壳安装是用户手动点的，止损对"已经点了安装的人"无效。
+  ❌ 它**不能把已经更新的设备退回去**：那些设备本地版本已经更高，服务端"最新"比它低 → 判定无更新 → 永远停在那儿。
+  （旧版 `rollback.mjs` 打印的"客户端会落到上一条 enabled 版本"就是这句话的错误来源，现已更正。）
+- **真回滚 / 恢复**：`node scripts/release.mjs <新版本号> --from-git <旧 ref>` ——
+  ⚠️ **只覆盖通道 A（热更新）**。通道 B 的对应能力（`release-apk.mjs --from-git`）
+  **决定暂不实现（2026-09-16 决策，非遗漏）**，理由与触发条件见下。
+
+  **理由**：① 通道 B 还没发过任何壳版本 —— 没有真实基线，"退回旧代码"无从演练，
+  也无从判断它是否真比"发一个修好的版本"更好；② 它与 web **不是同一件事**：
+  **Android 不允许 versionCode 更低的包覆盖安装**，所以"退回旧壳"只能是
+  「**旧壳代码 + 更高的 versionCode**」，而 build.gradle 的 versionCode/versionName 又必须与本次发布一致
+  （`release-apk.mjs` 的前置守卫会拦），实现路径比 web 的 `--from-git`（只需 tar 出 `public/`）重得多、
+  也更容易写错；③ 多数坏壳的正解本来就是**尽快发一个修好的更高版本**（本项目已有此结论）。
+  **在它落地之前，坏壳的止损手段是 `rollback.mjs <版本号> --native`（停止推送）+
+  发一个修好的更高版本 —— 注意前者救不了已经装了坏包的人。**
+
+  **触发重新评估的条件**（满足其一再做）：发过第一个壳版本、有了可演练的真实基线；
+  或真的发生坏壳事故且"发修好的版本"不足以止损（例如新壳启动即崩、而旧壳可用）。
+  内容取自旧 ref 的 `public/`、版本号用更高的新号、包内 meta 注入新号。这样已更新的设备会正常下载并退回旧代码。
+  先 `--dry-run` 预演（会打印"本次将回退掉哪些改动"，并回读校验包内 meta）。
+  ⚠️ 为什么必须注入新号：包内 meta 若是旧号，客户端下完会判定"又有新版本"→ **无限重装**。
+  ⚠️ 因为是重发已发布过的旧代码，此模式下「改动必须先合并 main」这条前置不适用。
+- **自动兜底只有一种**：`resetWhenUpdate:true`（连续启动崩溃 3 次自动回退）—— **只覆盖崩溃类故障**。
+  UI / 文案 / 逻辑类问题（App 照常启动）不会触发它，只能靠上面两条命令。
+
 ### 通道 B：打 APK（原生层改动走这条）
 
 **适用**：改了 Capacitor 插件、Android 配置、`capacitor.config.json`、原生权限等，热更新覆盖不到的地方。
 
-- ✅ 跑 `node scripts/release-apk.mjs <版本号>`（自动：**cap sync** → 注入 assets 版本 meta →
-  gradle 打包 → 写 `app_native_versions` 表 → 上传 APK → 覆盖 `~/Desktop/有爱.apk`）
-- ✅ 打包后必须验证：构建时间（确认是最新）、签名通过（`apksigner verify`）、关键改动已入包（unzip 检查）
+**两个执行环境（同一套脚本，不是两条通道）：**
+
+1. **本地直跑**：`node scripts/release-apk.mjs <版本号> [--notes "..."]`
+2. **远程跑（CD，2026-09-15 起）**：GitHub Actions → `CD · APK 发布（原生壳）` → 先 `dry_run=true`
+   看预演报告（**真构建**，产物可从 run 里下载安装验证），确认后 `dry_run=false` + `confirm=<版本号>`，
+   在 `production` 环境点 Approve 才真正写生产
+
+脚本自动：**cap sync** → 注入 assets 版本 meta → gradle 打包 → 校验包内 meta + 签名 →
+写 `app_native_versions` 表 → 上传 APK → （本地跑时）覆盖 `~/Desktop/有爱.apk`
+
+**⚠️ CI 发布的前置条件（两段式，必须先合再发）：**
+版本号是发布命令传入的，但 **`versionCode` 与 `versionName` 都在 `android/app/build.gradle` 里** ——
+它们属于代码改动，必须**先走 PR 合并到 main**，再触发发布工作流。
+`release-apk.mjs` 对这两项都有守卫，任一对不上就拒绝发布（并**一次性报出全部不一致**，不用来回跑两轮）：
+
+- **`versionName` 必须逐字等于本次发布的版本号。** 客户端把 **APK manifest 里的 versionName**
+  当本地版本（`apk-update.js` 用 `App.getInfo().version`），再和表里的 `version_name` 比 ——
+  两者不等就会「表说 2.1.29、装的包自报 2.1.28」⇒ App **反复提示同一次更新，用户陷入无限重装**。
+  ⚠️ 这条是 2026-09-15 补的：此前**没有任何检查**守它（包内 `shell-version` meta 是脚本自己注入的，
+  恒等于版本号、必然通过），而它的症状正是 2026-09-04 那次事故的原样复现。
+- **`versionCode` 必须严格递增**，基准是**含已下线行**的历史最大值（2.8.0 误发布后已 `enabled=false`，
+  但它的 code 33 已经用掉了，而 Android 不允许同码覆盖安装）。
+- `--code` 参数**不允许**与 `build.gradle` 不一致：APK 里真实的 code 永远取自 `build.gradle`，
+  用 `--code` 覆盖只会让**表里记的号和包里装的不一致**。
+
+- ✅ 打包后必须验证：构建时间（确认是最新）、签名通过（`apksigner verify`，工作流里有独立步骤）、
+  关键改动已入包（unzip 检查，脚本第 5b 步）
+- ✅ 发布后必须回读校验：`node scripts/verify-apk-release.mjs [版本号]`（只读）——
+  版本行 `enabled` / Storage 对象可下载且字节数一致 / **SHA-256 与表里一致** / 包内 meta 一致。
+  ⚠️ 其中 SHA-256 这条是 APK 通道独有的关键项：`apk-update.js` 在唤起系统安装器**之前**会比对它，
+  对不上就**拒绝安装**，用户侧表现是"下载完成后毫无反应"（服务端全绿）——
+  和热更新通道的 `verify-release.mjs` 是同一个「写成功 ≠ 客户端拿得到」的道理
+- ⚠️ **CI 发布不覆盖 `~/Desktop/有爱.apk`**（runner 没有你的桌面）。需要桌面留档时从 run 的
+  artifact 下载，或本地跑一次；「桌面只留一个固定文件名」的纪律仍然只适用于本地打包
 - ✅ 告知用户明确的 APK 路径和构建时间
 
 ### APK 自更新机制（App 内提示升级，与"打 APK"区分）
@@ -310,17 +391,25 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 - **前端**：原生 HTML/CSS/JS（无框架），ES Module
 - **后端**：Supabase（PostgreSQL + Auth + Realtime），无自建服务器
 - **打包**：Capacitor → Android APK（`com.love.todo`）
-- **发布**：热更新（`release.mjs`；本地直跑 或 GitHub Actions `release-web.yml` 审批门跑）+ APK（`release-apk.mjs`）+ App 内自更新（`apk-update.js` + `ApkInstaller`）；发布后回读校验 `verify-release.mjs`
+- **发布**：**通道 A 热更新**（`release.mjs`；本地直跑 或 GitHub Actions `release-web.yml` 审批门跑）
+  + **通道 B APK**（`release-apk.mjs`；本地直跑 或 `release-apk.yml` 审批门跑）
+  + App 内自更新（`apk-update.js` + `ApkInstaller`）；
+  发布后回读校验：通道 A 用 `verify-release.mjs`，通道 B 用 `verify-apk-release.mjs`（两者都是只读、可当 CI 门禁）
 - **PWA**：`manifest.webmanifest` + `sw.js`（Service Worker v15，仅浏览器环境生效，原生环境 bypass）
 - **Capacitor 插件**：`SystemBars` / `LocalNotifications` / `SplashScreen` / `CapacitorUpdater`（热更）/ 自研 `ApkInstaller`（APK 自更）
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
 - **测试**：Playwright（Python 双账号 E2E，连测试库）+ Node 局部回归（可 mock）
-- **CI/CD**：GitHub Actions **五个** workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** + 三个结构性检查）、
-  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，有 `paths` 过滤）、`release-web.yml`（热更新 CD，仅手动触发）、
+- **CI/CD**：GitHub Actions **六个** workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** + 三个结构性检查）、
+  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，有 `paths` 过滤）、
+  `release-web.yml`（**通道 A 热更新 CD**，仅手动触发）、
+  `release-apk.yml`（**通道 B APK 发布 CD**，仅手动触发；工序与 release-web.yml 同构：
+  预演真构建 → 审批门 → 发布 → 回读校验）、
   `e2e-web-full.yml`（**定时全量回归**：每晚 02:00 北京 / `schedule` + `workflow_dispatch`，跑 4 个双账号 Python E2E）、
   `codeql.yml`（**静态代码扫描**：push / PR / 每周一定时；`security-events: write` 是它唯一需要的写权限）。
   main 已开**分支保护**，required checks 取 `ci.yml` 三个 job；改代码走分支 + PR（见「铁律五 → main 分支保护」）
   ⚠️ `schedule` 的 cron **按 UTC 解释**，且定时任务只在**默认分支**上运行（夜里跑的是 main 上已合并的代码）
+  ⚠️ 两个「写生产」的工作流（release-web / release-apk）**共用 `contents: read` + `environment: production` 审批门**，
+  但**各有各的 concurrency 组**（`release-web` / `release-apk`）—— 它们写的是不同的表/对象，互不冲突，不需要串行
 - **供应链安全（2026-09-15 批次 D 起）**：所有 `uses:` **固定到完整 commit SHA**（+ `# vX.Y.Z` 注释，Dependabot 靠它识别版本）；
   仓库已开 `sha_pinning_required`（硬门禁）、secret scanning + push protection、Dependabot alerts / security updates、
   私密漏洞上报（`SECURITY.md`）；依赖版本更新由 `.github/dependabot.yml` 驱动
@@ -329,7 +418,7 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
   ⚠️ **"固定 SHA" 与 "Dependabot 推更新" 是一对，缺一不可**：只固定 = 冻在旧版本、安全补丁进不来
   ⚠️ 取 SHA：`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`（`type=tag` 时再解一层 `git/tags/<sha>`）
 - **本地服务**：`node scripts/serve.mjs`（端口 3000，**生产库**，仅手动自测）／`node scripts/serve-test.mjs`（端口 3100，**测试库**，跑 E2E 必须用这个）
-- **测试库维护**：`node scripts/reset-test-db.mjs`（归零，硬删 web 通道 E2E 残留 + 贴纸）／`node scripts/check-test-env.mjs`（隔离自检）／`node app-e2e/scripts/check-test-schema.mjs`（schema 契约）
+- **测试库维护**：`node scripts/reset-test-db.mjs`（归零，硬删 web 通道 E2E 残留 + 贴纸）／`node scripts/check-test-env.mjs`（隔离自检）／`node app-e2e/scripts/check-test-schema.mjs`（schema 契约）／`node app-e2e/scripts/check-rls.mjs`（RLS 生效自检）
 - **Web E2E 跑批**：`node scripts/run-web-e2e.mjs`（逐个归零 + 失败重试一次 + flaky 显式标记 + Run Summary；`--files` / `--keep-data` / `--no-retry` / `--fail-on-flaky`）；
   依赖钉在 `scripts/requirements-e2e.txt`（Python playwright，CI 与本地同版本）
 - **结构性检查（CI required job 里跑，都是纯静态、秒级失败）**：`check-test-guards.mjs`（只读守卫）／
@@ -338,4 +427,8 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
   `sha_pinning_required` 也拦得住未固定（实测：该 job 在 "Set up job" 阶段就失败并给出明确报错）；
   但它**不查版本注释**，而注释是 Dependabot 判断当前版本的唯一依据，缺了 = 安全补丁静默进不来。
   所以本脚本的价值是「本地秒级反馈 + 补上开关查不了的那条规则」）
+- **安全回归（前两个不需要凭据、进 CI 的 Node 回归；第三个需要测试库凭据）**：
+  `scripts/test_rls_migration.mjs`（PGlite 真 Postgres 跑 `supabase/migration-rls-hardening.sql`：复现洞 → 修复 → 幂等）／
+  `scripts/test_rpc_migration.mjs`（同法跑 `supabase/migration-rpc-execute-hardening.sql`：anon 收干净 / App 仍可用 / 注册触发器完好）／
+  `app-e2e/scripts/check-rls.mjs`（对真实测试库的 anon 探针：表 RLS + RPC 执行权限 + 暴露面白名单；也由 `admin/scripts/init-test-env.mjs` 第 ④ 步调用 ⇒ 属 required job）
 - **埋点状态**：⚠️ 目前零埋点，无法回答"哪个功能最常用""两人一天互动几次"。补基础埋点（北极星 = 双端同日活跃天数）在路线图 P0。
