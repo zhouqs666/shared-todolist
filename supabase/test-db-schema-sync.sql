@@ -112,8 +112,13 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION increment_login_count(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION consume_login_count(UUID) TO authenticated;
+-- ⚠️ 只有 GRANT 是不够的：函数 EXECUTE 默认授予 PUBLIC，必须**先收回 PUBLIC/anon**
+--    再显式授予目标角色（只 revoke anon 是空动作 —— 实测过）。
+--    2026-09-16 之前这里只有下面两行 GRANT，看着像加固，实际 anon 仍可调用（未登录可写 profiles）。
+REVOKE EXECUTE ON FUNCTION increment_login_count(UUID) FROM public, anon;
+REVOKE EXECUTE ON FUNCTION consume_login_count(UUID) FROM public, anon;
+GRANT EXECUTE ON FUNCTION increment_login_count(UUID) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION consume_login_count(UUID) TO authenticated, service_role;
 
 -- ===== 7. 验证 =====
 -- SELECT column_name, data_type FROM information_schema.columns

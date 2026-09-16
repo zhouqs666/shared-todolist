@@ -63,7 +63,7 @@
 - ✅ **测试前跑三个 preflight**：
   - `node scripts/check-test-env.mjs` —— Web 通道隔离（测试库 ≠ 生产库）
   - `node app-e2e/scripts/check-test-schema.mjs` —— 测试库 schema 契约（从 `supabase/*.sql` 推导表/列/**函数**，漂移会打印修复 SQL）
-  - `node app-e2e/scripts/check-rls.mjs` —— 测试库 **RLS 是否真的生效**（anon 视角探针，见下方 2026-09-16）
+  - `node app-e2e/scripts/check-rls.mjs` —— 测试库**表 RLS + 函数执行权限**是否真的生效（anon 视角探针，见下方 2026-09-16）
   测试库缺列/缺表会导致 `listTodos()` 整体报错、界面静默空列表，E2E 只报「元素找不到」，极易误判成定位/时序问题（2026-09-14 烧了多轮 CI）。缺 RPC 函数同理（`increment_login_count` 缺失时冷启动 404）。
 
 **血泪教训（2026-09-16，RLS 被手工关掉却无人发现）：**
@@ -427,7 +427,8 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
   `sha_pinning_required` 也拦得住未固定（实测：该 job 在 "Set up job" 阶段就失败并给出明确报错）；
   但它**不查版本注释**，而注释是 Dependabot 判断当前版本的唯一依据，缺了 = 安全补丁静默进不来。
   所以本脚本的价值是「本地秒级反馈 + 补上开关查不了的那条规则」）
-- **安全回归（也需要凭据，但只读/不写数据）**：`scripts/test_rls_migration.mjs`（PGlite 真 Postgres 跑
-  `supabase/migration-rls-hardening.sql`：复现洞 → 修复 → 幂等；**不需要任何凭据**，所以能进 CI 的 Node 回归）／
-  `app-e2e/scripts/check-rls.mjs`（对真实测试库的 anon 探针；也由 `admin/scripts/init-test-env.mjs` 第 ④ 步调用 ⇒ 属 required job）
+- **安全回归（前两个不需要凭据、进 CI 的 Node 回归；第三个需要测试库凭据）**：
+  `scripts/test_rls_migration.mjs`（PGlite 真 Postgres 跑 `supabase/migration-rls-hardening.sql`：复现洞 → 修复 → 幂等）／
+  `scripts/test_rpc_migration.mjs`（同法跑 `supabase/migration-rpc-execute-hardening.sql`：anon 收干净 / App 仍可用 / 注册触发器完好）／
+  `app-e2e/scripts/check-rls.mjs`（对真实测试库的 anon 探针：表 RLS + RPC 执行权限 + 暴露面白名单；也由 `admin/scripts/init-test-env.mjs` 第 ④ 步调用 ⇒ 属 required job）
 - **埋点状态**：⚠️ 目前零埋点，无法回答"哪个功能最常用""两人一天互动几次"。补基础埋点（北极星 = 双端同日活跃天数）在路线图 P0。
