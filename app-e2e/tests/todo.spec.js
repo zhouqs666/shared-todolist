@@ -81,18 +81,35 @@ describe('APP 待办管理', () => {
     expect(rows[0].completed).toBe(false);
   });
 
-  it('点击复选框标记完成，再点取消完成（写库验证）', async () => {
+  it('点击复选框标记完成；取消完成走长按菜单（写库验证）', async () => {
     const seeded = await seedTodo(client, { userId, text: '标记完成-目标待办' });
 
     await relaunchAndLogin();
 
-    // 标记完成 → 轮询测试库确认 completed=true
+    // ① 点复选框 → 完成（轮询测试库确认 completed=true）
     await dashboardPage.toggleTodoByText(seeded.text);
     await waitForTodoCompleted(client, seeded.text, true);
+    // UI 侧同验一次：已完成 ⇒ 复选框的无障碍标签变成「标为未完成」
+    expect(await dashboardPage.isTodoMarkedDone(seeded.text)).toBe(true);
 
-    // 再点取消 → completed 回到 false，且条目仍在列表
-    await dashboardPage.toggleTodoByText(seeded.text);
+    // ② 取消完成 → 长按卡片 → 菜单「撤销完成」
+    //
+    // ⚠️ 这里**曾经**是「再点一下复选框」（v2.7.69 之前的行为）。v2.7.69 有意移除了那个入口：
+    //    已完成卡片的复选框变成 opacity:0 + pointer-events:none，取消完成只剩两处 ——
+    //    完成瞬间那条 5 秒撤销 Toast、以及长按菜单里的「撤销完成」。用例没跟着改，
+    //    于是在 #59 之后连红 3 个 commit（elementClick 命令返回成功、库里 completed 却回不到 false）。
+    //
+    // ⚠️ 为什么这里**不加**"点一下已完成复选框应当毫无变化"的负向断言：
+    //    我为此在真机模拟器上取证过，结论互相矛盾、机制没查清 ——
+    //      · `adb shell input tap` 打在复选框坐标上，completed 确实翻了（探针 1）
+    //      · 但同一坐标快速点**未完成**卡片的复选框又完全没有反应（探针 4）
+    //      · 桌面 Chromium 里同一个坐标点击是**不生效**的（元素被 .todo__headline 接走，且
+    //        "点 FAB 能开面板"的正对照证明点击确实送达）—— 即浏览器侧 pointer-events:none 有效
+    //    在没查清 Android WebView 的行为之前，写任何一种断言都是在替未验证的结论背书。
+    //    ⇒ 本用例只覆盖**可复现的入口**；Android 侧的可点性另案调查（见交付说明）。
+    await dashboardPage.uncompleteViaLongPressMenu(seeded.text);
     await waitForTodoCompleted(client, seeded.text, false);
+    expect(await dashboardPage.isTodoMarkedDone(seeded.text)).toBe(false);
     const visible = await dashboardPage.hasTodo(seeded.text);
     expect(visible).toBe(true);
   });
