@@ -103,7 +103,8 @@ jobs:
             scripts/test_rls_migration.mjs \
             scripts/test_rpc_migration.mjs \
             scripts/test_dora_metrics.mjs \
-            scripts/test_dora_migration.mjs; do
+            scripts/test_dora_migration.mjs \
+            scripts/test_update_count.mjs; do
             echo "================================================"
             echo "Running: $f"
             echo "================================================"

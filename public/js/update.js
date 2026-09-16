@@ -186,3 +186,48 @@ export async function notifyAppReady() {
     console.warn('[update] notifyAppReady 失败:', err && err.message);
   }
 }
+
+// ===== No.X 印记：这个 App 累计迭代了多少次 =====
+
+/** 数据来源：两条发布通道各一张版本表（缺一不可 —— 只数热更新会漏掉壳更新） */
+const COUNT_TABLES = ['app_versions', 'app_native_versions'];
+
+/**
+ * 查「这个 App 累计迭代了多少次」—— 热更新 + 壳更新**统一累计**，两人看到同一个数。
+ *
+ * ── 口径（2026-09-16 修正，此前数错了 29 次）──────────────────────
+ *   取两张版本表的**全部行数**相加，**不带 `enabled` 过滤**，只增不减。
+ *
+ * ── 为什么不能按 `enabled` 过滤 ──────────────────────────────────
+ * `enabled` 是「客户端还能不能拿到这一版」的**可见性开关**（下线止损 / 回滚撤回误发布都靠它），
+ * 不是「这一版发过没有」的历史事实。按 enabled 数时，每下线一版这个数字就 −1 ——
+ * 而它要表达的是「走到今天一共迭代了多少次」，是给两个人看的纪念数字，只能增不能减。
+ * 实测：按 enabled = 129，全量 = 158，差的 29 正是被下线的行（26 个壳版本 + 3 个热更新）。
+ *
+ * ── 为什么不能用「这台设备更新过几次」 ────────────────────────────
+ * 那是每台手机各算各的：谁少更新一次就少 1，换机 / 重装 / 清数据归零。
+ * 而这个印记的初衷是「双方看到同一个数」⇒ 只能以服务端的发布历史为准。
+ *
+ * ── 返回 null 的含义 ────────────────────────────────────────────
+ * 查不到（客户端未注入 / 网络失败 / 计数没回来 / 两表都空）⇒ 调用方**不显示**印记。
+ * 刻意**不兜底**成 1：未登录时 anon 角色对这两张表一行都读不到，兜底就会把「查不到」
+ * 显示成一个具体的错误数字（`No.1` 就是这么来的 —— 错数字比没有数字更糟）。
+ *
+ * @param {object} client 已注入的 supabase 客户端（显式传入 ⇒ 与模块级 supabaseClient 解耦，回归可用假客户端钉住口径）
+ * @returns {Promise<number|null>} 累计次数；null = 拿不到（调用方不要显示）
+ */
+export async function getTotalUpdateCount(client) {
+  if (!client) return null;
+  try {
+    const results = await Promise.all(COUNT_TABLES.map(
+      (table) => client.from(table).select('id', { count: 'exact', head: true }),
+    ));
+    // count 不是数字 ⇒ 这次没数起来（报错，或被策略挡成空），宁可不显示也不要一个错数字
+    if (results.some((r) => !r || r.error || typeof r.count !== 'number')) return null;
+    const total = results.reduce((sum, r) => sum + r.count, 0);
+    return total > 0 ? total : null;
+  } catch (err) {
+    console.warn('[update] 累计迭代次数查询失败（No.X 印记不显示）:', err && err.message);
+    return null;
+  }
+}

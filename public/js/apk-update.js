@@ -10,7 +10,7 @@
  *   - 关闭：点面板外缩回顶栏图标位置（scale + translateY 反转动画）
  */
 
-import { compareVersions } from './update.js';
+import { compareVersions, getTotalUpdateCount } from './update.js';
 
 // ===== 依赖注入 =====
 let supabaseClient = null;
@@ -34,23 +34,6 @@ function log(stage, detail = '') {
 function formatMB(bytes) {
   if (!bytes || bytes <= 0) return '';
   return (bytes / 1024 / 1024).toFixed(1) + ' MB';
-}
-
-// ===== 查总更新次数（壳更新 + 热更新）=====
-export async function getTotalUpdateCount() {
-  try {
-    const { count: shellCount } = await supabaseClient
-      .from('app_native_versions')
-      .select('id', { count: 'exact', head: true })
-      .eq('enabled', true);
-    const { count: bundleCount } = await supabaseClient
-      .from('app_versions')
-      .select('id', { count: 'exact', head: true })
-      .eq('enabled', true);
-    return (shellCount || 0) + (bundleCount || 0) || 1;
-  } catch (_) {
-    return 1;
-  }
 }
 
 // ===== 诗意短句池（壳更新专属，8 条）=====
@@ -257,8 +240,11 @@ export function showNativeUpdatePanel(update, handlers = {}) {
   }
   entry.addEventListener('click', onEntryClick);
 
-  getTotalUpdateCount().then((n) => {
-    countEl.textContent = `No.${n}`;
+  // No.X 印记 = App 累计迭代次数（口径见 update.js 的 getTotalUpdateCount）。
+  // 不 await：计数再慢也不该拖延面板出现；拿不到就隐藏印记（不显示错误数字）
+  getTotalUpdateCount(supabaseClient).then((n) => {
+    if (n) countEl.textContent = `No.${n}`;
+    else countEl.hidden = true;
   });
 
   // ---------- 函数 ----------

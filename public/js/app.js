@@ -36,7 +36,7 @@ import { initNotify, requestPermission, isNative } from './notify.js';
 import { initMessages, onNoteAdded, onNoteRemoved, onNoteUpdated } from './messages.js';
 import { initReactions, renderReactions, onReactionAdded, onReactionRemoved, REACTION_EMOJIS, isMyReaction, toggleReaction, getReactionSvg, getReactionLabel } from './reactions.js';
 import { pickImage, pickImages, uploadTodoImage } from './image-utils.js';
-import { checkForUpdate, setUpdateSupabase, notifyAppReady, getCurrentBundleInfo } from './update.js';
+import { checkForUpdate, setUpdateSupabase, notifyAppReady, getCurrentBundleInfo, getTotalUpdateCount } from './update.js';
 // App 内 APK 更新（原生壳更新）：先查壳更新，无壳更新才回落 bundle 热更新
 import { checkNativeUpdate, showNativeUpdatePanel, setApkUpdateSupabase, bindForegroundCheck } from './apk-update.js';
 import { supabase } from './supabase.js';
@@ -1106,21 +1106,6 @@ async function showUpdateWelcomeIfPending() {
 
   welcomePlaying = true;
 
-  // 查总更新次数（用于文案下方的"第 N 次更新"标注）
-  // 2026-09-05：同时查 app_native_versions（壳更新）+ app_versions（热更新），累加
-  let totalCount = 1;
-  try {
-    const { count: bundleCount } = await supabase
-      .from('app_versions')
-      .select('id', { count: 'exact', head: true })
-      .eq('enabled', true);
-    const { count: shellCount } = await supabase
-      .from('app_native_versions')
-      .select('id', { count: 'exact', head: true })
-      .eq('enabled', true);
-    totalCount = (bundleCount || 0) + (shellCount || 0) || 1;
-  } catch (_) {}
-
   // 延迟到开屏 splash 淡出后播放（splash 是 1.2s + 0.5s 淡出）
   setTimeout(() => {
     const overlay = document.createElement('div');
@@ -1157,7 +1142,7 @@ async function showUpdateWelcomeIfPending() {
         </svg>
       </div>
       <div style="color:#e884a8;font-size:15px;font-weight:400;letter-spacing:2px;animation:uw-fade 0.5s ease 0.4s both">${msg}</div>
-      <div style="position:fixed;bottom:18px;right:20px;color:#b85a7c;font-size:9px;font-weight:300;letter-spacing:4px;opacity:0.22;animation:uw-fade 0.5s ease 1s both">No.${totalCount}</div>
+      <div id="updateWelcomeNo" style="position:fixed;bottom:18px;right:20px;color:#b85a7c;font-size:9px;font-weight:300;letter-spacing:4px;opacity:0;transition:opacity 0.5s ease"></div>
       <style>
         @keyframes uw-pop{0%{opacity:0;transform:scale(0.3) translateY(30px)}60%{opacity:1;transform:scale(1.1) translateY(0)}100%{opacity:1;transform:scale(1)}}
         @keyframes uw-beat{0%,100%{transform:scale(1)}15%{transform:scale(1.2)}30%{transform:scale(1)}45%{transform:scale(1.12)}60%{transform:scale(1)}}
@@ -1166,6 +1151,16 @@ async function showUpdateWelcomeIfPending() {
       </style>
     `;
     document.body.appendChild(overlay);
+
+    // No.X 印记 = 这个 App 累计迭代了多少次（热更新 + 壳更新统一累计，口径见 update.js）。
+    // 到这里才发起查询（splash 已淡出 ⇒ 会话必然已恢复，不会查成 anon 的 0 行）；
+    // 不 await：计数再慢也不拖延动画；拿不到就永远不显示（错数字比没有数字更糟）
+    getTotalUpdateCount(supabase).then((n) => {
+      const noEl = overlay.querySelector('#updateWelcomeNo');
+      if (!n || !noEl) return;
+      noEl.textContent = `No.${n}`;
+      noEl.style.opacity = '0.22';
+    });
 
     // 淡入
     requestAnimationFrame(() => { overlay.style.opacity = '1'; });
