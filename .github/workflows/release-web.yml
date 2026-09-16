@@ -280,6 +280,18 @@ jobs:
           if [ -n "$MIN_APP" ]; then args+=(--min-app "$MIN_APP"); fi
           node scripts/verify-release.mjs "${args[@]}"
 
+      # DORA 四指标快照（只读）：发布**正是指标会变的时刻**，所以顺手算一次并写进 Run Summary。
+      # 平时本地想看：node scripts/dora-metrics.mjs --days 30
+      # ⚠️ 这一步刻意**不 fail 整个 job**：指标是观测，不是发布的必要条件 ——
+      #    "统计不出来"不该把一次已经成功的发布变成红灯（发布已完成且已回读校验过）。
+      - name: DORA 指标快照（只读）
+        if: success()
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/dora-metrics.mjs --days 30
+
       # 【2026-09-14 删】原先这里有「检查仓库 meta 漂移 + 上传 index-html 制品」两步，
       # 用来提醒人工把 index.html 的版本 meta 补提交回 main —— 那是「仓库持有版本真相」旧设计的补丁。
       # 现在 `release.mjs` 改为在**暂存副本**上注入版本号，发布对仓库工作区零改动，

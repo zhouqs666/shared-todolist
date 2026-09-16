@@ -42,6 +42,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { assertNewerThanLatest } from './_lib-version-check.mjs';
 import { loadEnv, requireSupabaseEnv } from './_lib-env.mjs';
+import { resolveGitProvenance, upsertWithOptionalColumns } from './_lib-release-meta.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -101,6 +102,20 @@ const { url: SUPABASE_URL, key: SERVICE_KEY } = requireSupabaseEnv();
 async function main() {
   console.log(`\n📦 发布 APK 版本 ${VERSION}\n`);
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+
+  // 0. 记录本次发布的 git 溯源（DORA 前置时间的锚点）。
+  //
+  // ⚠️ 必须在 **cap sync / 注入 meta 之前**取：那两个步骤会改 android/ 下的文件，
+  // 之后再取会把「脚本自己造成的改动」当成"工作区不干净"，从而把每一行都排除在
+  // 前置时间统计之外（指标静默变成"—"，而没人知道是取早了还是真脏）。
+  // 这里要的语义是"壳是用哪个 commit 的源码构建的"，所以取构建前的工作区状态才对。
+  const provenance = resolveGitProvenance({ paths: ['public', 'android'] });
+  if (provenance.sha) {
+    console.log(`  → 溯源：${provenance.sha.slice(0, 8)}（${provenance.committedAt}）`
+      + `${provenance.dirty ? ' ⚠️ 工作区有未提交改动（该行不算进 DORA 前置时间）' : ' ✓ 工作区干净'}`);
+  } else {
+    console.log(`  ⚠️ ${provenance.reason}`);
+  }
 
   // 1.【铁律】先查线上最新启用版本，版本号必须语义化大于线上
   console.log('  → 查询线上最新壳版本（铁律：不允许版本号倒挂）...');
@@ -356,7 +371,7 @@ ${candidates.map((p) => '   - ' + p).join('\n')}
 
   // 9. 写版本表
   console.log('  → 写入 app_native_versions 表...');
-  const { error: dbErr } = await sb.from('app_native_versions').upsert({
+  const row = {
     version_name: VERSION,
     version_code: code,
     storage_path: storagePath,
@@ -368,8 +383,18 @@ ${candidates.map((p) => '   - ' + p).join('\n')}
     is_force_update: false,
     min_supported_version: null,
     released_at: new Date().toISOString(),
-  }, { onConflict: 'version_name' });
-  if (dbErr) throw new Error(`写版本表失败：${dbErr.message}`);
+    // DORA 溯源（migration-dora-metrics.sql）：迁移没执行时允许退化，不阻断发布
+    commit_sha: provenance.sha,
+    commit_at: provenance.committedAt,
+    commit_dirty: provenance.dirty,
+  };
+  const { degraded, error: dbErr } = await upsertWithOptionalColumns(
+    sb, 'app_native_versions', row, ['commit_sha', 'commit_at', 'commit_dirty'], 'version_name');
+  if (dbErr) throw new Error(dbErr);
+  if (degraded) {
+    console.warn('    ⚠️ 已发布，但溯源没写进表：数据库还没执行 supabase/migration-dora-metrics.sql');
+    console.warn(`      （${degraded}）⇒ DORA 的前置时间会缺这一行`);
+  }
 
   console.log('\n✅ 发布成功！');
   console.log(`   版本：${VERSION}（code ${code}）`);

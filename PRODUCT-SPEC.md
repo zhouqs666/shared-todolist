@@ -477,7 +477,29 @@
 
 **完整性约束**：`completed_consistent` CHECK——未完成则 `completed_by`/`completed_at` 必须为 NULL；已完成则二者必须非空。
 
-### 6.3 安全模型（RLS）
+### 6.3 发布通道相关表字段
+
+两张版本表由发布脚本写入（客户端只读），供版本下发与 **DORA 指标**共用。
+字段定义见 `supabase/migration-app-hot-update.sql`（基础）、`migration-app-native-versions-force.sql`（强制更新）、
+`migration-dora-metrics.sql`（下表的后 6 行）。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `version` / `version_name` | TEXT | 语义化版本号，唯一 |
+| `storage_path` / `released_at` / `enabled` / `notes` | — | 见迁移文件；`enabled=false` 即「已下线」 |
+| `commit_sha` | TEXT | 发布内容的来源 commit（回退包 = 旧 ref 的 sha）。`rollback.mjs`/`dora-metrics.mjs` 之外的读取方不存在 |
+| `commit_at` | TIMESTAMPTZ | 该 commit 的提交时间；`released_at − commit_at` = **DORA 前置时间** |
+| `commit_dirty` | BOOLEAN | 发布时工作区是否有未提交改动。`true` ⇒ 该行**不对应某个 commit 的精确内容**，前置时间统计会跳过它 |
+| `disabled_at` | TIMESTAMPTZ | 下线时刻（`rollback.mjs` 写入）。不变式：`disabled_at IS NULL ⟺ enabled = true` |
+| `disabled_reason` | TEXT | 下线原因（`rollback.mjs --reason`） |
+| `disabled_is_incident` | BOOLEAN | 是否**事故**下线。只有 `true` 计入 DORA 变更失败率；`NULL` = 未归类（不计入，报告单独列出） |
+
+> **为什么把"是否事故"交给人工标注**：机器判不出「这次下线是因为出事了，还是例行退役/回滚演练」。
+> 猜错会让失败率失真，所以宁可留 `NULL` 并在报告里单独提醒 —— 不猜。
+> **历史行不回填**（那时已无从考证）：因此 DORA 的前置时间/失败率只覆盖 2026-09-16 之后发布的版本，
+> `dora-metrics.mjs` 会把「可算样本 / 总部署数」一起打印，不假装覆盖全部历史。
+
+### 6.4 安全模型（RLS）
 
 | 角色 | `todos` / `reactions` / `stickers` / `daily_notes` | `profiles` |
 |------|---------------------------------------------------|-----------|
@@ -495,7 +517,7 @@
 > 被 Supabase 安全顾问报 CRITICAL `rls_disabled_in_public` —— 修复见 `supabase/migration-rls-hardening.sql`，
 > 防复发见 §8.2 与 `app-e2e/scripts/check-rls.mjs`。
 
-### 6.4 存储
+### 6.5 存储
 
 | Bucket | 用途 | 公开性 |
 |--------|------|--------|

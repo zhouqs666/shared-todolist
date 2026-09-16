@@ -405,7 +405,9 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 - **发布**：**通道 A 热更新**（`release.mjs`；本地直跑 或 GitHub Actions `release-web.yml` 审批门跑）
   + **通道 B APK**（`release-apk.mjs`；本地直跑 或 `release-apk.yml` 审批门跑）
   + App 内自更新（`apk-update.js` + `ApkInstaller`）；
-  发布后回读校验：通道 A 用 `verify-release.mjs`，通道 B 用 `verify-apk-release.mjs`（两者都是只读、可当 CI 门禁）
+  发布后回读校验：通道 A 用 `verify-release.mjs`，通道 B 用 `verify-apk-release.mjs`（两者都是只读、可当 CI 门禁）；
+  另：`release-web.yml` 的 publish 作业在回读校验后**顺带跑一次 `dora-metrics.mjs`** 写进 Run Summary
+  （`continue-on-error: true` —— 观测不该把一次已成功的发布变成红灯）
 - **PWA**：`manifest.webmanifest` + `sw.js`（Service Worker v15，仅浏览器环境生效，原生环境 bypass）
 - **Capacitor 插件**：`SystemBars` / `LocalNotifications` / `SplashScreen` / `CapacitorUpdater`（热更）/ 自研 `ApkInstaller`（APK 自更）
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
@@ -442,4 +444,14 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
   `scripts/test_rls_migration.mjs`（PGlite 真 Postgres 跑 `supabase/migration-rls-hardening.sql`：复现洞 → 修复 → 幂等）／
   `scripts/test_rpc_migration.mjs`（同法跑 `supabase/migration-rpc-execute-hardening.sql`：anon 收干净 / App 仍可用 / 注册触发器完好）／
   `app-e2e/scripts/check-rls.mjs`（对真实测试库的 anon 探针：表 RLS + RPC 执行权限 + 暴露面白名单；也由 `admin/scripts/init-test-env.mjs` 第 ④ 步调用 ⇒ 属 required job）
+- **DORA 四指标（2026-09-16 起，回答"CI/CD 到底好不好"）**：
+  `node scripts/dora-metrics.mjs [--days 30] [--json] [--fail-on-degraded]`（**只读**）——
+  部署频率 / 前置时间（`released_at − commit_at`）/ 变更失败率 / 恢复时间。
+  口径与已知限制写在 `scripts/_lib-dora.mjs` 头部（**唯一事实来源，别在别处再抄一份**）；
+  纯计算部分由 `scripts/test_dora_metrics.mjs` 用合成夹具钉住（无凭据、进 CI）。
+  数据来源是两张版本表，靠 `supabase/migration-dora-metrics.sql` 补的 6 列
+  （`commit_sha` / `commit_at` / `commit_dirty` / `disabled_at` / `disabled_reason` / `disabled_is_incident`）；
+  写入方是 `release.mjs` / `release-apk.mjs` / `rollback.mjs`（**写失败不阻断发布** —— 观测不该成为交付通道的单点故障）。
+  ⚠️ 事故与否由**人**在 `rollback.mjs --incident` 时标注：机器判不出"下线是因为出事了还是例行退役/演练"，
+  不标就留 `NULL`（不计入失败率，报告里单独列出来提醒），**不猜**。
 - **埋点状态**：⚠️ 目前零埋点，无法回答"哪个功能最常用""两人一天互动几次"。补基础埋点（北极星 = 双端同日活跃天数）在路线图 P0。
