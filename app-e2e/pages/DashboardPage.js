@@ -137,10 +137,9 @@ export class DashboardPage {
   /**
    * 点击指定待办的圆形复选框（切换完成/未完成）
    *
-   * ⚠️ v2.7.69 起：**已完成的卡片**复选框是 opacity:0 + pointer-events:none，
-   * 点它不会切换状态（见 isTodoMarkedDone / uncompleteViaLongPressMenu 的注释）。
-   * 这个方法的语义因此是「点一下复选框」——**能不能生效取决于卡片当前状态**，
-   * 调用方要自己断言结果，别假定它一定会翻转。
+   * ⚠️ v2.7.69 起：**已完成的卡片**复选框变为 opacity:0 + pointer-events:none，
+   * 「再点一下取消完成」这条入口被有意移除。所以本方法的语义是"点一下复选框"，
+   * **能不能生效取决于卡片当前状态** —— 调用方必须自己断言结果，不要假定它一定会翻转。
    */
   async toggleTodoByText(text) {
     const checkbox = await this.driver.$(checkboxXPath(text));
@@ -160,39 +159,5 @@ export class DashboardPage {
       `//*[@resource-id="todoList"]//*[@text="${text}"]/preceding::*[@text="标为未完成"][1]`
     );
     return await el.waitForExist({ timeout }).catch(() => false);
-  }
-
-  /**
-   * 长按指定待办，弹出操作菜单
-   *
-   * 为什么用 touch 长按而不是 click()：菜单的**移动端入口**是 app.js 里挂在卡片上的
-   * `touchstart` **计时 350ms**（桌面端走 contextmenu，是另一条路）。Appium 的 touch
-   * 长按（down → pause → up）走的正是前者，按住 900ms 留足余量。
-   * 锚点落在待办文本节点上即可 —— 监听挂在整张 <li> 上，事件会冒泡上去。
-   */
-  async longPressTodoByText(text, holdMs = 900) {
-    const anchor = await this.driver.$(`//*[@resource-id="todoList"]//*[@text="${text}"]`);
-    await anchor.waitForDisplayed({ timeout: 10000 });
-    await this.driver
-      .action('pointer', { parameters: { pointerType: 'touch' } })
-      .move({ origin: anchor })
-      .down()
-      .pause(holdMs)
-      .up()
-      .perform();
-  }
-
-  /**
-   * 长按卡片 → 菜单「撤销完成」
-   *
-   * v2.7.69 起这是**可达的取消完成入口**之一（另一处是完成瞬间那条 5 秒撤销 Toast）。
-   * 菜单项同样是 aria-label 落在 @text（与复选框同一套映射，见文件头实测）。
-   * 菜单挂在 body 上（不在 #todoList 内），所以不加 resource-id 前缀。
-   */
-  async uncompleteViaLongPressMenu(text) {
-    await this.longPressTodoByText(text);
-    const btn = await this.driver.$('//*[@text="撤销完成"]');
-    await btn.waitForDisplayed({ timeout: 10000 });
-    await btn.click();
   }
 }
