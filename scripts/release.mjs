@@ -48,6 +48,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { assertNewerThanLatest } from './_lib-version-check.mjs';
 import { loadEnv, requireSupabaseEnv } from './_lib-env.mjs';
+import { resolveGitProvenance, upsertWithOptionalColumns } from './_lib-release-meta.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -119,6 +120,17 @@ async function main() {
   // 用 regex.test 检测"是否找到 meta"，而非 strict equal —— V8 的 String.replace 优化
   // 在 replacement 与原文一致时会返回同一字符串引用，导致 strict equal 误判"未找到"。
   const META_RE = /<meta name="app-version" content="[^"]*" \/>/;
+
+  // 2.【DORA 溯源】这次发布的代码是哪个 commit —— 在打包之前解析。
+  // 放在这里（而不是写库前）是为了 **--dry-run 也能看到会记什么**：
+  // 「预演的价值取决于它跑到了哪一步，不是取决于它绿了」（批次 F 的教训）。
+  const provenance = resolveGitProvenance({ ref: fromGit, paths: ['public'] });
+  if (provenance.sha) {
+    console.log(`  → 溯源：${provenance.sha.slice(0, 8)}（${provenance.committedAt}）`
+      + `${provenance.dirty ? ' ⚠️ 工作区有未提交改动（该行不算进 DORA 前置时间）' : ' ✓ 工作区干净'}`);
+  } else {
+    console.log(`  ⚠️ ${provenance.reason}`);
+  }
 
   const TMP_DIR = join(ROOT, '.release-tmp');
   if (!existsSync(TMP_DIR)) mkdirSync(TMP_DIR);
@@ -241,15 +253,26 @@ async function main() {
       ? `【回退包】内容取自 ${fromGit}${notes ? '：' + notes : ''}`
       : (notes || null);
     console.log('  → 写入 app_versions 表...');
-    const { error: dbErr } = await sb.from('app_versions').upsert({
+    // DORA 前置时间的锚点：这次发布的代码是哪个 commit（回退模式取旧 ref 的 sha）。
+    // 解析在打包之前已完成（见上面第 2 步），这里直接用 —— 保证 dry-run 与正式发布看到同一个值。
+    const row = {
       version: VERSION,
       storage_path: storagePath,
       min_app_version: effectiveMinApp,
       enabled: true,
       notes: finalNotes,
       released_at: new Date().toISOString(),
-    }, { onConflict: 'version' });
-    if (dbErr) throw new Error(`写版本表失败：${dbErr.message}`);
+      commit_sha: provenance.sha,
+      commit_at: provenance.committedAt,
+      commit_dirty: provenance.dirty,
+    };
+    const { degraded, error: dbErr } = await upsertWithOptionalColumns(
+      sb, 'app_versions', row, ['commit_sha', 'commit_at', 'commit_dirty'], 'version');
+    if (dbErr) throw new Error(dbErr);
+    if (degraded) {
+      console.warn('    ⚠️ 已发布，但溯源没写进表：数据库还没执行 supabase/migration-dora-metrics.sql');
+      console.warn(`      （${degraded}）⇒ DORA 的前置时间会缺这一行`);
+    }
 
     console.log('\n✅ 发布成功！');
     console.log(`   版本：${VERSION}`);

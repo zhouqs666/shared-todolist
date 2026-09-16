@@ -101,7 +101,9 @@ jobs:
             scripts/test_pinch.mjs \
             scripts/test_sakura_colors.mjs \
             scripts/test_rls_migration.mjs \
-            scripts/test_rpc_migration.mjs; do
+            scripts/test_rpc_migration.mjs \
+            scripts/test_dora_metrics.mjs \
+            scripts/test_dora_migration.mjs; do
             echo "================================================"
             echo "Running: $f"
             echo "================================================"
