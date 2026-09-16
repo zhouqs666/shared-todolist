@@ -54,6 +54,16 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
+-- ⚠️ 函数权限（2026-09-16 补）：PostgreSQL 默认把函数的 EXECUTE 授予 **PUBLIC**，
+--    所以上面这个 SECURITY DEFINER 函数默认是「拿到公开 anon key 的任何人可调用」。
+--    它 RETURNS trigger ⇒ 无法被直接调用（实测 0A000 trigger functions can only be
+--    called as triggers），故不是漏洞；这里收回只是为了「anon 可执行」这一列恒为 false
+--    （以后审计时凡出现 true 就一定是问题，不需要每次重新判断）。
+--    必须带 `public`：只 `revoke ... from anon` 是空动作（anon 是通过 PUBLIC 拿到的）。
+--    计数 RPC（increment_login_count / consume_login_count）的同类收紧见
+--    supabase/migration-rpc-execute-hardening.sql。
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM public, anon;
+
 -- ===== 2. todos 表（V2：created_by / completed_by 是 UUID 引用 auth.users）=====
 CREATE TABLE IF NOT EXISTS todos (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
