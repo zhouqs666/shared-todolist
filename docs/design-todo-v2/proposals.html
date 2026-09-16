@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>有爱 · 待办页改版：可切换样式方案</title>
+<!--
+  这是一份「设计提案预览页」，不是产品代码，不参与打包（不在 public/ 下）。
+  它直接引用 public/css/style.css —— 所有手机框里的卡片都是**真实的组件样式**，
+  不是重画的示意图。凡方案里写「新样式」的部分，都在本文件 <style> 里以 .fv-* 作用域覆盖。
+
+  用法：打开后先看最上面的「同一台手机 · 原地切换」，点按钮换版本；
+  手机框里的圆勾可以真的点（会打勾/取消，Paper 版还有盖章动效），
+  折叠条可以真的收起展开 —— 都是能点的，不是静态图。
+
+  数据说明：列表内容为**虚构示例**（生产待办内容是两人私密数据，不进仓库）；
+  「体量统计」是来自本地只读备份 backups/ 的**聚合数字**（只统计条数/分布，不含文本）。
+-->
+<link rel="stylesheet" href="../../public/css/style.css" />
+<style>
+/* ============================================================
+   页面外壳（提案页自身的排版，与被评审的 App 样式无关）
+   ============================================================ */
+body.proposal { background: #f7f2f6; }
+.p-wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px 90px; }
+.p-head { padding: 46px 0 4px; }
+.p-kicker { font-family: var(--font-en); font-size: 11px; letter-spacing: .28em; text-transform: uppercase; color: var(--rose-600); }
+.p-h1 { font-family: var(--font-cn); font-size: 33px; font-weight: 600; margin: 12px 0 8px; }
+.p-lead { font-size: 15px; line-height: 1.9; color: var(--stone-500); max-width: 800px; }
+.p-facts { display: flex; flex-wrap: wrap; gap: 10px; margin: 24px 0 4px; }
+.fact { background: #fff; border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 16px; min-width: 156px; }
+.fact__n { font-family: var(--font-mono); font-size: 21px; font-weight: 700; color: var(--rose-600); }
+.fact__l { font-size: 12px; color: var(--stone-500); margin-top: 3px; }
+.p-note { margin: 18px 0 0; padding: 12px 16px; background: rgba(255,255,255,.7); border-left: 3px solid var(--rose-300); border-radius: 0 10px 10px 0; font-size: 13px; line-height: 1.8; color: var(--stone-500); max-width: 880px; }
+.p-sec { margin-top: 58px; border-top: 1px solid var(--color-border); padding-top: 28px; }
+.p-sec__h { font-family: var(--font-cn); font-size: 24px; font-weight: 600; margin: 0 0 6px; }
+.p-sec__sub { font-size: 14px; line-height: 1.9; color: var(--stone-500); max-width: 880px; }
+
+/* 手机框 */
+.p-frames { display: flex; gap: 22px; overflow-x: auto; padding: 22px 4px 30px; align-items: flex-start; }
+.frame { flex: 0 0 auto; width: 390px; max-width: 92vw; }
+.frame__screen { position: relative; width: 100%; height: 760px; border-radius: 34px; border: 1px solid #ecdfe6; background: var(--color-bg); overflow: hidden; box-shadow: 0 20px 44px -22px rgba(96,44,68,.45); }
+.frame__scroll { height: 100%; overflow-y: auto; scrollbar-width: none; }
+.frame__scroll::-webkit-scrollbar { display: none; }
+.frame .fab { position: absolute; right: 16px; bottom: 18px; z-index: 20; }
+.frame__cap { margin-top: 14px; }
+.frame__tag { display: inline-block; font-family: var(--font-en); font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase; color: #fff; background: var(--rose-500); border-radius: 999px; padding: 3px 10px; }
+.frame__tag--alt { background: var(--stone-500); }
+.frame__tag--rec { background: linear-gradient(135deg, var(--rose-500), var(--rose-700)); }
+.frame__name { font-family: var(--font-cn); font-size: 17px; font-weight: 600; margin: 9px 0 5px; }
+.frame__desc { font-size: 13px; line-height: 1.8; color: var(--stone-500); }
+.frame__meta { font-size: 12px; line-height: 1.8; color: var(--stone-500); margin-top: 10px; border-left: 2px solid var(--color-border); padding-left: 11px; }
+.frame__meta b { color: var(--rose-700); font-weight: 600; }
+.frame__zoom { margin-top: 12px; border: 1px solid var(--color-border); background: rgba(255,255,255,.8); color: var(--stone-900); border-radius: 999px; padding: 7px 14px; font-family: var(--font-cn); font-size: 12.5px; cursor: pointer; }
+.frame__zoom:hover { border-color: var(--rose-300); color: var(--rose-700); }
+
+/* ============================================================
+   原地切换对比（核心工具：同一台手机里换版本，眼球不用移动）
+   ============================================================ */
+.cmp__bar { position: sticky; top: 0; z-index: 30; padding: 14px 0 12px; margin-bottom: 8px; background: rgba(247,242,246,.93); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-bottom: 1px solid var(--color-border); }
+.cmp__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 9px; }
+.cmp__row:last-child { margin-bottom: 0; }
+.cmp__rowl { flex: 0 0 auto; width: 150px; font-family: var(--font-en); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--stone-500); }
+.chip { border: 1px solid var(--color-border); background: #fff; color: var(--stone-900); border-radius: 999px; padding: 8px 15px; font-family: var(--font-cn); font-size: 13.5px; cursor: pointer; transition: transform .16s var(--ease), border-color .16s var(--ease), box-shadow .16s var(--ease); }
+.chip:hover { border-color: var(--rose-300); }
+.chip:active { transform: scale(.97); }
+.chip--on { background: linear-gradient(135deg, var(--rose-500), var(--rose-700)); color: #fff; border-color: transparent; box-shadow: 0 6px 16px -7px rgba(184,90,124,.6); }
+.cmp__stage { display: flex; gap: 36px; align-items: flex-start; flex-wrap: wrap; padding-top: 20px; }
+.cmp__side { flex: 1 1 300px; min-width: 280px; max-width: 520px; position: sticky; top: 168px; }
+.cmp__side .frame__name { font-size: 20px; margin-top: 12px; }
+.cmp__side .frame__desc { font-size: 14px; }
+.cmp__side .frame__meta { font-size: 13px; margin-top: 14px; }
+.cmp__hint { font-size: 12.5px; line-height: 1.8; color: var(--stone-500); margin-top: 16px; padding: 11px 14px; background: rgba(255,255,255,.6); border-radius: 10px; }
+
+/* 放大看单版（像装到手机上一样完整） */
+.zoom { position: fixed; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center; gap: 30px; padding: 26px; background: rgba(48,18,34,.66); -webkit-backdrop-filter: blur(9px); backdrop-filter: blur(9px); }
+.zoom[hidden] { display: none; }
+.zoom .frame__screen { height: min(844px, calc(100vh - 76px)); }
+.zoom__cap { max-width: 330px; color: rgba(255,255,255,.9); }
+.zoom__cap .frame__name { color: #fff; font-size: 20px; }
+.zoom__cap .frame__desc { color: rgba(255,255,255,.82); font-size: 13.5px; }
+.zoom__cap .frame__meta { color: rgba(255,255,255,.72); font-size: 12.5px; border-left-color: rgba(255,255,255,.28); }
+.zoom__cap .frame__meta b { color: #f7c9db; }
+.zoom__close { position: absolute; top: 20px; right: 24px; border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.12); color: #fff; border-radius: 999px; padding: 9px 18px; font-family: var(--font-cn); font-size: 13.5px; cursor: pointer; }
+.zoom__close:hover { background: rgba(255,255,255,.22); }
+@media (max-width: 900px) {
+  .cmp__rowl { width: 100%; }
+  .cmp__side { position: static; max-width: none; }
+  .zoom { flex-direction: column; gap: 14px; overflow-y: auto; }
+}
+
+/* ============================================================
+   共用小组件：分区标题 / 折叠条 / 归档入口 / 日期分隔 / 紧凑完成行
+   ============================================================ */
+.sec { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 10px; font-family: var(--font-en); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--stone-500); }
+.sec__n { font-family: var(--font-mono); letter-spacing: 0; color: var(--rose-600); font-size: 12px; }
+.sec--soft .sec__n { color: var(--stone-500); }
+
+.grp__bar { display: flex; align-items: center; gap: 9px; width: 100%; margin: 18px 0 12px; padding: 13px 15px; border: 1px dashed var(--color-border); border-radius: var(--radius-md); background: rgba(255,255,255,.62); font-family: var(--font-en); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--stone-500); cursor: pointer; }
+.grp__bar b { font-family: var(--font-mono); letter-spacing: 0; color: var(--rose-600); font-size: 13px; }
+.grp__caret { margin-left: auto; transition: transform .25s var(--ease); font-size: 10px; }
+.grp--collapsed .grp__caret { transform: rotate(-90deg); }
+.grp--collapsed .grp__body { display: none; }
+
+.arch-row { display: flex; align-items: center; gap: 10px; width: 100%; margin: 16px 0 4px; padding: 15px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: rgba(255,255,255,.55); font-family: var(--font-cn); font-size: 13.5px; color: var(--stone-500); cursor: pointer; }
+.arch-row b { font-family: var(--font-mono); color: var(--rose-600); font-size: 14px; }
+.arch-row span:last-child { margin-left: auto; opacity: .55; }
+
+.day-h { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 12px; }
+.day-h__cn { font-family: var(--font-cn); font-size: 15px; font-weight: 600; color: var(--rose-700); }
+.day-h__en { font-family: var(--font-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--stone-500); }
+.day-h::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
+
+/* 紧凑完成行（时间轴 / 归档页用；高度约为卡片的 40%） */
+.drow { display: flex; align-items: center; gap: 10px; padding: 7px 2px; font-size: 14px; color: var(--stone-500); }
+.drow__t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drow__av { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; opacity: .8; flex-shrink: 0; }
+.drow__time { font-family: var(--font-mono); font-size: 10.5px; opacity: .7; }
+.drow__tick { color: var(--rose-300); font-size: 12px; }
+
+/* 完成时间水印：仅 Paper 方案启用；其余方案里这个 span 不能留下任何痕迹 */
+.todo__watermark { display: none; }
+
+/* 摘要卡（方案四用） */
+.digest { display: flex; gap: 0; background: #fff; border: 1px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow); margin-bottom: 24px; }
+.digest__c { flex: 1; padding: 14px 10px; text-align: center; }
+.digest__c + .digest__c { border-left: 1px solid var(--color-border); }
+.digest__n { font-family: var(--font-mono); font-size: 22px; font-weight: 700; color: var(--rose-600); line-height: 1; }
+.digest__l { font-size: 11px; color: var(--stone-500); margin-top: 5px; }
+
+/* ============================================================
+   Q2-Ⅰ Quiet List：去掉卡片外壳，纯行 + 细分隔线
+   ============================================================ */
+.fv-quiet .todo { background: transparent; border: none; border-bottom: 1px solid var(--color-border); border-radius: 0; box-shadow: none; padding: 15px 6px; margin: 0; display: flex; align-items: center; gap: 14px; animation: none; }
+.fv-quiet .todo:hover { transform: none; box-shadow: none; }
+.fv-quiet .todo--done { background: transparent; box-shadow: none; }
+.fv-quiet .todo--pinned { background: transparent; border-left: none; }
+.fv-quiet .todo__check { position: static; opacity: 1; width: 22px; height: 22px; border: 1.5px solid var(--rose-300); flex: 0 0 auto; }
+.fv-quiet .todo__check svg { width: 13px; height: 13px; }
+.fv-quiet .todo--done .todo__check,
+.fv-quiet .todo__check--done { opacity: 1; border: 1.5px solid var(--rose-500); background: var(--rose-500); }
+.fv-quiet .todo--done .todo__check svg { opacity: 1; transform: scale(1); color: #fff; }
+.fv-quiet .todo__text { font-size: 16px; }
+.fv-quiet .todo--done .todo__text { font-size: 15px; text-decoration-color: rgba(232,132,168,.35); }
+.fv-quiet .todo__meta { margin-top: 3px; font-size: 11.5px; }
+.fv-quiet .todo__avatar { width: 15px; height: 15px; }
+.fv-quiet .todo__pin-icon { width: 13px; height: 13px; }
+
+/* ============================================================
+   Q2-Ⅱ Editorial：杂志排版，放大层级；完成项降为注脚
+   ============================================================ */
+.fv-edit .todo { display: flex; gap: 12px; align-items: flex-start; background: transparent; border: none; border-bottom: 1px solid rgba(245,226,233,.8); border-radius: 0; box-shadow: none; padding: 8px 2px 18px; margin: 0 0 15px; animation: none; }
+.fv-edit .todo:hover { transform: none; box-shadow: none; }
+.fv-edit .todo--done { background: transparent; box-shadow: none; opacity: .7; }
+.fv-edit .todo__check { position: static; opacity: 1; margin-top: 7px; width: 16px; height: 16px; border: 1.5px solid var(--rose-300); flex: 0 0 auto; }
+.fv-edit .todo__check svg { width: 10px; height: 10px; }
+.fv-edit .todo--done .todo__check { opacity: 1; border: none; background: transparent; }
+.fv-edit .todo--done .todo__check svg { opacity: 1; transform: scale(1); color: var(--rose-400); }
+.fv-edit .todo__text { font-size: 21px; line-height: 1.6; letter-spacing: .01em; }
+.fv-edit .todo--done .todo__text { font-size: 15.5px; text-decoration: none; }
+.fv-edit .todo__meta { margin-top: 10px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .06em; }
+.fv-edit .todo__avatar { width: 15px; height: 15px; }
+.fv-edit .todo__pin-icon { margin-top: 8px; }
+.fv-edit .todo__headline { align-items: baseline; }
+
+/* ============================================================
+   Q2-Ⅲ Paper 2.0：保留卡片形态，材质与仪式升级
+   ============================================================ */
+.fv-paper .todo { border-radius: 18px; padding: 16px 18px 15px; margin-bottom: 14px; background: linear-gradient(180deg, #fff 0%, var(--cream-100) 100%); border: 1px solid rgba(245,226,233,.95); box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(184,90,124,.05), 0 12px 26px -16px rgba(184,90,124,.38); position: relative; overflow: hidden; }
+.fv-paper .todo::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: linear-gradient(180deg, var(--rose-300), rgba(243,185,205,0)); }
+.fv-paper .todo--pinned::before { background: linear-gradient(180deg, var(--gold-300), rgba(252,211,77,0)); }
+.fv-paper .todo__text { font-size: 16.5px; line-height: 1.45; }
+.fv-paper .todo--done { background: linear-gradient(180deg, #fffdfe 0%, #fdf7fa 100%); box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(184,90,124,.03); transform: scale(.995); }
+.fv-paper .todo--done::before { opacity: .22; }
+.fv-paper .todo__check { width: 20px; height: 20px; top: 13px; right: 15px; opacity: .85; border-width: 1.6px; }
+.fv-paper .todo--done .todo__check { opacity: .6; border: 1.5px solid var(--rose-300); background: transparent; }
+.fv-paper .todo--done .todo__check svg { opacity: 1; transform: scale(1); }
+.fv-paper .todo__watermark { display: block; position: absolute; right: 15px; bottom: 11px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; color: rgba(184,90,124,.42); }
+@keyframes stamp-in { 0% { transform: scale(.7); opacity: 0; } 55% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); } }
+.fv-paper .todo.is-stamped .todo__check svg { animation: stamp-in .5s cubic-bezier(.34,1.56,.64,1); }
+
+/* ============================================================
+   Q2-Ⅳ Inset Grouped：一张大卡装 N 行（容器化）
+   ============================================================ */
+.fv-group .gwrap { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 18px; overflow: hidden; box-shadow: 0 1px 2px rgba(184,90,124,.04), 0 12px 26px -18px rgba(184,90,124,.4); margin-bottom: 20px; }
+.fv-group .gwrap--muted { background: rgba(255,255,255,.6); }
+.fv-group .gwrap .todo { background: transparent; border: none; border-radius: 0; box-shadow: none; margin: 0; padding: 15px 16px 14px 14px; border-bottom: 1px solid rgba(245,226,233,.85); animation: none; display: flex; align-items: center; gap: 12px; }
+.fv-group .gwrap .todo:last-child { border-bottom: none; }
+.fv-group .gwrap .todo:hover { transform: none; box-shadow: none; background: rgba(253,240,245,.6); }
+.fv-group .todo--done, .fv-group .todo--pinned { background: transparent; }
+.fv-group .todo__check { position: static; opacity: 1; width: 20px; height: 20px; flex: 0 0 auto; border: 1.5px solid var(--rose-300); }
+.fv-group .todo__check svg { width: 12px; height: 12px; }
+.fv-group .todo--done .todo__check { opacity: 1; border: 1.5px solid var(--rose-400); background: transparent; }
+.fv-group .todo--done .todo__check svg { opacity: 1; transform: scale(1); color: var(--rose-400); }
+.fv-group .todo__text { font-size: 15.5px; }
+.fv-group .gwrap--muted .todo__text { font-size: 14.5px; }
+.fv-group .todo__meta { font-size: 11px; margin-top: 2px; }
+.fv-group .todo__avatar { width: 15px; height: 15px; }
+.fv-group .todo__pin-icon { width: 13px; height: 13px; }
+
+/* 推荐组合：分级材质（未完成组 = 纸白 + 高光；已完成组 = 淡底压平） */
+.fv-rec .gwrap { box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(184,90,124,.05), 0 16px 30px -20px rgba(184,90,124,.45); }
+.fv-rec .gwrap--muted { box-shadow: none; }
+.fv-rec .todo--done .todo__text { text-decoration-color: rgba(232,132,168,.3); }
+
+/* ============================================================
+   ⚠️ 稀有度保护（本次评审的核心约束，先读这段）
+   生产库 63 条存活待办里有 7 条隐藏款（6 稀有 + 1 史诗），**全部在已完成区**。
+   下面第一批方案里的 .fv-quiet / .fv-group 等，只要写了 .todo 的 background，
+   就会按 CSS 优先级把隐藏款的渐变底吃掉 —— 这正是「图鉴被改版稀释」的真实机制。
+   所以这里用 !important 重申一遍，并当作给未来实现的提醒：
+   **任何新 CSS 都必须给稀有度让位**（真实做法是给 .todo--rare 等更高的选择器权重）。
+   ============================================================ */
+.todo--rare { background: linear-gradient(155deg, var(--rare-50) 0%, var(--rare-100) 100%) !important; border: 1.5px solid var(--rare-300) !important; }
+.todo--epic { background: linear-gradient(155deg, var(--epic-50) 0%, var(--epic-100) 100%) !important; border: 1.5px solid var(--epic-300) !important; }
+.todo--legendary { background: linear-gradient(155deg, var(--legendary-50) 0%, var(--legendary-100) 100%) !important; border: 1.5px solid var(--legendary-300) !important; }
+
+/* ============================================================
+   第二批共用组件：章节头 / 过渡带 / 图鉴条 / 吸顶月份 / 完成印章
+   ============================================================ */
+.chap { display: flex; align-items: baseline; gap: 9px; margin: 30px 0 14px; }
+.chap__cn { font-family: var(--font-cn); font-size: 16.5px; font-weight: 600; color: var(--stone-900); }
+.chap__sum { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .04em; color: var(--stone-500); }
+.chap__line { flex: 1; height: 1px; background: linear-gradient(90deg, var(--color-border), transparent); }
+.chap--sticky { position: sticky; top: 68px; z-index: 5; margin: 4px 0 8px; padding: 9px 0 8px; border-bottom: 1px solid var(--color-border); background: linear-gradient(180deg, var(--color-bg) 72%, rgba(255,251,252,.86)); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+
+.band { margin: 32px 0 20px; text-align: center; }
+.band__cn { font-family: var(--font-cn); font-size: 15px; color: var(--rose-700); letter-spacing: .03em; }
+.band__en { font-family: var(--font-en); font-size: 9.5px; letter-spacing: .24em; text-transform: uppercase; color: var(--stone-500); margin-top: 7px; }
+.band__rule { height: 1px; margin: 16px 10px 0; background: linear-gradient(90deg, transparent, var(--color-border) 18%, var(--color-border) 82%, transparent); }
+
+.stk { display: flex; align-items: center; gap: 3px; flex-wrap: nowrap; }
+.stk__i { width: 17px; height: 17px; border-radius: 6px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; }
+.stk__i--rare { background: linear-gradient(155deg, var(--rare-50), var(--rare-100)); border-color: var(--rare-300); color: #e884a8; }
+.stk__i--epic { background: linear-gradient(155deg, var(--epic-50), var(--epic-100)); border-color: var(--epic-300); color: #8b5cf6; }
+.stk__i--legendary { background: linear-gradient(155deg, var(--legendary-50), var(--legendary-100)); border-color: var(--legendary-300); color: #d97706; }
+.stk__i--lock { background: rgba(255,255,255,.45); border-color: var(--color-border); color: var(--stone-200); }
+.stk__i svg { width: 12px; height: 12px; }
+.stk__l { font-family: var(--font-mono); font-size: 9.5px; color: var(--stone-500); margin-left: 5px; white-space: nowrap; }
+
+/* 完成印章（集章册）：每张完成卡片右下角一枚，隐藏款用稀有度配色 + 图鉴序号 */
+.todo__stamp { position: absolute; right: 15px; bottom: 12px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border-radius: 7px; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .04em; border: 1px dashed rgba(184,90,124,.34); color: rgba(184,90,124,.62); background: rgba(255,255,255,.5); }
+.todo--rare .todo__stamp { border-style: solid; border-color: rgba(253,164,175,.85); color: #d8607f; background: rgba(255,255,255,.62); }
+.todo--epic .todo__stamp { border-style: solid; border-color: rgba(139,92,246,.45); color: #7c5cc4; background: rgba(255,255,255,.62); }
+.todo--legendary .todo__stamp { border-style: solid; border-color: rgba(245,158,11,.6); color: #b7791f; background: rgba(255,255,255,.62); }
+
+/* ============================================================
+   第二批 · 视觉语言
+   ============================================================ */
+/* 新Ⅰ 纸与光：未完成=新纸浮起；已完成=晒过的纸（暖一度、压平、内凹） */
+.fv-light .container { background: radial-gradient(620px 400px at 50% -8%, rgba(243,185,205,.3), transparent 72%); }
+.fv-light .todo { border-radius: 20px; padding: 17px 19px 16px; margin-bottom: 15px; background: linear-gradient(180deg, #fff 0%, var(--cream-100) 100%); border: 1px solid rgba(245,226,233,.9); box-shadow: inset 0 1px 0 #fff, 0 6px 18px -12px rgba(150,74,102,.3), 0 22px 40px -30px rgba(150,74,102,.55); }
+.fv-light .todo--done { background: linear-gradient(180deg, #fdf6f1 0%, #f9efe8 100%); border-color: rgba(229,198,211,.75); box-shadow: inset 0 2px 7px rgba(184,90,124,.055); }
+.fv-light .todo--done .todo__text { color: #8c7782; }
+.fv-light .todo__text { font-size: 16.5px; }
+.fv-light .todo__check { width: 20px; height: 20px; top: 14px; right: 16px; opacity: .85; border-width: 1.6px; }
+.fv-light .todo--done .todo__check { opacity: .5; border: 1.5px solid var(--rose-300); background: transparent; }
+.fv-light .todo--done .todo__check svg { opacity: 1; transform: scale(1); }
+
+/* 新Ⅱ 信笺：信纸横纹 + 衬线正文，完成的像一封被读过的信 */
+.fv-letter .todo { border-radius: 14px; padding: 17px 18px 15px 20px; margin-bottom: 16px; border: 1px solid rgba(245,226,233,.85); background: repeating-linear-gradient(180deg, transparent 0 25px, rgba(232,132,168,.085) 25px 26px), linear-gradient(180deg, #fffdfe, #fff9fb); box-shadow: inset 0 1px 0 #fff, 0 8px 20px -17px rgba(150,74,102,.45); }
+.fv-letter .todo__text { font-size: 17px; line-height: 26px; }
+.fv-letter .todo__meta { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .05em; }
+.fv-letter .todo--done { opacity: .82; }
+.fv-letter .todo--done .todo__text { text-decoration-color: rgba(232,132,168,.3); }
+.fv-letter .todo__check { width: 20px; height: 20px; top: 13px; right: 15px; opacity: .8; }
+.fv-letter .todo--done .todo__check { opacity: .55; border: 1.5px solid var(--rose-300); background: transparent; }
+.fv-letter .todo--done .todo__check svg { opacity: 1; transform: scale(1); }
+
+/* 新Ⅲ 印章收藏：卡片材质完全不动，只加「完成印章」——主角从标题变成印章 */
+.fv-stamp .todo { padding-bottom: 32px; }
+.fv-stamp .todo__meta-text { font-size: 11.5px; }
+
+/* 新Ⅳ 大留白：去边框去阴影，靠底色与间距分层；稀有款成为唯一强色块 */
+.fv-air .container { padding-left: 22px; padding-right: 22px; }
+.fv-air .todo { background: var(--color-surface); border: none; border-radius: 22px; padding: 20px 22px 18px; margin-bottom: 20px; box-shadow: none; }
+.fv-air .todo--done { background: rgba(253,240,245,.6); }
+.fv-air .todo__text { font-size: 17.5px; line-height: 1.5; }
+.fv-air .todo__meta { margin-top: 8px; }
+.fv-air .todo__check { width: 22px; height: 22px; top: 19px; right: 21px; opacity: .8; border-width: 1.6px; }
+.fv-air .todo--done .todo__check { opacity: .5; border: 1.5px solid var(--rose-400); background: transparent; }
+.fv-air .todo--done .todo__check svg { opacity: 1; transform: scale(1); }
+.fv-air .todo--pinned { border-left: 3px solid var(--color-primary); }
+
+/* 附加版式开关（在对比器上直接叠加，方便现场微调判断） */
+.sw-no-meta .todo__meta { display: none; }
+.sw-dense .todo { padding-top: 11px !important; padding-bottom: 11px !important; }
+</style>
+</head>
+<body class="proposal">
+<div class="p-wrap">
+
+  <header class="p-head">
+    <div class="p-kicker">Proposal · 2026-09-16 · 供选择</div>
+    <h1 class="p-h1">待办页改版 · 可切换的样式方案</h1>
+    <p class="p-lead">
+      全部是<b>真实样式</b>：手机框直接引用 <code>public/css/style.css</code> 并复用真实的卡片 DOM 结构，
+      所以「现状」那一屏就是你手机上此刻的样子。<b>框里的圆勾能真的点</b>（打勾 / 取消，Paper 版还有盖章动效）、
+      <b>折叠条能真的收起展开</b> —— 打开就能按，不用脑补。
+    </p>
+    <div class="p-facts">
+      <div class="fact"><div class="fact__n">63</div><div class="fact__l">存活待办（含已完成）</div></div>
+      <div class="fact"><div class="fact__n">3 <span style="font-size:13px;color:#7a6572">/ 60</span></div><div class="fact__l">未完成 / 已完成</div></div>
+      <div class="fact"><div class="fact__n">7 天 5 条</div><div class="fact__l">最近完成的只有这些</div></div>
+      <div class="fact"><div class="fact__n">7 个字</div><div class="fact__l">待办文本长度中位数</div></div>
+      <div class="fact"><div class="fact__n">8 屏</div><div class="fact__l">现在要滚多久才见底</div></div>
+    </div>
+    <p class="p-note">
+      <b>体量依据</b>来自本地只读备份 <code>backups/backup-2026-09-15T12-00-49-650Z.json</code> 的聚合统计
+      （只算条数与时间分布，不读文本内容）。<b>列表里的文案是虚构示例</b>，生产待办内容不进仓库。
+      另外两个数字对设计很关键：已完成里 <b>29 条超过 30 天</b>、卡片文本中位数只有 <b>7 个字</b> ——
+      即「用一张为长文本＋备注＋图片设计的卡片，去装一个 7 字短句，且这张卡片 95% 的场合是已完成、不可点的」。
+    </p>
+  </header>
+
+  <!-- ================= 核心：原地切换 ================= -->
+  <section class="p-sec">
+    <h2 class="p-sec__h">同一台手机 · 原地切换（先玩这个）</h2>
+    <p class="p-sec__sub">
+      点下面任意一个按钮，右边这台手机就换成那一版 —— 眼球不用移动，两次点击之间就是「前后对比」。
+      最下面一排是<b>版式开关</b>：可以直接叠加「隐藏元信息行」和「行内距收紧」，用来现场试「如果那条时间戳不要了会怎样」。
+    </p>
+    <div class="cmp__bar" id="cmp-bar"></div>
+    <div class="cmp__stage">
+      <div id="cmp-frame"></div>
+      <div class="cmp__side" id="cmp-side"></div>
+    </div>
+  </section>
+
+  <!-- ================= 盲盒冲突：先说清上一批为什么不对 ================= -->
+  <section class="p-sec">
+    <h2 class="p-sec__h">先纠正一件事：已完成区是奖杯柜，不是坟场</h2>
+    <p class="p-sec__sub">
+      你问「是不是没考虑隐藏款的图鉴功能」—— 比这更糟：我上一批四个方案（收起 / 双区归档 / 按天变薄 / 变成数字）
+      的核心动作<b>全都是让已完成区变轻</b>，而隐藏款的奖励视觉就长在已完成卡片上。用真实数据算一下：
+    </p>
+    <div class="p-facts" style="margin:16px 0 6px">
+      <div class="fact"><div class="fact__n">7 / 63</div><div class="fact__l">存活待办里的隐藏款（6 稀有 + 1 史诗）</div></div>
+      <div class="fact"><div class="fact__n">7 / 7</div><div class="fact__l">全部落在「已完成」区</div></div>
+      <div class="fact"><div class="fact__n">5 / 12</div><div class="fact__l">图鉴已解锁，还有 7 张没集齐</div></div>
+    </div>
+    <p class="p-note" style="max-width:900px">
+      <b>结论</b>：任何「收起 / 变薄 / 搬走」都会把那 7 张渐变卡片一起埋掉 —— 用户再也看不到自己开到过什么，
+      而图鉴还剩 7 张没解锁，这套系统本来还在驱动「多添一条」。更糟的是<b>我上一批的手机框里一张隐藏款都没放</b>，
+      所以纸上看着都不错。<br>
+      <b>这一批的三条约束</b>（对应你说的三句话）：<br>
+      ① <b>卡片是原子</b>：完成的待办和未完成长得一样，同尺寸同信息，谁都不许缩成一行；<br>
+      ② <b>往下滑不是问题</b>，问题是滑下去没有收获感 —— 所以给时间加骨架、给完成加痕迹，而不是把内容藏起来；<br>
+      ③ <b>隐藏款必须留在原位</b>，而且要被看得更清楚。下面每个手机框里都真实带着那 7 张渐变卡。
+    </p>
+    <p class="p-sec__sub" style="margin-top:14px">
+      顺带说一句技术真相：这不是审美问题，是 <b>CSS 优先级问题</b>。我在上一批里写的
+      <code>.fv-quiet .todo { background: transparent }</code> 优先级高于 <code>.todo--rare</code>，
+      于是隐藏款的渐变底会被静默吃掉 —— 这正是「改版把图鉴稀释掉」的真实机制。
+      本页已加了一段<b>稀有度保护</b>（用 <code>!important</code> 重申），并且刻意保留：你可以在第一批的
+      Quiet / 容器化 里看到隐藏款因此「硌」在版式外面 —— 那就是冲突的样子。
+    </p>
+  </section>
+
+  <!-- ================= 第二批：结构 ================= -->
+  <section class="p-sec">
+    <h2 class="p-sec__h">第二批 · 结构（卡片一像素不动）</h2>
+    <p class="p-sec__sub">
+      四版都在回答同一个问题：<b>不隐藏、不缩小、不搬家，怎么让往下滑变得有意义</b>。
+      全部信息损失为 0，60 件完成的待办都还在原位，尺寸和现在完全一样。
+      四版里都有那 7 张隐藏款渐变卡，可以顺便确认「图鉴在不在」。
+    </p>
+    <div class="p-frames" id="frames-newq1"></div>
+  </section>
+
+  <!-- ================= 第二批：视觉 ================= -->
+  <section class="p-sec">
+    <h2 class="p-sec__h">第二批 · 视觉（强化卡片，不削弱）</h2>
+    <p class="p-sec__sub">
+      四版都不改结构、不改卡片尺寸、不改信息，只换「材质」和「痕迹」。
+      重点看两件事：<b>隐藏款的渐变底有没有被保住</b>，以及<b>完成的卡片是否还和未完成一样有份量</b>
+      （上一批的 Ⅰ Quiet 和 Ⅳ 容器化会把它压成一行 / 抽掉卡片，这就是它们出局的原因）。
+    </p>
+    <div class="p-frames" id="frames-newq2"></div>
+  </section>
+
+  <!-- ================= 第一批（留档对照） ================= -->
+  <section class="p-sec">
+    <h2 class="p-sec__h">第一批 · 列表显示什么（留档对照）</h2>
+    <p class="p-sec__sub">
+      目标：让打开 App 的第一屏就等于「我接下来要做什么」，而不是「我做过什么」。
+      四版的分野只有一句话 —— <b>已完成的那些，是收起、是搬家、是变薄、还是变成数字</b>。
+      每版下方标注了首屏能看到多少、改动面多大。
+    </p>
+    <div class="p-frames" id="frames-q1"></div>
+  </section>
+
+  <!-- ================= Q2 ================= -->
+  <section class="p-sec">
+    <h2 class="p-sec__h">问题二 · 视觉语言（四版并排）</h2>
+    <p class="p-sec__sub">
+      现状的视觉问题不在配色（樱粉体系 + 三轨字体是成立的），而在 <b>「每一条都是一个盒子」</b>：
+      1px 边框 + 投影 + 15/16 内距 + 12 外距 ≈ 80px/条，一屏只能 8 条，而卡片里的信息（7 个字）根本撑不满。
+      四版按「外壳」的激进程度排序，从去壳到强化壳，都顺手修掉同一个现网缺陷：
+      <b>完成态把复选框藏成 opacity:0，导致「取消完成」这个操作在视觉上不存在</b>（只能去长按菜单里找「撤销完成」）。
+    </p>
+    <table style="border-collapse:collapse;margin:18px 0 4px;font-size:13px">
+      <thead><tr style="color:#7a6572;text-align:left">
+        <th style="padding:6px 18px 6px 0;font-weight:600">方案</th>
+        <th style="padding:6px 18px 6px 0;font-weight:600">单条实测高度</th>
+        <th style="padding:6px 18px 6px 0;font-weight:600">一屏可见（内容区约 670px）</th>
+      </tr></thead>
+      <tbody style="font-family:var(--font-mono)">
+        <tr><td style="padding:5px 18px 5px 0">现状（卡片 + 12px 外距）</td><td style="padding:5px 18px 5px 0">80px</td><td style="padding:5px 18px 5px 0">8 条</td></tr>
+        <tr><td style="padding:5px 18px 5px 0">Ⅰ Quiet（行 + 分隔线）</td><td style="padding:5px 18px 5px 0">74px → 53px<span style="font-family:var(--font-cn);color:#7a6572">（元信息收掉）</span></td><td style="padding:5px 18px 5px 0">9 → 12 条</td></tr>
+        <tr><td style="padding:5px 18px 5px 0">Ⅱ Editorial（放大排版）</td><td style="padding:5px 18px 5px 0">95px</td><td style="padding:5px 18px 5px 0">7 条</td></tr>
+        <tr><td style="padding:5px 18px 5px 0">Ⅲ Paper 2.0（材质加深）</td><td style="padding:5px 18px 5px 0">93px</td><td style="padding:5px 18px 5px 0">7 条</td></tr>
+        <tr><td style="padding:5px 18px 5px 0">Ⅳ Inset Grouped（容器化）</td><td style="padding:5px 18px 5px 0">69px</td><td style="padding:5px 18px 5px 0">10 条</td></tr>
+        <tr><td style="padding:5px 18px 5px 0">Q1-③ 的紧凑完成行</td><td style="padding:5px 18px 5px 0">35px</td><td style="padding:5px 18px 5px 0">19 行</td></tr>
+      </tbody>
+    </table>
+    <p class="p-sec__sub" style="margin-top:6px;font-size:13px">
+      数字用 Playwright 量自本页真实渲染结果（每条含外边距）。注意看最后一行的反差：
+      <b>真正让列表「变薄」的不是去掉边框，而是别让每条都占两行</b> —— 现状的 80px 里，有 24px 是那句
+      「小宝宝 · 今天 09:12」，而中位文本只有 7 个字。所以在对比器里叠加「隐藏元信息行」那一下，
+      密度提升比换任何一版视觉都明显。
+    </p>
+    <div class="p-frames" id="frames-q2"></div>
+  </section>
+
+  <!-- ================= 现状 ================= -->
+  <section class="p-sec">
+    <h2 class="p-sec__h">对照基准 · 现状</h2>
+    <p class="p-sec__sub">
+      一条扁平 <code>ul.todo-list</code>，排序是「置顶 → 未完成 → 已完成」，已完成的卡片<b>不下沉出视野、也不收起</b>，
+      只是文字划线 + 背景转白 + 阴影收一线。下面框里可以真的滚一下 —— 那就是那 60 张卡片的坟场。
+    </p>
+    <div class="p-frames" id="frames-now"></div>
+  </section>
+
+  <!-- ================= 推荐 ================= -->
+  <section class="p-sec">
+    <h2 class="p-sec__h">推荐组合（如果只挑一套）</h2>
+    <p class="p-sec__sub">
+      <b>Q1 方案二（双区分离）+ 方案四的摘要 + Q2-Ⅳ（容器化）+ Q2-Ⅲ 的材质</b>：
+      未完成是「一张亮卡片」、已完成是「一张淡卡片里的若干细行」、更早的进归档页。
+      第一屏恒定为 3～8 条，且两种状态在视觉上是两个物种 —— 这是「质的飞跃」最省力的落点。
+    </p>
+    <div class="p-frames" id="frames-rec"></div>
+  </section>
+
+  <!-- ================= 实施 ================= -->
+  <section class="p-sec">
+    <h2 class="p-sec__h">改动面、顺序与风险</h2>
+    <div id="plan" class="p-sec__sub"></div>
+  </section>
+
+</div>
+
+<!-- 放大看单版（像装到手机上一样完整） -->
+<div id="zoom" class="zoom" hidden>
+  <button id="zoomClose" class="zoom__close" type="button">✕ 关闭（Esc）</button>
+  <div id="zoom-frame"></div>
+  <div class="zoom__cap" id="zoom-cap"></div>
+</div>
+
+<script>
+/* ============================================================
+   虚构示例数据（不来自生产库）
+   ============================================================ */
+const ME = '../../public/icons/avatars/dabaobei.jpg';
+const TA = '../../public/icons/avatars/xiaobaobao.jpg';
+
+/* 稀有度贴真实分布（存活 63 条里 7 条隐藏款 = 6 rare + 1 epic）：
+   6 条全部在已完成区，外加 1 条「刚添加就开出」的稀有款落在未完成区（开奖发生在添加瞬间）。 */
+const OPEN = [
+  { text: '买牛奶和面包', pinned: true, av: TA, meta: '小宝宝 · 今天 09:12', rarity: 'rare', stamp: '✦ 萌芽 2/4' },
+  { text: '把周末的机票退了', av: ME, meta: '大宝贝 · 昨天 21:40' },
+  { text: '给妈妈打电话', av: TA, meta: '小宝宝 · 9月14日' },
+];
+const DONE = [
+  { text: '交水电费', av: TA, meta: '小宝宝 · 2 小时前 · 大宝贝完成', time: '2h', rarity: 'rare', stamp: '✦ 初心 1/4' },
+  { text: '订周五的电影票', av: ME, meta: '大宝贝 · 昨天 ·「选了你喜欢的位置」', time: '1d', rarity: 'epic', stamp: '✦ 心动 1/4' },
+  { text: '取快递', av: TA, img: true, meta: '小宝宝 · 昨天 · 大宝贝完成', time: '1d', stamp: '小 · 9/15' },
+  { text: '遛狗', av: ME, heart: true, meta: '大宝贝 · 前天 · 小宝宝完成', time: '2d', rarity: 'rare', stamp: '✦ 晨光 3/4' },
+  { text: '买菜', av: TA, meta: '小宝宝 · 3 天前 · 大宝贝完成', time: '3d', stamp: '小 · 9/13' },
+];
+const OLD = ['洗碗', '拖地', '买牙膏', '换床单', '预约体检', '还信用卡', '给猫铲屎',
+             '修水龙头', '订生日蛋糕', '洗车', '还书', '买猫粮', '晾衣服', '倒垃圾'];
+
+/* ============================================================
+   组件片段（与真实 DOM 结构一致，类名同源）
+   ============================================================ */
+const SVG_CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const SVG_HEART = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px"><path d="M12 21s-7.5-4.7-7.5-10.2C4.5 7.6 7 5.5 9.8 5.5c1.4 0 2.7.7 3.2 1.8.5-1.1 1.8-1.8 3.2-1.8 2.8 0 5.3 2.1 5.3 5.3C21.5 16.3 12 21 12 21z" fill="currentColor"/></svg>';
+const SVG_PIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M12 17v5"/><path d="M9 11l-4 4h14l-4-4"/><path d="M15 3.5a2 2 0 0 1 2 2V9l-5 5-5-5V5.5a2 2 0 0 1 2-2h6z"/></svg>';
+const SVG_IMG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+const SVG_TOPHEART = '<svg viewBox="0 0 32 32" width="24" height="24" role="img" aria-label="爱心"><defs><linearGradient id="th1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f3b9cd"/><stop offset="100%" stop-color="#e884a8"/></linearGradient></defs><path d="M16 28s-11-6.6-11-14.2C5 9.2 7.9 6.5 11.3 6.5c2 0 3.8 1 4.7 2.6.9-1.6 2.7-2.6 4.7-2.6C24.1 6.5 27 9.2 27 13.8 27 21.4 16 28 16 28z" fill="url(#th1)"/><path d="M13 11c-1.6 0-3 1.3-3 3" stroke="rgba(255,255,255,0.55)" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>';
+const SVG_FAB = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+
+function topbar() {
+  return '<header class="topbar">'
+    + '<div class="topbar__title"><span class="topbar__heart">' + SVG_TOPHEART + '</span>'
+    + '<span class="topbar__anni"><span class="topbar__anni-label">在一起</span><span class="topbar__anni-days">412</span><span class="topbar__anni-unit">天</span></span></div>'
+    + '<div class="topbar__right"><span class="topbar__me"><img class="topbar__avatar" src="' + ME + '" alt=""></span></div>'
+    + '</header>';
+}
+
+/** 一张待办卡片（结构 = renderItem 的真实输出） */
+function card(t, opts) {
+  opts = opts || {};
+  const done = !!opts.done;
+  const cls = 'todo' + (done ? ' todo--done' : '') + (t.pinned && !done ? ' todo--pinned' : '')
+    + (t.rarity ? ' todo--' + t.rarity : '');
+  let head = '';
+  if (t.pinned && !done) head += '<span class="todo__pin-icon">' + SVG_PIN + '</span>';
+  head += '<div class="todo__text">' + t.text + '</div>';
+  if (t.img) head += '<button class="todo__image-badge" type="button" aria-label="查看图片">' + SVG_IMG + '</button>';
+
+  let meta = '<img class="todo__avatar" src="' + t.av + '" alt="">'
+    + '<span class="todo__meta-text">' + (opts.meta || t.meta || '') + '</span>';
+  if (t.heart) meta += '<div class="todo__reactions"><span class="todo__reaction">' + SVG_HEART + '<span class="todo__reaction-count">1</span></span></div>';
+
+  return '<li class="' + cls + '" data-id="' + t.text + '">'
+    + '<button class="todo__check' + (done ? ' todo__check--done' : '') + '" type="button" role="checkbox" aria-checked="' + done + '">' + SVG_CHECK + '</button>'
+    + '<div class="todo__body"><div class="todo__headline">' + head + '</div><div class="todo__meta">' + meta + '</div></div>'
+    + (opts.watermark ? '<span class="todo__watermark">' + opts.watermark + '</span>' : '')
+    + (opts.stamp ? '<span class="todo__stamp">' + opts.stamp + '</span>' : '')
+    + '</li>';
+}
+const doneCard = (t, opts) => card(t, Object.assign({ done: true }, opts || {}));
+
+/** 紧凑完成行（时间轴 / 归档页） */
+function drow(t, time) {
+  return '<li class="drow"><span class="drow__tick">✓</span><span class="drow__t">' + t.text + '</span>'
+    + '<img class="drow__av" src="' + t.av + '" alt="">'
+    + '<span class="drow__time">' + (time || t.time || '') + '</span></li>';
+}
+const SVG_SPARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.1 6.1 6.1 2.1-6.1 2.1L12 19l-2.1-6.1L3.8 10.8l6.1-2.1z" fill="currentColor"/></svg>';
+const chap = (cn, sum, sticky) => '<div class="chap' + (sticky ? ' chap--sticky' : '') + '">'
+  + '<span class="chap__cn">' + cn + '</span><span class="chap__sum">' + sum + '</span><span class="chap__line"></span></div>';
+const band = (cn, en) => '<div class="band"><div class="band__cn">' + cn + '</div><div class="band__en">' + en + '</div><div class="band__rule"></div></div>';
+/** 图鉴条：12 格（4 rare + 4 epic + 4 legendary），已解锁亮、未解锁剪影（真实进度 5/12） */
+const stkStrip = (unlocked) => {
+  const kinds = [];
+  ['rare', 'epic', 'legendary'].forEach((k) => { for (let i = 0; i < 4; i++) kinds.push(k); });
+  return '<div class="stk">' + kinds.map((k, i) => i < unlocked
+    ? '<span class="stk__i stk__i--' + k + '">' + SVG_SPARK + '</span>'
+    : '<span class="stk__i stk__i--lock">' + SVG_SPARK + '</span>').join('')
+    + '<span class="stk__l">图鉴 ' + unlocked + ' / 12</span></div>';
+};
+const secH = (label, n, soft) => '<div class="sec' + (soft ? ' sec--soft' : '') + '"><span>' + label + '</span><span class="sec__n">· ' + n + '</span></div>';
+const archRow = (label, n) => '<button class="arch-row" type="button"><span>' + label + '</span><b>' + n + '</b><span>›</span></button>';
+const oldDone = () => OLD.map((t, i) => ({ text: t, av: i % 2 ? ME : TA, time: (4 + i) + 'd',
+  stamp: (i % 2 ? '大宝贝' : '小宝宝') + ' · 8/' + (9 + i) }));
+const ul = (inner) => '<ul class="todo-list">' + inner + '</ul>';
+
+/* ============================================================
+   各版「身体」（列表内容）
+   ============================================================ */
+const nowBody = ul(OPEN.map((t) => card(t)).join('') + DONE.map((t) => doneCard(t)).join('')
+  + oldDone().slice(0, 12).map((t) => doneCard(t)).join('')
+  + '<li style="text-align:center;font-size:12px;color:#7a6572;padding:14px 0">⋯ 下面还有 43 条已完成的（真实数据里还有 29 条超过 30 天）</li>');
+
+const q1aBody = ul(OPEN.map((t) => card(t)).join(''))
+  + '<div class="grp"><button class="grp__bar" type="button"><span>已完成</span><b>60</b><span class="grp__caret">▾</span></button>'
+  + '<div class="grp__body">' + ul(DONE.map((t) => doneCard(t)).join('')
+  + '<li style="text-align:center;font-size:12px;color:#7a6572;padding:12px 0">⋯ 其余 55 条点开可见（或跳归档页）</li>') + '</div></div>';
+
+const q1bBody = secH('未完成', 3) + ul(OPEN.map((t) => card(t)).join(''))
+  + secH('最近完成', 5, true) + ul(DONE.map((t) => doneCard(t)).join(''))
+  + archRow('更早完成的记录', 55);
+
+const q1cBody = '<div class="day-h"><span class="day-h__cn">今天</span><span class="day-h__en">Sep 16</span></div>'
+  + ul(OPEN.map((t) => card(t)).join('') + drow(DONE[0]))
+  + '<div class="day-h"><span class="day-h__cn">昨天</span><span class="day-h__en">Sep 15</span></div>'
+  + ul(drow(DONE[1], '21:10') + drow(DONE[2], '18:42'))
+  + '<div class="day-h"><span class="day-h__cn">更早</span><span class="day-h__en">Sep 13 —</span></div>'
+  + ul(DONE.slice(3).map((t) => drow(t)).join('') + oldDone().slice(0, 8).map((t) => drow(t)).join('')
+  + '<li style="text-align:center;font-size:12px;color:#7a6572;padding:12px 0">⋯ 还有 47 条</li>');
+
+const q1dBody = '<div class="digest">'
+  + '<div class="digest__c"><div class="digest__n">3</div><div class="digest__l">未完成</div></div>'
+  + '<div class="digest__c"><div class="digest__n">5</div><div class="digest__l">本周一起完成</div></div>'
+  + '<div class="digest__c"><div class="digest__n">60</div><div class="digest__l">累计完成</div></div></div>'
+  + ul(OPEN.map((t) => card(t)).join(''))
+  + archRow('全部完成记录', 60);
+
+function visualBody(opts) {
+  opts = opts || {};
+  const doneCardW = (t) => card(t, { done: true, watermark: t.time }); // 完成态带等宽体时间水印
+  const openHTML = ul(OPEN.map((t) => card(t)).join(''));
+  const doneHTML = ul(DONE.map(doneCardW).join('') + oldDone().slice(0, 6).map(doneCardW).join(''));
+  if (!opts.grouped) return openHTML + doneHTML;
+  return secH('未完成', 3) + '<div class="gwrap">' + openHTML + '</div>'
+    + secH('最近完成', 5, true) + '<div class="gwrap gwrap--muted">' + doneHTML + '</div>';
+}
+
+/* ---------- 第二批 · 结构（卡片一像素不动，只给时间加骨架） ---------- */
+
+/* 新① 时光章节：在时间上插章节头，每章写明这一章一起完成了多少 */
+const n1Body = secH('要做的', 3) + ul(OPEN.map((t) => card(t)).join(''))
+  + chap('今天', '已完成 1 件')
+  + ul(doneCard(DONE[0]))
+  + chap('昨天', '一起完成 2 件')
+  + ul(DONE.slice(1, 3).map((t) => doneCard(t)).join(''))
+  + chap('更早 · 九月', '一起完成 6 件')
+  + ul(DONE.slice(3).map((t) => doneCard(t)).join('') + oldDone().slice(0, 4).map((t) => doneCard(t)).join(''))
+  + chap('八月', '一起完成 51 件')
+  + ul(oldDone().slice(4).map((t) => doneCard(t)).join('')
+  + '<li style="text-align:center;font-size:12px;color:#7a6572;padding:14px 0">⋯ 八月还有 45 件，一直往下就是我们走过的那个月</li>');
+
+/* 新② 回忆长卷：唯一的改动是一条过渡带，之后一镜到底 */
+const n2Body = ul(OPEN.map((t) => card(t)).join(''))
+  + band('以下，是我们一起完成的 60 件', 'SINCE JUL 31 · 图鉴 5 / 12')
+  + ul(DONE.map((t) => doneCard(t)).join('') + oldDone().map((t) => doneCard(t)).join('')
+  + '<li style="text-align:center;font-size:12px;color:#7a6572;padding:14px 0">⋯ 还有 41 件（继续往下滑就好）</li>');
+
+/* 新③ 月度相册：已完成按月成页，页头带这个月的收获 */
+const n3Body = ul(OPEN.map((t) => card(t)).join(''))
+  + '<div class="chap"><span class="chap__cn">2026 · 9 月</span><span class="chap__sum">一起完成 12 件</span><span class="chap__line"></span></div>'
+  + '<div style="margin:-6px 0 14px">' + stkStrip(5) + '</div>'
+  + ul(DONE.map((t) => doneCard(t)).join('') + oldDone().slice(0, 3).map((t) => doneCard(t)).join(''))
+  + '<div class="chap"><span class="chap__cn">2026 · 8 月</span><span class="chap__sum">一起完成 48 件</span><span class="chap__line"></span></div>'
+  + ul(oldDone().slice(3).map((t) => doneCard(t)).join('')
+  + '<li style="text-align:center;font-size:12px;color:#7a6572;padding:14px 0">⋯ 八月还有 41 件</li>');
+
+/* 新④ 吸顶月份轴：滚到哪个月，月份就吸在顶栏下面（滚一下试试） */
+const n4Body = ul(OPEN.map((t) => card(t)).join(''))
+  + chap('九月', '一起完成 12 件', true)
+  + ul(DONE.map((t) => doneCard(t)).join('') + oldDone().slice(0, 3).map((t) => doneCard(t)).join(''))
+  + chap('八月', '一起完成 48 件', true)
+  + ul(oldDone().slice(3).map((t) => doneCard(t)).join('')
+  + '<li style="text-align:center;font-size:12px;color:#7a6572;padding:14px 0">⋯ 八月还有 41 件</li>');
+
+/* ---------- 第二批 · 视觉（全部强化卡片，不动信息与位置） ---------- */
+const visualNew = () => ul(OPEN.map((t) => card(t)).join('') + DONE.map((t) => doneCard(t)).join('')
+  + oldDone().slice(0, 5).map((t) => doneCard(t)).join(''));
+/** 集章册：每张完成卡都带印章（普通款是"谁 · 日期"，隐藏款是"✦ 贴纸名 序号"） */
+const stampedBody = () => ul(OPEN.map((t) => card(t)).join('')
+  + DONE.map((t) => doneCard(t, { stamp: t.stamp })).join('')
+  + oldDone().slice(0, 5).map((t) => doneCard(t, { stamp: t.stamp })).join(''));
+
+const recBody = '<div class="digest" style="margin-bottom:22px">'
+  + '<div class="digest__c"><div class="digest__n">3</div><div class="digest__l">未完成</div></div>'
+  + '<div class="digest__c"><div class="digest__n">5</div><div class="digest__l">本周完成</div></div>'
+  + '<div class="digest__c"><div class="digest__n">60</div><div class="digest__l">累计完成</div></div></div>'
+  + secH('未完成', 3) + '<div class="gwrap">' + ul(OPEN.map((t) => card(t)).join('')) + '</div>'
+  + secH('最近完成', 5, true) + '<div class="gwrap gwrap--muted">' + ul(DONE.map((t) => doneCard(t)).join('')) + '</div>'
+  + archRow('全部完成记录 · 按月归档', 60);
+
+/* ============================================================
+   版本登记表（对比器、并排区、放大视图共用同一份）
+   ============================================================ */
+const CFG = {
+  now: { tag: '现状', tagCls: 'frame__tag--alt', variant: '', body: () => nowBody,
+    name: '现状 · 63 条全平铺',
+    desc: '3 条可做的藏在最上面，下面是 60 张「已完成、点不动、只划线」的卡片。你每天打开它、滚过它、然后关掉。',
+    meta: '<b>一屏可见</b> 8 条 ｜ <b>首屏可操作</b> 3 条（仅 4%）<br><b>改动面</b> —（对照基准）' },
+  q1a: { tag: '方案一', variant: '', body: () => q1aBody,
+    name: '折叠 · 已完成整段收起',
+    desc: '未完成照旧在最上面，已完成收进一根虚线折叠条，默认收起（框里那根条可以点，原位展开）。「完成 → 卡片滑进下面」的当下反馈还在。',
+    meta: '<b>首屏</b> 3 条 + 1 根条 ｜ <b>改动面</b> 小（DOM 包一层 + 折叠状态存 localStorage）<br><b>代价</b> 只是把坟场盖了块布，列表仍会随时间越积越多（除非展开时也懒渲染）' },
+  q1b: { tag: '方案二', variant: '', body: () => q1bBody,
+    name: '分离 · 双区 + 归档页',
+    desc: '主列表只保留「未完成 + 最近 7 天完成的」。更早的一律进归档页（复用回收站那套全屏列表 + 按月分组），主列表长度从此恒定，不再随时间增长。',
+    meta: '<b>首屏</b> 8 条，恒定为 8 条 ｜ <b>改动面</b> 中（多一个归档页 + 路由）<br><b>代价</b> 想看「上个月做了什么」要多点一次 ｜ <b>收益</b> 顺手把路线图里 P2 的「已完成归档」做掉' },
+  q1c: { tag: '方案三', variant: '', body: () => q1cBody,
+    name: '变薄 · 按天分组 + 完成项转细行',
+    desc: '不隐藏任何数据，靠「变薄」降噪：未完成用卡片，已完成压成 35px 的细行（约卡片的 40% 高），按今天/昨天/更早分组。一屏能看约 19 行，且自带「我们一起做过什么」的叙事感。',
+    meta: '<b>首屏</b> 3 条卡片 + 约 17 条细行 ｜ <b>改动面</b> 中大（分组渲染 + 细行是新的渲染分支）<br><b>代价</b> 细行点击区只有 35px（需补长按菜单入口）；分组要按 completed_at 排，且它是新的一层视觉语言' },
+  q1d: { tag: '方案四', variant: '', body: () => q1dBody,
+    name: '变数字 · 摘要 + 一键归档',
+    desc: '把「已完成」从列表项降级成统计数字：顶部一张「未完成 3 · 本周完成 5 · 累计 60」摘要卡，下面只列未完成，已完成只剩一行入口。信息密度最高、最安静。',
+    meta: '<b>首屏</b> 4 条（含摘要卡）｜ <b>改动面</b> 中（摘要统计 + 归档页）<br><b>代价</b> 完成一条后「它去哪了」的反馈消失，得靠动画补（卡片飞出 → 数字 +1）｜ <b>收益</b> 每天打开都有新数字，把平坦列表换成会变的摘要' },
+  quiet: { tag: 'Ⅰ', variant: 'fv-quiet', body: () => visualBody(),
+    name: 'Quiet List · 去卡片化',
+    desc: '删掉边框、阴影、圆角、卡片底色 —— 只剩「行 + 一条细分隔线」。勾选框回到左侧、22px、始终可见（完成态也在，点它就是撤销完成）。',
+    meta: '<b>一屏</b> 9 条（实测单条 74px）｜ <b>改动面</b> 纯 CSS（结构不动）<br><b>还能更密</b> 把元信息那一行收掉 → 53px → 一屏 12 条<br><b>代价</b> 与现有「暖奢纸片」调性有断裂感，卡片上的隐藏款渐变背景会失去承载物（需给稀有款单独的行内标记）' },
+  edit: { tag: 'Ⅱ', variant: 'fv-edit', body: () => visualBody(),
+    name: 'Editorial · 杂志排版',
+    desc: '借已确立的字体三轨：中文衬线放到 21px、行高 1.6，时间戳用等宽体；未完成是「正文」，已完成降为 15px 的「注脚」，中间用日期 overline 与发丝线分隔。像在读一页日记。',
+    meta: '<b>一屏</b> 7 条（实测单条 95px，比现状还疏）｜ <b>改动面</b> 纯 CSS + 日期 overline<br><b>代价</b> 密度没有提升，收益全在情绪 ｜ <b>收益</b> 情感浓度最高的一版，最贴合「有爱」的品牌定位' },
+  paper: { tag: 'Ⅲ', variant: 'fv-paper', body: () => visualBody(),
+    name: 'Paper 2.0 · 材质与仪式',
+    desc: '保留卡片形态但把材质做「贵」：双层暖影 + inset 白高光（纸的厚度）+ 左侧状态色书脊；完成瞬间对勾「盖章」回弹、卡片压平并浮出一枚等宽体的完成时间水印。框里点勾试试。',
+    meta: '<b>一屏</b> 7 条（实测单条 93px）｜ <b>改动面</b> 纯 CSS + 一个 class 的动画<br><b>代价</b> 结构没变，所以「质的飞跃」来自冲击力而非效率 ｜ <b>优势</b> DOM 结构零改动，E2E 风险最低，可独立先上' },
+  group: { tag: 'Ⅳ', variant: 'fv-group', body: () => visualBody({ grouped: true }),
+    name: 'Inset Grouped · 容器化',
+    desc: '从「N 张卡片」变成「一张大卡装 N 行」（iOS 设置页那种 inset grouped）：外层一张圆角大卡 + 内部行分隔线，行内不再有独立阴影。勾选框回左侧、始终可见。',
+    meta: '<b>一屏</b> 10 条（实测单条 69px，四版里最密的卡片式方案）｜ <b>改动面</b> 纯 CSS（需给列表包一层容器 div）<br><b>代价</b> 稀有款（隐藏款）不能再靠「整张卡换渐变底」表达 ｜ <b>收益</b> 与任何分区方案天然契合（未完成组 / 已完成组两张卡），密度与质感双升' },
+  /* ===== 第二批 · 结构（卡片一像素不动） ===== */
+  n1: { tag: '新①', variant: '', body: () => n1Body,
+    name: '时光章节 · 给时间加骨架',
+    desc: '卡片一像素不动。未完成区加一个小标题「要做的」（否则「今天的待办」会出现在「今天」章节头之上，读不通），下面按完成时间分章：今天 / 昨天 / 更早 · 九月 / 八月，各章写明一起完成了多少件。往下滑不再是刷列表，而是翻页。',
+    meta: '<b>信息损失</b> 0（60 件全部在原位）｜ <b>改动面</b> 小：render() 里按时间插分隔节点<br><b>收益</b> 长列表获得结构感，章节小计让每个月的收获被看见 ｜ <b>已定</b> 不做贴纸小计（口径有歧义）' },
+  n2: { tag: '新②', variant: '', body: () => n2Body,
+    name: '回忆长卷 · 只加一条过渡带',
+    desc: '改动最小的版本：未完成之后放一条过渡带「以下，是我们一起完成的 60 件」，然后一镜到底。不分区、不收起、不搬家 —— 只是告诉用户「下面这段是回忆，慢慢滑」。',
+    meta: '<b>信息损失</b> 0 ｜ <b>改动面</b> 极小（渲染时插一个节点）<br><b>收益</b> 用一句话把「往下滑」从被迫变成想看 ｜ <b>代价</b> 长列表仍然长，没有月份定位' },
+  n3: { tag: '新③', variant: '', body: () => n3Body,
+    name: '月度相册 · 按月成页',
+    desc: '已完成按月份成「相册页」：页头是「2026 · 9 月」+ 件数，并把图鉴进度（12 格，已解锁亮、未解锁剪影）放在当页 —— 滑下去像翻相册，顺带看到自己集到第几张。',
+    meta: '<b>信息损失</b> 0 ｜ <b>改动面</b> 中：按月分组 + 图鉴条（数据已有：stickers 表 5/12）<br><b>收益</b> 把图鉴从顶栏二级入口拉进主列表，收集感直接出现在滚动路径上 ｜ <b>代价</b> 需要按月聚合 completed_at' },
+  n4: { tag: '新④', variant: '', body: () => n4Body,
+    name: '吸顶月份轴 · 滑到哪都知道',
+    desc: '月份标题吸顶 —— <b>滚一下这个框</b>，标题会停在顶栏下面。像通讯录的字母索引：滑得再深也知道自己在哪一年哪一月，长列表因此有了坐标。',
+    meta: '<b>信息损失</b> 0 ｜ <b>改动面</b> 小：章节头 + 一个 position: sticky<br><b>收益</b> 解决长卷唯一的真问题——迷失位置 ｜ <b>代价</b> 顶栏 + 吸顶头同时占约 100px' },
+
+  /* ===== 第二批 · 视觉（全部强化卡片，不动信息与位置） ===== */
+  light: { tag: '新Ⅰ', variant: 'fv-light', body: () => visualNew(),
+    name: '纸与光 · 新纸 vs 晒过的纸',
+    desc: '未完成是「新纸」（白、浮起），已完成是「晒过的纸」（暖一度、压平、微微内凹）—— 尺寸、信息、位置全部不动，只用材质说「这是过去时」。背景铺一层柔光，稀有款渐变在暖底上更跳。',
+    meta: '<b>信息损失</b> 0（完成卡与未完成卡同尺寸同信息）｜ <b>改动面</b> 纯 CSS<br><b>收益</b> 两种状态一眼可分，而卡片一个都没变小 ｜ <b>代价</b> 材质差较弱，需要滑一屏才感觉出来' },
+  letter: { tag: '新Ⅱ', variant: 'fv-letter', body: () => visualNew(),
+    name: '信笺 · 一张被读过的信',
+    desc: '卡片变信纸：淡横纹 + 衬线正文 + 更柔的圆角，完成的像一封被读过的信（略降透明度）。稀有款保留渐变底，等于信纸上的一枚彩印。',
+    meta: '<b>信息损失</b> 0 ｜ <b>改动面</b> 纯 CSS<br><b>收益</b> 情感浓度最高的一版，最贴「有爱」 ｜ <b>代价</b> 横纹对小字号不友好，需实测 7 字短句的可读性' },
+  stamp: { tag: '新Ⅲ', variant: 'fv-stamp', body: () => stampedBody(),
+    name: '印章收藏 · 往下滑 = 翻集章册',
+    desc: '卡片材质完全不动，只在每张完成卡右下加一枚完成印章：普通款是「谁 · 日期」，隐藏款用稀有度配色 + 图鉴序号（✦ 初心 1/4）。滑下去变成翻自己的集章册。',
+    meta: '<b>信息损失</b> 0 ｜ <b>改动面</b> 小：卡片加一个绝对定位子元素<br><b>收益</b> 直接强化盲盒，且把「完成」这件事变成可收集的痕迹 ｜ <b>代价</b> 右下角多一个元素，卡片高度要留 12px' },
+  air: { tag: '新Ⅳ', variant: 'fv-air', body: () => visualNew(),
+    name: '大留白 · 稀有款成为唯一强色块',
+    desc: '去掉边框与阴影，靠底色与更大的间距分层：未完成是白卡、已完成是极淡粉卡。留白变大后，稀有款的渐变成为画面里唯一的强色块 —— 惊喜感反而被放大。',
+    meta: '<b>信息损失</b> 0 ｜ <b>改动面</b> 纯 CSS<br><b>收益</b> 慢下来的气质，且不牺牲任何呈现 ｜ <b>代价</b> 密度更低（一屏 6 条），滑得更久 —— 按你说的「滑就滑吧」，这是可以接受的交换' },
+
+  rec: { tag: '推荐', tagCls: 'frame__tag--rec', variant: 'fv-group fv-rec', body: () => recBody,
+    name: '摘要 + 双区组 + 容器化材质',
+    desc: '第一屏恒定为「3 条可做 + 5 条刚做完 + 1 行归档入口」，不用滚。未完成组是纸白高光卡，已完成组是压平的淡底卡 —— 两种状态在视觉上是两个物种，而不是同一种卡片改了个颜色。',
+    meta: '<b>首屏</b> 9 个元素、0 次滚动 ｜ <b>改动面</b> 中：state.js 排序 + app.js render() 分组渲染 + 新增归档页 + CSS<br><b>硬要求</b> 完成态必须保留可见的撤销入口（现在藏成 opacity:0，只能长按找「撤销完成」）' },
+};
+
+/* ============================================================
+   渲染
+   ============================================================ */
+/** 说明块（tag + 名称 + 一句话 + 改动面） */
+function capHTML(cfg) {
+  return '<span class="frame__tag ' + (cfg.tagCls || '') + '">' + cfg.tag + '</span>'
+    + '<div class="frame__name">' + cfg.name + '</div>'
+    + '<div class="frame__desc">' + cfg.desc + '</div>'
+    + '<div class="frame__meta">' + cfg.meta + '</div>';
+}
+const ALL = Object.keys(CFG).map((k) => Object.assign({ id: k }, CFG[k]));
+const byId = (id) => ALL.find((c) => c.id === id);
+const frameOf = (id) => '<div class="frame"><div class="frame__screen ' + byId(id).variant + '">'
+  + '<div class="frame__scroll">' + topbar() + '<main class="container">' + byId(id).body() + '</main></div>'
+  + '<button class="fab" type="button" aria-label="添加待办">' + SVG_FAB + '</button></div>'
+  + '<div class="frame__cap">' + capHTML(byId(id))
+  + '<button class="frame__zoom" type="button" data-zoom="' + id + '">⤢ 放大看这一版</button></div></div>';
+
+/* 并排区 */
+document.getElementById('frames-now').innerHTML = ['now'].map(frameOf).join('');
+document.getElementById('frames-newq1').innerHTML = ['n1', 'n2', 'n3', 'n4'].map(frameOf).join('');
+document.getElementById('frames-newq2').innerHTML = ['light', 'letter', 'stamp', 'air'].map(frameOf).join('');
+document.getElementById('frames-q1').innerHTML = ['q1a', 'q1b', 'q1c', 'q1d'].map(frameOf).join('');
+document.getElementById('frames-q2').innerHTML = ['quiet', 'edit', 'paper', 'group'].map(frameOf).join('');
+document.getElementById('frames-rec').innerHTML = ['rec'].map(frameOf).join('');
+
+/* ============================================================
+   原地切换对比器
+   ============================================================ */
+const GROUPS = [
+  { label: '基准', ids: ['now'] },
+  { label: '第二批 · 结构（改版推荐）', ids: ['n1', 'n2', 'n3', 'n4'] },
+  { label: '第二批 · 视觉（改版推荐）', ids: ['light', 'letter', 'stamp', 'air'] },
+  { label: '第一批 · 收起/变薄（有冲突）', ids: ['q1a', 'q1b', 'q1c', 'q1d'] },
+  { label: '第一批 · 视觉（有冲突）', ids: ['quiet', 'edit', 'paper', 'group'] },
+  { label: '旧组合', ids: ['rec'] },
+];
+const SWITCHES = [
+  { id: 'noMeta', label: '隐藏元信息行', hint: '把「小宝宝 · 今天 09:12」整行去掉 —— 密度提升最大的一步' },
+  { id: 'dense', label: '行间距收紧', hint: '每条再压 8px，换取一屏多放 1 条' },
+];
+let current = 'n1';
+const active = { noMeta: false, dense: false };
+
+function extraClass() {
+  return (active.noMeta ? ' sw-no-meta' : '') + (active.dense ? ' sw-dense' : '');
+}
+function render() {
+  const cfg = byId(current);
+  document.getElementById('cmp-frame').innerHTML =
+    '<div class="frame"><div class="frame__screen ' + (cfg.variant || '') + extraClass() + '">'
+    + '<div class="frame__scroll">' + topbar() + '<main class="container">' + cfg.body() + '</main></div>'
+    + '<button class="fab" type="button" aria-label="添加待办">' + SVG_FAB + '</button></div></div>';
+  const on = SWITCHES.filter((s) => active[s.id]).map((s) => s.label);
+  document.getElementById('cmp-side').innerHTML = capHTML(cfg)
+    + (on.length ? '<div class="cmp__hint"><b>已叠加开关：</b>' + on.join(' + ') + '</div>' : '')
+    + '<div class="cmp__hint">框里的圆勾<b>可以点</b>（真的会打勾 / 取消，Paper 版有盖章动效）；Q1 方案一的折叠条<b>可以点</b>；面板本身就是可滚动的 —— 滚一下能看到已完成那 60 条的去向。<br>右下角「⤢ 放大」按钮把当前这版铺满全屏（844px 高，等于 iPhone 14 的一屏）。</div>'
+    + '<button class="frame__zoom" type="button" data-zoom="' + cfg.id + '" style="margin-top:14px">⤢ 放大当前这一版</button>';
+  // 按钮态
+  document.querySelectorAll('#cmp-bar .chip[data-cfg]').forEach((b) => {
+    b.classList.toggle('chip--on', b.dataset.cfg === current);
+  });
+  document.querySelectorAll('#cmp-bar .chip[data-sw]').forEach((b) => {
+    b.classList.toggle('chip--on', !!active[b.dataset.sw]);
+  });
+}
+
+document.getElementById('cmp-bar').innerHTML = GROUPS.map((g) =>
+  '<div class="cmp__row"><span class="cmp__rowl">' + g.label + '</span>'
+  + g.ids.map((id) => '<button class="chip" type="button" data-cfg="' + id + '">' + byId(id).name + '</button>').join('')
+  + '</div>').join('')
+  + '<div class="cmp__row"><span class="cmp__rowl">版式开关</span>'
+  + SWITCHES.map((s) => '<button class="chip" type="button" data-sw="' + s.id + '">' + s.label + '</button>').join('')
+  + '</div>';
+render();
+
+/* ============================================================
+   放大视图
+   ============================================================ */
+const zoomEl = document.getElementById('zoom');
+function openZoom(id) {
+  const cfg = byId(id);
+  document.getElementById('zoom-frame').innerHTML =
+    '<div class="frame"><div class="frame__screen ' + (cfg.variant || '') + '">'
+    + '<div class="frame__scroll">' + topbar() + '<main class="container">' + cfg.body() + '</main></div>'
+    + '<button class="fab" type="button" aria-label="添加待办">' + SVG_FAB + '</button></div></div>';
+  document.getElementById('zoom-cap').innerHTML = capHTML(cfg)
+    + '<div class="frame__meta" style="border:none;padding:0;margin-top:14px">点框里的圆勾可以打勾 / 取消；Esc 或右上角关闭。</div>';
+  zoomEl.hidden = false;
+}
+function closeZoom() { zoomEl.hidden = true; document.getElementById('zoom-frame').innerHTML = ''; }
+document.getElementById('zoomClose').addEventListener('click', closeZoom);
+zoomEl.addEventListener('click', (e) => { if (e.target === zoomEl) closeZoom(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeZoom(); });
+
+/* ============================================================
+   交互总入口（水印/折叠/切换/放大/打勾）
+   ============================================================ */
+document.addEventListener('click', (e) => {
+  const chipCfg = e.target.closest('.chip[data-cfg]');
+  if (chipCfg) { current = chipCfg.dataset.cfg; render(); return; }
+  const chipSw = e.target.closest('.chip[data-sw]');
+  if (chipSw) { active[chipSw.dataset.sw] = !active[chipSw.dataset.sw]; render(); return; }
+  const zoomBtn = e.target.closest('[data-zoom]');
+  if (zoomBtn) { openZoom(zoomBtn.dataset.zoom); return; }
+
+  const chk = e.target.closest('.todo__check');
+  if (chk) {
+    const li = chk.closest('.todo');
+    const nowDone = !li.classList.contains('todo--done');
+    li.classList.toggle('todo--done', nowDone);
+    chk.classList.toggle('todo__check--done', nowDone);
+    chk.setAttribute('aria-checked', String(nowDone));
+    li.classList.remove('is-stamped');
+    if (nowDone) { void li.offsetWidth; li.classList.add('is-stamped'); }
+    return;
+  }
+  const bar = e.target.closest('.grp__bar');
+  if (bar) bar.closest('.grp').classList.toggle('grp--collapsed');
+});
+
+/* ============================================================
+   实施计划文本
+   ============================================================ */
+document.getElementById('plan').innerHTML = [
+  '<p><b>建议的实施顺序</b>（每步独立可发布、可回滚，符合「一次只发一类改动」）：</p>',
+  '<ol style="line-height:2;padding-left:22px;margin:10px 0">',
+  '<li><b>先修缺陷</b>（约 0.5 天，纯 CSS）：完成态的复选框从 <code>opacity:0</code> 改为可见的「撤销完成」入口。这是现网真实的可发现性问题，不依赖任何方案选择。</li>',
+  '<li><b>视觉一版</b>（1 天，纯 CSS，Ⅲ Paper 2.0 或 Ⅳ 容器化）：只动视觉、不动结构，装到你手机上用一周，看新调性是否成立。</li>',
+  '<li><b>元信息降级</b>（半天，纯 CSS）：把「创建者 · 时间」从独立一行收进标题行或直接省掉（对比器里那个「隐藏元信息行」开关就是它的效果）。这是密度提升最大的一步。</li>',
+  '<li><b>Q1 的折叠或双区</b>（1～2 天）：改 <code>state.js</code> 的 <code>sortTodos</code> 与 <code>app.js</code> 的 <code>render()</code>，把已完成分段渲染。折叠状态存 localStorage。</li>',
+  '<li><b>归档页 + 摘要数字</b>（1～2 天）：复用 <code>trash.js</code> 的全屏列表样式；摘要数字由前端从已加载的 todos 算，不需要新表、不需要新埋点。</li>',
+  '</ol>',
+  '<p style="margin-top:18px"><b>三条必须一起处理的工程约束（否则会踩在已有测试上）：</b></p>',
+  '<ol style="line-height:2;padding-left:22px;margin:10px 0">',
+  '<li><b>E2E 会红</b>：<code>scripts/test_undo_complete.py</code> 与 <code>test_trash.py</code> 靠 <code>.todo</code>（带文本匹配）+ <code>.todo__check</code> 断言「完成→沉底→撤销」。若完成后卡片被 <code>display:none</code> 收起，<code>count()</code> 仍能找到、但 <code>click()</code> 会因不可见失败。<b>要么用「节点仍在 DOM、仅视觉收起」的实现，要么同 PR 一起改这两个用例</b>；发布前必须跑 <code>node scripts/run-web-e2e.mjs</code>。</li>',
+  '<li><b>隐藏款盲盒的视觉承载物</b>：稀有/史诗/传说三档现在是「整张卡片渐变底 + 四边彩边」（<code>.todo--rare/.todo--epic/.todo--legendary</code>）。容器化或去卡片化后这个表达没有落点 —— 需要为开奖决定一个替代载体（左侧书脊染色 / 行首四角星光 / 文字微渐变），否则盲盒这个核心卖点会被改版稀释掉。</li>',
+  '<li><b>数据从哪来（比加索引更值得先想清楚）</b>：<code>db.js</code> 的 <code>listTodos()</code> 现在一次性拉回全部未删除的待办（无分页、无上限），排序由 <code>(pinned, completed, created_at)</code> 完成，已有对应索引 <code>idx_todos_pinned_completed_created</code>。<b>好处是</b>：摘要数字、最近 7 天过滤、归档页全都能直接用内存里已有的 todos 算，<b>不需要新表、新字段、新查询</b>。「按天分组」需要 <code>completed_at</code>（字段已有、但没索引）—— 在 63 行的规模下<b>不需要加索引</b>，别提前加。</li>',
+  '</ol>',
+].join('');
+</script>
+</body>
+</html>
