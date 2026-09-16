@@ -171,6 +171,13 @@ jobs:
       - name: Check test DB schema (fail fast)
         run: cd app-e2e && node scripts/check-test-schema.mjs
 
+      # 同类快速失败（2026-09-16）：测试库的 RLS 被手工关过（安全顾问报
+      # `rls_disabled_in_public`）⇒ 未登录可读写业务数据。5 个 HTTP 请求就能判，
+      # 别等 15 分钟模拟器跑完。注意：本 workflow 直接 `npx wdio`（不走 npm test），
+      # 所以 package.json 的 pretest 在这里不生效，必须显式加这一步。
+      - name: Check test DB RLS (fail fast)
+        run: cd app-e2e && node scripts/check-rls.mjs
+
       - name: Enable KVM for emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
