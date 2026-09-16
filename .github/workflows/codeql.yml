@@ -71,7 +71,7 @@ jobs:
     steps:
       - name: Checkout
         # 固定到 v4.4.0 指向的 commit（tag 可变，SHA 不可变）；版本注释是给 Dependabot 读的
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Initialize CodeQL
         # ⚠️ init 与 analyze 必须**同版本**（2026-09-16 实测）：
