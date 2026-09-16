@@ -592,6 +592,15 @@
   - 血泪：测试项目的 `profiles` 曾被手工关掉 RLS 而无人发现（顾问报 `rls_disabled_in_public`）。
     根因是「建表靠粘贴一次、之后没有回读校验」；对策即是上面这条 + `scripts/test_rls_migration.mjs`
     （无凭据、用 PGlite 把 `supabase/migration-rls-hardening.sql` 真跑一遍）。
+- **函数执行权限同样收紧**（2026-09-16 补）：PostgreSQL 默认把函数 EXECUTE 授予 `PUBLIC`，
+  于是 public schema 里每个 `SECURITY DEFINER` 函数默认「拿到公开 anon key 的任何人可调用」。
+  实测踩中三个：`create_test_user`（**测试项目已删除**，anon 可调 ⇒ 任何人可建账号）、
+  `increment_login_count` / `consume_login_count`（anon 可调 ⇒ 未登录就能写 `profiles`）。
+  已按 `supabase/migration-rpc-execute-hardening.sql` 收回 PUBLIC/anon，只留 authenticated + service_role。
+  ⚠️ 两个必须记住的坑：`revoke ... from anon` 是**空动作**（权限来自 PUBLIC），必须 `from public, anon` 并补
+  `grant ... to authenticated`；反过来只写 `GRANT ... TO authenticated` 也不移除 PUBLIC 的默认授权。
+  机器判定：`app-e2e/scripts/check-rls.mjs` 会断言「anon 调 RPC 必须被拒」+「暴露面白名单」，
+  由 `admin/scripts/init-test-env.mjs` 第 ④ 步带进 CI required job。
 - Storage 写入权限限制为 authenticated
 - APK 更新包带 **sha256 校验**，防止篡改
 - 修改他人数据的 RPC（`consume_login_count`）用 `SECURITY DEFINER` + `search_path` 锁定，避免权限提升
@@ -754,7 +763,8 @@ npm run bundle:supabase
 | `scripts/test_pinch.mjs` | lightbox 双指缩放（mock Supabase，零生产写入） |
 | `scripts/test_sticker_wiggle.mjs` | 贴纸轻晃引导逻辑（上限 3 次） |
 | `scripts/test_rls_migration.mjs` | RLS 加固迁移（`supabase/migration-rls-hardening.sql`）：与仓库 SQL 逐字一致 + 在 PGlite（真 Postgres/WASM）里复现洞 → 修复 → 幂等；**不需要凭据** |
-| `app-e2e/scripts/check-rls.mjs` | 真实测试库的 RLS 生效自检（anon 探针，不写数据）；由 `admin/scripts/init-test-env.mjs` 第 ④ 步调用 ⇒ CI required job 里拦住 |
+| `app-e2e/scripts/check-rls.mjs` | 真实测试库的**安全自检**：表 RLS + RPC 执行权限 + PostgREST 暴露面白名单（anon 探针，不写数据）；由 `admin/scripts/init-test-env.mjs` 第 ④ 步调用 ⇒ CI required job 里拦住 |
+| `scripts/test_rpc_migration.mjs` | 函数权限加固迁移（`supabase/migration-rpc-execute-hardening.sql`）：PGlite 真 Postgres 里断言 anon 收干净 / authenticated 仍可用 / 注册触发器链路完好 / 幂等；**不需要凭据** |
 
 ### 12.3 术语表
 
