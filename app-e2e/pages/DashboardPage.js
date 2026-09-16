@@ -13,6 +13,18 @@
  */
 import { dismissKeyboard } from '../utils/device.js';
 
+/**
+ * 待办卡片上的圆形复选框 XPath
+ *
+ * 实测（getPageSource 校准）：自绘 checkbox（button role=checkbox）映射为
+ * android.widget.CheckBox，aria-label 落在 @text 而非 @content-desc，
+ * 值随状态在「标为已完成/未完成」间切换；DOM 里复选框位于同一条待办文本**之前**，
+ * 用 nearest preceding 定位到它。
+ */
+const checkboxXPath = (text) =>
+  `//*[@resource-id="todoList"]//*[@text="${text}"]` +
+  `/preceding::*[@text="标为已完成" or @text="标为未完成"][1]`;
+
 export class DashboardPage {
   constructor(driver) {
     this.driver = driver;
@@ -124,17 +136,28 @@ export class DashboardPage {
 
   /**
    * 点击指定待办的圆形复选框（切换完成/未完成）
-   * 实测（getPageSource 校准）：自绘 checkbox（button role=checkbox）映射为
-   * android.widget.CheckBox，aria-label 落在 @text 而非 @content-desc，
-   * 值随状态在「标为已完成/未完成」间切换；DOM 里复选框位于同一条待办文本之前，
-   * 用 nearest preceding 定位到它。
+   *
+   * ⚠️ v2.7.69 起：**已完成的卡片**复选框变为 opacity:0 + pointer-events:none，
+   * 「再点一下取消完成」这条入口被有意移除。所以本方法的语义是"点一下复选框"，
+   * **能不能生效取决于卡片当前状态** —— 调用方必须自己断言结果，不要假定它一定会翻转。
    */
   async toggleTodoByText(text) {
-    const checkbox = await this.driver.$(
-      `//*[@resource-id="todoList"]//*[@text="${text}"]` +
-        `/preceding::*[@text="标为已完成" or @text="标为未完成"][1]`
-    );
+    const checkbox = await this.driver.$(checkboxXPath(text));
     await checkbox.waitForDisplayed({ timeout: 10000 });
     await checkbox.click();
+  }
+
+  /**
+   * 该待办当前是否被标记为已完成（读复选框的无障碍标签）
+   *
+   * 判据：已完成时复选框的 aria-label 变成「标为未完成」—— 标签描述的是"点它会怎样"，
+   * 所以**已完成 = 标签是「标为未完成」**（容易读反，这里写死判据）。
+   * 用存在性探测而不是先拿句柄再读属性：列表重渲染会让句柄瞬间陈旧（见 hasTodo 注释）。
+   */
+  async isTodoMarkedDone(text, timeout = 5000) {
+    const el = await this.driver.$(
+      `//*[@resource-id="todoList"]//*[@text="${text}"]/preceding::*[@text="标为未完成"][1]`
+    );
+    return await el.waitForExist({ timeout }).catch(() => false);
   }
 }

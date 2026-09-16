@@ -81,18 +81,28 @@ describe('APP 待办管理', () => {
     expect(rows[0].completed).toBe(false);
   });
 
-  it('点击复选框标记完成，再点取消完成（写库验证）', async () => {
+  it('点击复选框标记完成；取消完成走撤销 Toast（写库验证）', async () => {
     const seeded = await seedTodo(client, { userId, text: '标记完成-目标待办' });
 
     await relaunchAndLogin();
 
-    // 标记完成 → 轮询测试库确认 completed=true
+    // ① 点复选框 → 完成（轮询测试库确认 completed=true）
     await dashboardPage.toggleTodoByText(seeded.text);
     await waitForTodoCompleted(client, seeded.text, true);
+    // UI 侧同验一次：已完成 ⇒ 复选框的无障碍标签变成「标为未完成」
+    expect(await dashboardPage.isTodoMarkedDone(seeded.text)).toBe(true);
 
-    // 再点取消 → completed 回到 false，且条目仍在列表
-    await dashboardPage.toggleTodoByText(seeded.text);
+    // ② 取消完成 → 完成瞬间那条「撤销」Toast（v2.7.69 起，取消完成只剩两处入口：
+    //    这条 5 秒撤销 Toast、以及长按卡片菜单里的「撤销完成」）。
+    //
+    // ⚠️ 这里**曾经**是「再点一下复选框」—— v2.7.69 有意移除了那个入口（已完成卡片的复选框
+    //    变成 opacity:0 + pointer-events:none）。用例没跟着改，于是在 #59 之后连红 3 个 commit
+    //    （elementClick 命令返回成功、库里 completed 却回不到 false，两次重试都一样）。
+    const undo = await browser.$('//*[@text="撤销"]');
+    await undo.waitForDisplayed({ timeout: 8000 });
+    await undo.click();
     await waitForTodoCompleted(client, seeded.text, false);
+    expect(await dashboardPage.isTodoMarkedDone(seeded.text)).toBe(false);
     const visible = await dashboardPage.hasTodo(seeded.text);
     expect(visible).toBe(true);
   });

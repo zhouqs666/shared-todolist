@@ -704,6 +704,65 @@ input {
   padding: 0;
 }
 
+/* ===== 时光章节：给"完成的时间"加骨架（第二批 第 2 步）=====
+   设计约束：卡片是原子 —— 章节头只加一行标签，不动卡片尺寸/信息/位置。
+   不吸顶（已定决策，见 PLAN-time-chapters-paper2.md §八）：滑过八月那 47 条时没有坐标，
+   这是当时接受的代价；要补的话最便宜的是月内再切一层"周"，不是加吸顶。
+   卡片左右内距 16px，这里 4px 让标签的视觉左缘与卡片文字对齐（与 .todo 的 check 列同起点）。 */
+.tl-chap {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin: 30px 4px 12px;
+  /* 只在本节点**新建**时播一次：复用（重排）不会重播，所以 toggleComplete / 远端回声
+     触发的重渲染不会让整页章节闪一下（与 renderedIds 抑制卡片重播同一个道理） */
+  animation: tlChapIn 0.32s var(--ease) both;
+}
+.tl-chap__label {
+  font-size: 16.5px;
+  font-weight: 600;
+  color: var(--stone-900);
+  letter-spacing: 0.01em;
+}
+.tl-chap__sum {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--stone-500);
+  white-space: nowrap;
+}
+.tl-chap__line {
+  flex: 1;
+  min-width: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--color-border), transparent);
+}
+
+/* 未完成区小标题「要做的 · N」：与已完成章节区分 —— 更小更轻，像一行的引子。
+   它必须存在，否则「今天」章节头会紧跟在未完成卡片后面，读起来像"这些是今天的待办"。 */
+.tl-chap--open {
+  margin: 2px 4px 10px;
+}
+.tl-chap--open .tl-chap__label {
+  font-family: var(--font-en);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--stone-500);
+}
+.tl-chap--open .tl-chap__sum {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--rose-600);
+}
+
+@keyframes tlChapIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
 .todo-list__empty {
   text-align: center;
   color: var(--color-text-muted);

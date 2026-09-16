@@ -12,7 +12,7 @@
  *   - 跨域请求（Supabase API/Realtime/Storage）一律走网络，绝不缓存
  */
 
-const VERSION = 'v15'; // 热更新上线后递增，强制清理旧缓存
+const VERSION = 'v16'; // 热更新上线后递增，强制清理旧缓存
 const CACHE = 'todo-shell-' + VERSION;
 
 // 预缓存的核心资源（与实际 public/ 目录对齐）
@@ -26,6 +26,7 @@ const PRECACHE_URLS = [
   '/js/db.js',
   '/js/realtime.js',
   '/js/state.js',
+  '/js/timeline.js',
   '/js/theme.js',
   '/js/utils.js',
   '/js/update.js',

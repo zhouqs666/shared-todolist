@@ -13,6 +13,7 @@
 import { db } from './db.js';
 import { auth } from './auth.js';
 import { formatRelativeTime } from './utils.js';
+import { groupByLocalPeriod } from './timeline.js';
 import {
   getTodos,
   setTodos,
@@ -1253,6 +1254,34 @@ function setHeartExcited(on) {
 // 避免 toggleComplete / Realtime 回声等触发的重渲染让整列重新淡入（闪烁根因）
 const renderedIds = new Set();
 
+/** 未完成区小标题的章节 key（与 timeline.js 产出的 key 不会撞：那边是 day:/month: 前缀） */
+const OPEN_CHAPTER_KEY = '__open__';
+
+/** 新建章节头 <li>：**不带 data-id**，所以上面 existing Map（只认 .todo[data-id]）天然忽略它 */
+function createChapter(key, modifier) {
+  const li = document.createElement('li');
+  li.className = 'tl-chap' + (modifier ? ` ${modifier}` : '');
+  li.dataset.chapKey = key;
+  const label = document.createElement('span');
+  label.className = 'tl-chap__label';
+  const sum = document.createElement('span');
+  sum.className = 'tl-chap__sum';
+  const line = document.createElement('span');
+  line.className = 'tl-chap__line';
+  li.appendChild(label);
+  li.appendChild(sum);
+  li.appendChild(line);
+  return li;
+}
+
+/** 原地更新章节头文案；只在真的变了时写 DOM（避免每轮 render 触发无谓的重排） */
+function updateChapter(li, label, subtitle) {
+  const labelEl = li.querySelector('.tl-chap__label');
+  const sumEl = li.querySelector('.tl-chap__sum');
+  if (labelEl && labelEl.textContent !== label) labelEl.textContent = label;
+  if (sumEl && sumEl.textContent !== subtitle) sumEl.textContent = subtitle;
+}
+
 function render() {
   const todos = getTodos();
   if (todos.length === 0) {
@@ -1330,10 +1359,34 @@ function render() {
     }
   });
 
+  // 章节头复用池：与上面的 existing 同一个模式（每轮从 DOM 现读，不缓存跨轮状态）
+  // ⚠️ 章节头必须**参与同一次重排** —— 只"插进去"而不跟着 fragment 走，第二次 render
+  //    之后它们会全部堆在列表顶部、所有 todo 掉到下面（看起来就是「章节全错位」）。
+  //    触发方式很日常：完成一条、或对方端改一条，就会再 render 一次。
+  const chapterPool = new Map();
+  Array.from(todoListEl.querySelectorAll('.tl-chap[data-chap-key]')).forEach((el) => {
+    chapterPool.set(el.dataset.chapKey, el);
+  });
+  const usedChapters = new Set();
+
   // 按排序顺序更新/创建，并用 DocumentFragment 重排（移动而非重建，不触发动画）
   const frag = document.createDocumentFragment();
   let newCount = 0; // 本轮新建的卡片数（用于首屏阶梯入场）
-  todos.forEach((todo) => {
+
+  /** 取一个章节头（复用则原地改文案，新建才带动画），标记为「本轮用过」 */
+  const takeChapter = (key, label, subtitle, modifier) => {
+    usedChapters.add(key);
+    const el = chapterPool.get(key) || createChapter(key, modifier);
+    // 回写池子：同一个 key 在本轮被取第二次时复用同一个节点（否则会静默出现两个同名章节头）。
+    // 当前两个调用点的 key 天然唯一（'__open__' + groupByLocalPeriod 的 Map 键），
+    // 这一行是给后人加章节时的兜底。
+    chapterPool.set(key, el);
+    updateChapter(el, label, subtitle);
+    return el;
+  };
+
+  /** 把一个 todo 排进 fragment（复用节点原地更新 / 新建才带入场动画） */
+  const place = (todo) => {
     let el = existing.get(todo.id);
     if (el) {
       updateItem(el, todo); // 原地更新（无动画）
@@ -1346,7 +1399,28 @@ function render() {
       renderedIds.add(todo.id);
     }
     frag.appendChild(el);
+  };
+
+  // ① 未完成区：小标题「要做的 · N」。
+  //    没有它，下面「今天」章节头会紧跟在未完成卡片后面，读起来像"这些是今天的待办"。
+  const openTodos = todos.filter((t) => !t.completed);
+  if (openTodos.length > 0) {
+    frag.appendChild(takeChapter(OPEN_CHAPTER_KEY, '要做的', `· ${openTodos.length}`, 'tl-chap--open'));
+    openTodos.forEach(place);
+  }
+
+  // ② 已完成区：按完成时间分章（分组规则在 timeline.js —— 纯函数、有单测；
+  //    章节顺序与组内顺序都由它决定，这里只负责把节点按序排好）
+  groupByLocalPeriod(todos).forEach((chap) => {
+    frag.appendChild(takeChapter(chap.key, chap.label, chap.subtitle));
+    chap.todos.forEach(place);
   });
+
+  // 本轮不再出现的章节头必须移除（例：已完成项全被删掉），否则会留在列表里显示陈旧小计
+  chapterPool.forEach((el, key) => {
+    if (!usedChapters.has(key)) el.remove();
+  });
+
   todoListEl.appendChild(frag);
 }
 
