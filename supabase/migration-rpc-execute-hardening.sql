@@ -2,8 +2,9 @@
 -- 函数执行权限加固：把「未登录就能调 RPC」这类洞堵死（幂等，可重复执行）
 --
 -- 执行位置：目标项目 → Supabase Dashboard → SQL Editor → 全选粘贴 → Run
---   · 测试项目 loveListTest：建议执行（下面「执行记录」里有实测证据）
---   · 生产项目：建议执行（2026-09-16 的审计结果显示同样 anon 可执行）
+--   · 测试项目 loveListTest：**已执行（2026-09-16）**
+--   · 生产项目：**已执行（2026-09-16）**
+--   两边的回读结果与独立复验见文件末尾「执行记录」
 --
 -- ------------------------------------------------------------
 -- 起因（2026-09-16，从 RLS 漏洞顺线索查出来的同类问题）
@@ -138,15 +139,30 @@ select p.oid::regprocedure                                      as "函数",
 
 
 -- ============================================================
--- 执行记录（2026-09-16）
+-- 执行记录（2026-09-16，测试项目与生产项目**都执行了**本文件）
 --
 --   · 审计来源：从 RLS 告警顺线索查出来的同类问题（都是「默认权限 + 手工改过、没人回读」）
 --   · 测试项目：`create_test_user` 已删除（本文件不负责删除，它是 ad-hoc 调试函数、
 --     仓库与 git 全历史都查不到；仓库任何代码都没引用它 ⇒ 直接 DROP 无副作用）。
 --     删除后 PostgREST 暴露面只剩已登记的两个 RPC，`check-rls.mjs` 的白名单核对可以守住这条。
---   · 生产项目：审计显示 `handle_new_user()` / `increment_login_count()` /
---     `consume_login_count()` 三个函数的 `anon_可执行` 全为 true（与测试项目同源默认权限）；
---     生产**不存在** `create_test_user`。
+--   · 生产项目：不存在 `create_test_user`；其余三个函数的 `anon_可执行` 原为 true。
+--
+--   · 执行结果（两个项目一致，回读最后那条 SELECT）：
+--       | 函数                        | anon_可执行 | 登录用户_可执行 |
+--       | handle_new_user()           | false       | true            |
+--       | increment_login_count(uuid) | false       | true            |
+--       | consume_login_count(uuid)   | false       | true            |
+--     ACL 由 `=X/postgres | postgres=X/postgres | anon=X/postgres | authenticated=X/postgres`
+--     变为 `postgres=X/postgres | authenticated=X/postgres | service_role=X/postgres`
+--     —— 开头的 `=X/postgres`（PUBLIC）与 `anon=` 两条**都消失**了，这才是"真收干净"的准确形态；
+--     若只 revoke anon，ACL 里会仍留着 `=X/postgres`，anon 照旧可调（本文件头部有实测记录）。
+--
+--   · 独立复验（不看回读表格，而是重新用 anon 打一遍测试项目）：
+--     `node app-e2e/scripts/check-rls.mjs` → 9 项全绿、退出码 0：
+--       5 张表的 RLS + anon 读 profiles 0 行 + 两个 RPC 均 42501 + 暴露面白名单仅 2 个已登记函数。
+--     生产侧刻意**没有**用探针复验：那个调用形式上是个写请求，铁律一不允许拿生产做验证；
+--     生产只看只读的审计查询（上表）。
+--
 --   · 与 `migration-rls-hardening.sql` 的关系：那个管**表**（RLS 开关 + 策略），
 --     本文件管**函数**（EXECUTE 权限）。两件事必须都做，缺任一个「未登录」都还有路可走：
 --     表收紧后 anon 读不到任何 UUID，但 `increment_login_count` 依然可调（只是打不到具体行）。
