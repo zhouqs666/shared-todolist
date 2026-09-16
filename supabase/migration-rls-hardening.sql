@@ -2,8 +2,9 @@
 -- RLS 加固：把「表对全体公开」这类洞一次性堵死（幂等，可重复执行）
 --
 -- 执行位置：目标项目 → Supabase Dashboard → SQL Editor → 全选粘贴 → Run
---   · 测试项目 loveListTest：**已执行（2026-09-16）**，见文件末尾「执行记录」
---   · 生产项目：建议执行（幂等；对本项目的实际影响见文件末尾「预期影响」）
+--   · 测试项目 loveListTest：**已执行（2026-09-16，整份）**
+--   · 生产项目：**已执行（2026-09-16，只跑了「3.1 profiles」那一段）**
+--   两边的执行证据与回读结果都在文件末尾「执行记录」
 --
 -- ------------------------------------------------------------
 -- 背景（2026-09-16，来自 Supabase 安全顾问告警）
@@ -357,14 +358,14 @@ select c.relname                                  as "表名",
 --   profiles 从「RLS 关闭」变成「RLS 开启 + 仅 authenticated 可读」。
 --   对 E2E 无影响：测试脚本走 service_role / 登录后的会话，都不依赖 anon 读 profiles。
 --
--- 生产项目：
+-- 生产项目（2026-09-16 已按此执行）：
 --   ① 已在仓库 schema.sql 里声明过的表（profiles/todos/daily_notes/reactions）→ 策略重建后
 --      与现状**逐字一致**，唯一变化是 profiles 的 SELECT 收紧为 authenticated。
 --      已知消费方只有 `public/js/db.js` 的 listProfiles()/updateLastSeen()（都在登录后），
 --      故对 App 无可见影响；但它**确实**改变了「未登录能否读 profiles」，属需知会的变化。
---      ⚠️ 实测（2026-09-16，仅一次只读 GET）：生产 `profiles` 用 anon key 能读到行
---      ⇒ 生产仍在泄露两名用户的用户名/显示名/最后在线时间/打开计数给「拿到公开 anon key 的任何人」。
---      生产 `disable_signup=true`（已实测），所以不存在借注册放大成读写全库的路径。
+--      执行前实测（一次只读 GET）：生产 `profiles` 用 anon key 能读到行
+--      ⇒ 那时生产确实在把两名用户的用户名/显示名/最后在线时间/打开计数
+--        暴露给「拿到公开 anon key 的任何人」；收紧后同一探测返回 `[]`（见「执行记录」⑤）。
 --   ② app_versions / app_native_versions → 只确保 RLS 开着，策略不动。
 --   ③ 若本项目 public schema 下还有**别的不在仓库里**的表，而它恰好 RLS 关闭：
 --      本脚本会把它开启，且因为没有任何 policy，它将变成「只有 service_role 能访问」。
@@ -373,7 +374,7 @@ select c.relname                                  as "表名",
 
 
 -- ============================================================
--- 执行记录（2026-09-16，测试项目 loveListTest / fsmzgpkldwulmzlukvke）
+-- 执行记录（2026-09-16）：测试项目整份、生产项目只跑「3.1 profiles」
 --
 --   ① 修复前：anon 探针实测 `profiles` 返回 23503（穿过策略层）⇒ RLS 未生效；
 --      anon 直接读 profiles 能拿到 1 行 ⇒ 未登录可见。
@@ -387,6 +388,17 @@ select c.relname                                  as "表名",
 --      `node app-e2e/scripts/check-rls.mjs` → 5 张表全部 42501、anon 读 0 行，退出码 0
 --   ④ 附带修好的环境漂移：测试项目 `disable_signup` 由 false 改为 true（与生产一致）
 --
---   注意：本记录只覆盖**测试项目**。生产项目未执行（顾问只报了测试项目），
---   而其 `profiles` 的 SELECT 仍是旧的「对 PUBLIC 开放」——是否收紧见「预期影响」。
+--   ⑤ **生产项目（zyceucmmtstszdnugimn）同日执行**，但只跑了「3.1 profiles」那一段：
+--      执行前诊断（人工在 SQL Editor 跑，只读）：7 张表 `RLS 已开启` 全为 true ——
+--      即生产**没有** `rls_disabled_in_public` 这类洞（所以顾问只报了测试项目）；
+--      唯一异常是 profiles 的「适用角色 = {public}」（3 条策略都没写 `TO`）⇒
+--      未登录即可读两名用户的档案。既然其余表都符合仓库定义，就不必全量跑。
+--      执行后独立复验（只读 GET）：
+--        anon 读 profiles        1 行 → `[]`（HTTP 200 空数组）✅
+--        anon 读 todos/daily_notes/reactions/stickers 仍为 `[]`（未被误动）✅
+--      ⚠️ 「生产 authenticated 仍可读」**未直接实测**（手上没有生产账号密码）。
+--         依据是三条等价证据：测试项目收紧后 Admin E2E 在其上真跑全绿 +
+--         PGlite 按生产形态演练（anon 1→0 行、authenticated 仍 1 行）+ 代码路径核对
+--         （`public/js/app.js` 里 `listProfiles()` 位于 `getCurrentUser()` 之后，
+--           未登录先跳 login.html 并 return ⇒ 不存在登录前读 profiles 的调用）。
 -- ============================================================

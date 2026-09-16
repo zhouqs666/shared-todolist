@@ -115,6 +115,16 @@
   只要密码复用，这就等价于把账号贴在公网。**教训**：删掉文件里的值不够，历史提交里还有 ⇒
   发现即**先改密码**（让泄露值失效），再清理文件；且这类问题本该由 push protection 在推送时拦下（批次 D）。
 - 🔴 SQL 注入：本项目直连 PostgREST 风险低，但手写 SQL / RPC 函数要逐一检查。
+- 🔴 **函数权限：PostgreSQL 默认把函数的 EXECUTE 授予 `PUBLIC`**（2026-09-16 实测）
+  于是 public schema 里每个 `SECURITY DEFINER` 函数默认都是「拿到公开 anon key 的任何人可调用」——
+  而 anon key 是公开的（硬编码在客户端、随 APK 分发）。本次实测踩中三个：
+  `create_test_user`（anon 可调 ⇒ 任何人能在测试项目建账号，而在"有账号即可读写全部数据"的模型下
+  等于全库沦陷）、`increment_login_count` / `consume_login_count`（anon 可调 ⇒ 未登录就能写 `profiles`）。
+  两个必须记住的点：① `revoke ... from anon` 是**空动作**（权限来自 PUBLIC），必须
+  `from public, anon` **并补** `grant ... to authenticated`（漏了后半句，App 自己就调不动了）；
+  ② 只写 `GRANT ... TO authenticated` 同样不移除 PUBLIC 的默认授权 —— 看着像加固，其实没堵上。
+  验证：`node app-e2e/scripts/check-rls.mjs`（anon 调 RPC 必须 42501 + 暴露面白名单：多出任何函数都失败）
+  ／`node scripts/test_rpc_migration.mjs`（PGlite 真跑一遍权限迁移，含"注册触发器没被弄坏"）。
 - 🟡 输入校验：长度、类型、emoji、图片 MIME。
 - 🟡 Storage：`todo-attachments` 公开读 bucket 是否会泄露不该公开的内容。
 - 🟡 **供应链：本次是否新增了依赖？** 新增前先问「这个依赖值不值得引入」——维护状态、下载量、
