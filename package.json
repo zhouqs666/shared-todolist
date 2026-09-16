@@ -8,6 +8,8 @@
     "dev": "node --watch scripts/serve.mjs",
     "serve:test": "node scripts/serve-test.mjs",
     "check:test-env": "node scripts/check-test-env.mjs",
+    "check:rls": "node app-e2e/scripts/check-rls.mjs",
+    "test:rls-migration": "node scripts/test_rls_migration.mjs",
     "reset:test-db": "node scripts/reset-test-db.mjs",
     "bundle:supabase": "esbuild --bundle --format=esm --platform=browser --target=es2020 --minify --outfile=public/js/vendor/supabase-js.esm.js @supabase/supabase-js",
     "cap:sync": "cap sync",
@@ -34,6 +36,7 @@
   "devDependencies": {
     "@capacitor/android": "^8.4.2",
     "@capacitor/cli": "^8.4.2",
+    "@electric-sql/pglite": "^0.5.8",
     "@playwright/test": "^1.62.1",
     "esbuild": "^0.21.5",
     "playwright": "^1.62.1",

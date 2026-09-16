@@ -20,12 +20,20 @@ CREATE TABLE IF NOT EXISTS profiles (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- ⚠️ 2026-09-16 收紧：原策略是 `profiles_select_all ... FOR SELECT USING (true)`——
+--    没写 `TO ...` 等于对 PUBLIC（含未登录的 anon）开放，而 anon key 是公开的
+--    （硬编码在 public/js/supabase.js，随 APK/网页分发）⇒ 任何人可列举两人的
+--    用户名/显示名/最后在线时间/打开计数。现统一限定为 authenticated。
+--    已上线的项目需执行 supabase/migration-rls-hardening.sql 才会生效（这里只是权威定义）。
 DROP POLICY IF EXISTS "profiles_select_all" ON profiles;
-CREATE POLICY "profiles_select_all" ON profiles FOR SELECT USING (true);
+DROP POLICY IF EXISTS "profiles_select_auth" ON profiles;
+CREATE POLICY "profiles_select_auth" ON profiles FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "profiles_insert_self" ON profiles;
-CREATE POLICY "profiles_insert_self" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "profiles_insert_self" ON profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
 DROP POLICY IF EXISTS "profiles_update_self" ON profiles;
-CREATE POLICY "profiles_update_self" ON profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "profiles_update_self" ON profiles FOR UPDATE TO authenticated USING (auth.uid() = id);
+-- 刻意不建 DELETE 策略：手机端没有"删档案"功能，只有 service_role 能删
 
 -- 注册时自动填充 profiles（trigger）
 CREATE OR REPLACE FUNCTION handle_new_user()
