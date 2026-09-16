@@ -118,7 +118,7 @@ jobs:
           echo "✓ 输入校验通过：version=${VERSION} dry_run=${DRY_RUN}"
 
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Java 21
         # gradle 需要 JDK；21 与 build-test-apk 通道保持一致（两处不一致会得到
@@ -324,7 +324,7 @@ jobs:
     environment: production
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Java 21
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
