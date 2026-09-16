@@ -18,7 +18,7 @@
 
 import { loadEnv, requireSupabaseEnv } from './_lib-env.mjs';
 import { createClient } from '@supabase/supabase-js';
-import { computeDora, formatDoraReport } from './_lib-dora.mjs';
+import { computeDora, formatDoraReport, DORA_COLUMNS, BASE_COLUMNS } from './_lib-dora.mjs';
 import { writeFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
@@ -62,10 +62,9 @@ if (!Number.isFinite(days) || days <= 0) {
 loadEnv();
 const { url: SUPABASE_URL, key: SERVICE_KEY } = requireSupabaseEnv();
 
-const SELECT = 'version, released_at, enabled, commit_sha, commit_at, commit_dirty, '
-  + 'disabled_at, disabled_reason, disabled_is_incident';
-const SELECT_NATIVE = 'version_name, released_at, enabled, commit_sha, commit_at, commit_dirty, '
-  + 'disabled_at, disabled_reason, disabled_is_incident';
+// 列清单在 _lib-dora.mjs（与 normalizeRow 一一对应，且由 test_dora_migration.mjs 与真实 schema 对账）
+const SELECT = DORA_COLUMNS.web.join(', ');
+const SELECT_NATIVE = DORA_COLUMNS.native.join(', ');
 
 const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
@@ -81,9 +80,9 @@ async function fetchRows(table, select, fallbackSelect) {
 }
 
 const { rows: web, degraded: dw } = await fetchRows(
-  'app_versions', SELECT, 'version, released_at, enabled');
+  'app_versions', SELECT, BASE_COLUMNS.web.join(', '));
 const { rows: native, degraded: dn } = await fetchRows(
-  'app_native_versions', SELECT_NATIVE, 'version_name, released_at, enabled');
+  'app_native_versions', SELECT_NATIVE, BASE_COLUMNS.native.join(', '));
 
 if (dw || dn) {
   console.error('\n⚠️ 数据库还没有 DORA 元数据列（commit_sha / disabled_* ）。');

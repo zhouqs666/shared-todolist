@@ -18,11 +18,12 @@
 --   · 失败率/恢复时间只覆盖「本迁移之后被下线的版本」
 -- `dora-metrics.mjs` 会把可计算的样本量与总部署数一起打印出来（不假装覆盖全部历史）。
 --
--- ── 语义（下线的两个方向都要成立）────────────────────────────────
---   · `disabled_at IS NULL`  ⟺  `enabled = true`（未下线）
---   · `disabled_at IS NOT NULL` ⟺ `enabled = false`（已下线，且知道是何时/为何）
---   `rollback.mjs --restore` 会把这三列清回 NULL —— 保持上面这条不变式成立，
---   否则"恢复上线了但 disabled_at 还在"会让指标把已恢复的版本算成仍在故障状态。
+-- ── 语义（新写入要维持的不变式）──────────────────────────────────
+--   · `enabled = true`  ⟹  `disabled_at IS NULL`：恢复上线时必须把下线记录清掉，
+--     否则"已恢复的版本"会被指标继续算作故障状态（`rollback.mjs --restore` 负责清空）。
+--   · 反过来**不成立、也不该成立**：迁移前的老行就是 `enabled = false` 且 `disabled_at IS NULL`
+--     —— 它们不是"违规"，而是"无归因的历史数据"。报告会把它们单独列出来、不计入任何指标。
+--     （本迁移刻意不做回填，所以这类行会长期存在；断言"双向等价"会把自己的老数据判成错误。）
 
 alter table public.app_versions
   add column if not exists commit_sha           text,

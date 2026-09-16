@@ -26,6 +26,28 @@
 
 const MIN = 60 * 1000;
 
+/**
+ * 读版本表所需的列（**与 `normalizeRow` 一一对应**，由 `supabase/migration-dora-metrics.sql` 定义）。
+ *
+ * 为什么把列名放在库里而不是写在 CLI 的字符串里：`scripts/test_dora_migration.mjs` 要拿它
+ * 与**真实 schema**（PGlite 跑一遍迁移）对账 —— 列名写错在运行时只表现为"读不到数据"，
+ * 是那种不会报错、只会安静出错的类型。
+ */
+export const DORA_COLUMNS = {
+  web: ['version', 'released_at', 'enabled',
+    'commit_sha', 'commit_at', 'commit_dirty',
+    'disabled_at', 'disabled_reason', 'disabled_is_incident'],
+  native: ['version_name', 'released_at', 'enabled',
+    'commit_sha', 'commit_at', 'commit_dirty',
+    'disabled_at', 'disabled_reason', 'disabled_is_incident'],
+};
+
+/** 迁移未执行时的回落列（仍能算部署频率，其余指标显示"—"） */
+export const BASE_COLUMNS = {
+  web: ['version', 'released_at', 'enabled'],
+  native: ['version_name', 'released_at', 'enabled'],
+};
+
 /** 把一行数据库记录规整成计算用的形状（两条通道的列名不同，在这里归一） */
 export function normalizeRow(row, channel) {
   return {

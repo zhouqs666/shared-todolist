@@ -490,7 +490,7 @@
 | `commit_sha` | TEXT | 发布内容的来源 commit（回退包 = 旧 ref 的 sha）。`rollback.mjs`/`dora-metrics.mjs` 之外的读取方不存在 |
 | `commit_at` | TIMESTAMPTZ | 该 commit 的提交时间；`released_at − commit_at` = **DORA 前置时间** |
 | `commit_dirty` | BOOLEAN | 发布时工作区是否有未提交改动。`true` ⇒ 该行**不对应某个 commit 的精确内容**，前置时间统计会跳过它 |
-| `disabled_at` | TIMESTAMPTZ | 下线时刻（`rollback.mjs` 写入）。不变式：`disabled_at IS NULL ⟺ enabled = true` |
+| `disabled_at` | TIMESTAMPTZ | 下线时刻（`rollback.mjs` 写入）。**恢复上线时必须清回 NULL** —— 新写入维持的不变式是 `enabled=true ⟹ disabled_at IS NULL`（反向**不**成立：迁移前的老行就是「enabled=false 且无记录」，属无归因的历史数据，报告单独列出、不计入指标） |
 | `disabled_reason` | TEXT | 下线原因（`rollback.mjs --reason`） |
 | `disabled_is_incident` | BOOLEAN | 是否**事故**下线。只有 `true` 计入 DORA 变更失败率；`NULL` = 未归类（不计入，报告单独列出） |
 
