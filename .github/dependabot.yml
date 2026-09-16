@@ -1,6 +1,6 @@
 # Dependabot 版本更新（批次 D · 供应链安全）
 # ============================================================================
-# 与「Dependabot alerts / security updates」的区别（面试常被问，也是这里配置的立论）：
+# 与「Dependabot alerts / security updates」的区别（也是这里配置的立论）：
 #
 #   - alerts           ：**看得见**。仓库已有依赖出现 CVE 时告警（本仓库已开）
 #   - security updates ：**能止血**。针对已告警的 CVE 自动开 PR 升级（本仓库已开）

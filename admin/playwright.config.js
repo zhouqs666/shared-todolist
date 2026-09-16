@@ -10,7 +10,7 @@ const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:4173';
 /**
  * Playwright 配置（阶段 2：web 自动化测试）
  *
- * 设计要点（面试可讲）：
+ * 设计要点：
  * - POM 模式：用例只描述业务流，元素定位集中在 e2e/pages/
  * - webServer：自动 build + preview 起服务、跑完自动关（本地复用已有服务，CI 强制新起）
  * - 失败即留证：screenshot / trace / video 仅失败时保留（retain-on-failure）
