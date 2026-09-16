@@ -113,6 +113,22 @@
   ⇒ **把依赖全升到最新，也挡不住自己写出的漏洞**，两者不能互相替代。
   CI 里 actions 的固定策略见 F2 的供应链两条。
 
+### 维度 B 补充：「下线 / 失效」能力的自带要求（2026-09-16）
+
+- 🔴 **任何让某个东西"失效"的能力，必须同时给出一条可执行的 undo。**
+  反例（本仓库真实缺失过）：`rollback.mjs --native` 若只能把壳版本置 `enabled=false`，
+  而壳只有一行启用 —— 关掉之后没有任何脚本能恢复，只能手工写 SQL。
+  正例：`--restore` 一个开关撤销。**没有 undo 的"下线"不是止损能力，是单向陷阱。**
+- 🔴 **演练必须被证明是「状态中性」的**，而不是"跑完没报错"。
+  做法：变更前**逐字段**存基线（含 `released_at` 这类"看起来无关但决定排序"的列），
+  恢复后逐字段比对，打印"11 个字段完全一致"。
+  血泪点：本项目客户端的挑版逻辑是「enabled 里按 `released_at` 倒序取第一条」——
+  只比 `enabled` 字段会漏掉"released_at 被顺手动过 ⇒ 谁是最新变了"这类变化。
+- 🟡 **破坏性动作的后果要"先打出来"，而不是事后解释**：`--dry-run` 与真跑共用同一段后果计算，
+  所以预演看到的告警（如「已无任何启用版本 ⇒ 所有设备都不再收到壳更新提示」）与真跑一字不差。
+- 🟡 **未知参数必须报错退出**，不能静默忽略：`--nativ`（打错字）若被忽略会 fallback 到默认通道，
+  于是"想操作壳表"变成"操作了热更新表"。**手滑 + 默认值 = 改错表。**
+
 ### 维度 D：可维护性
 
 - 🟡 文件规模：单个文件是否过长？—— 现状 `app.js` 1598 行已偏大（已拆出 lightbox / anniversary / action-sheet / confetti-effects，新代码别继续堆回去）。
@@ -188,9 +204,13 @@
   **2026-09-15 补：这个缺口已经可以彻底关掉，不要再靠「逐块抽出来手跑」兜底** ——
   下个 shellcheck 静态二进制即可（无需 brew）：
   ```bash
-  curl -sSfL -o sc.tar.xz https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.x86_64.tar.xz
-  tar -xJf sc.tar.xz && cp shellcheck-v0.11.0/shellcheck /tmp/shellcheck && chmod +x /tmp/shellcheck
-  PATH="/tmp:$PATH" actionlint -verbose .github/workflows/*.yml   # verbose 里不再出现 "was disabled"
+  # 装到 ~/.local/bin 而不是 /tmp：/tmp 会被系统或工具清掉，清掉之后 actionlint 又会**静默退化**
+  # 成「不查 run 块」—— 而这个退化的表现恰好就是「本地绿、CI 红」。
+  # 把工具装在会被清理的地方，等于给这个坑装了个定时器（2026-09-16 实测被清过）。
+  mkdir -p ~/.local/bin
+  curl -sSfL -o /tmp/sc.tar.xz https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.x86_64.tar.xz
+  tar -xJf /tmp/sc.tar.xz -C /tmp && mv /tmp/shellcheck-v0.11.0/shellcheck ~/.local/bin/ && chmod +x ~/.local/bin/shellcheck
+  PATH="$HOME/.local/bin:$PATH" actionlint -verbose .github/workflows/*.yml   # verbose 里不再出现 "was disabled"
   ```
   **代价与收益的实测对照**：装之前，我新写的 workflow 本地 actionlint **exit 0**、CI 上却 5 秒红
   （`SC2012: Use find instead of ls`）—— 一次 push 白跑。装之后同一份文件本地立刻报出全部 run 块问题。
@@ -352,6 +372,19 @@
   · 三个只读 workflow 补显式 `permissions: contents: read`
   · 顺带确认：`secret_scanning_non_provider_patterns` / `validity_checks` **API 不接受**（第二次实测，
     返回 200 但值仍为 disabled）⇒ 需人工在 Settings → Code security 勾选，已列入待办
+[2026-09-16] 通道 B 下线能力 + 真实演练（`rollback.mjs --native / --restore / --dry-run`）：🔴0 🟡0 → 通过
+  · 与业主并行会话的术语对齐：`#41` 把「回滚」重定义为两层（**下线/止损** = `rollback.mjs`；
+    **真回滚/恢复** = `release.mjs --from-git`），但两者当时**都只覆盖 web**。
+    本批按该术语体系给通道 B 补上「下线」这一层，并在文档中明确「通道 B 的真回滚尚未实现」。
+  · 真实演练（写生产，两次；均为业务动作，见铁律一「适用范围」）：
+    下线 `2.1.28 --native` → **反向验证**（`verify-apk-release.mjs` 无参以「线上没有任何 enabled
+    壳版本」失败 ⇒ 效果在客户端视角可见，不是脚本自报）→ `--restore` 恢复 → 正向验证通过 →
+    **逐字段比对基线：11 个字段完全一致（含 `released_at`）** ⇒ 演练状态中性。
+  · 只读/负向用例：`--help` exit 0；**无参数 exit 1**（原脚本行为，曾被我改成 0 后自查修回 ——
+    按退出码判断成败的包装脚本会把"忘传参数"当成"下线完成"）；格式错 / 版本不存在 / 未知参数
+    全部 exit 1 且报对原因；`--dry-run` 不写生产。
+  · 顺带结清 `_lib-env.mjs` 头部挂了很久的待办：`rollback.mjs` 迁移（当初留的理由正是
+    "迁移应当配一次真实下线演练一起做"，本批配着做了）。
 [2026-09-15] 批次 D 收尾：实测证据 + 一处**文档推断被推翻**
   · **正向**：PR #15 七个 check 全绿（含 `Analyze (javascript-typescript)` 1m6s、APP E2E 8m55s ——
     第三方 `reactivecircus/android-emulator-runner` 固定 SHA 后照常跑通，证明固定是**行为等价**改动）；
