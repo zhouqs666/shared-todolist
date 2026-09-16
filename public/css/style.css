@@ -56,6 +56,20 @@ input, textarea, [contenteditable] {
   --shadow: 0 1px 2px rgba(184, 90, 124, 0.04), 0 2px 8px rgba(184, 90, 124, 0.05);
   --shadow-md: 0 2px 6px rgba(184, 90, 124, 0.05), 0 8px 24px rgba(184, 90, 124, 0.08);
   --shadow-lg: 0 4px 12px rgba(184, 90, 124, 0.08), 0 16px 40px rgba(184, 90, 124, 0.12);
+
+  /* === v2.7.68 纸与光：卡片材质语义 token ===
+     未完成的卡片是「新纸」（白、浮起），已完成的卡片是「晒过的纸」（暖一度、压平内凹）。
+     为什么单开 token：① 材质差要成对调（调暖调冷只改这 4 个值）；
+     ② 隐藏款靠 .todo.todo--rare 覆盖 background/border，集中在这里才好让位。 */
+  --color-surface-raised: #ffffff;        /* 新纸（卡面起点） */
+  --color-surface-raised-deep: var(--cream-100); /* 新纸（渐变收尾，极淡樱贝） */
+  --color-surface-sunned: #fdf6f1;        /* 晒过的纸（起点，暖一度） */
+  --color-surface-sunned-deep: #f9efe8;   /* 晒过的纸（收尾，更暖） */
+  --color-border-sunned: var(--cream-300); /* 晒过的纸的边缘（比未完成略深一档） */
+  --shadow-raised: inset 0 1px 0 #fff,
+    0 6px 18px -12px rgba(150, 74, 102, 0.30),
+    0 22px 40px -30px rgba(150, 74, 102, 0.55);
+  --shadow-pressed: inset 0 2px 7px rgba(184, 90, 124, 0.055); /* 压平内凹（晒过的纸） */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -463,6 +477,8 @@ input {
   max-width: 640px;
   margin: 0 auto;
   padding: 20px 16px calc(40px + var(--safe-bottom));
+  /* v2.7.68 纸与光：顶部一抹更紧的柔光，让卡片看起来是浮在光上（body 那层是大范围的氛围光） */
+  background: radial-gradient(620px 400px at 50% -8%, rgba(243, 185, 205, 0.30), transparent 72%);
 }
 
 /* ===== 顶栏纪念日：在一起 X 天（爱心右边，精致克制） ===== */
@@ -780,15 +796,18 @@ input {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  /* v2.7.49 卡片纸质感：白 → 米杏 cream-50，像纸贴在桌面上 */
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius);
-  padding: 15px 16px;
+  /* v2.7.68 纸与光：卡片第一次真正有了「纸面」。
+     ⚠️ 顺带修一个静默缺陷：这里原来写的是 var(--color-bg-elevated)（该 token 在主题
+     清理时被删掉，全仓只此一处引用）。变量未定义 = 整条声明在计算期失效 = 卡片的
+     background 一直是 transparent、下面那行 var(--color-border-subtle) 同理 ⇒
+     「纸」其实既没底色也没 1px 边，全靠页面底色 + 阴影撑着。现改用真实语义 token。 */
+  background: linear-gradient(180deg, var(--color-surface-raised) 0%, var(--color-surface-raised-deep) 100%);
+  border-radius: 20px;
+  padding: 17px 19px 16px;
   margin-bottom: 12px; /* #6: 间距 10→12，呼吸感更好 */
-  /* v2.7.49 卡片纸质感：加 1px 米杏边（cream-200）+ 暖色阴影，默认悬浮感 */
-  border: 1px solid var(--color-border-subtle);
-  box-shadow: var(--shadow-sm);
-  box-shadow: var(--shadow);
+  /* 1px 暖边（不再是悬空变量）+ inset 白高光：纸的厚度感 */
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-raised);
   transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.3s var(--ease);
   /* backwards：配合 JS 的入场延迟，延迟期间的卡片停在起始帧（不闪现） */
   animation: todo-enter 0.25s var(--ease) backwards;
@@ -824,14 +843,17 @@ input {
   transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
 
-/* 完成态：去灰块，只弱化文字（卡片质感不变，靠排序下沉区分）。
-   阴影收敛一丝：完成的卡片轻轻"沉"进背景，未完成的依然漂浮。 */
+/* 完成态：从「白纸」变成「晒过的纸」—— 暖一度、压平内凹（v2.7.68 纸与光）。
+   与未完成卡的尺寸、信息、位置完全一致，只用材质说「这是过去时」。
+   ⚠️ 这里是单类选择器，隐藏款 .todo.todo--rare 权重更高，所以稀有度渐变不会被吃掉
+   （刻意如此：线上 7 张隐藏款全部在已完成区，压平可以、变白不行）。 */
 .todo--done {
-  background: var(--color-surface);
-  box-shadow: var(--shadow-xs);
+  background: linear-gradient(180deg, var(--color-surface-sunned) 0%, var(--color-surface-sunned-deep) 100%);
+  border-color: var(--color-border-sunned);
+  box-shadow: var(--shadow-pressed);
 }
 .todo--done:hover {
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-pressed), 0 2px 8px rgba(184, 90, 124, 0.05);
 }
 
 /* 离线待同步态（M2）：半透明 + 轻微降饱和，与正常待办明显区分 */
@@ -868,18 +890,18 @@ input {
   height: 14px;
 }
 
-/* 自绘圆形复选框：统一退到右上角，18×18 小尺寸，不占布局空间。
+/* 自绘圆形复选框：统一退到右上角，20×20，不占布局空间。
    无论完成与否都在同一位置（右上角），文字始终铺满卡片成为主角。
    - 未完成：空心玫瑰小圆（点它完成），按下时点亮成心意的颜色
-   - 完成：去掉圆圈，只留小对勾（点它取消完成） */
+   - 完成：淡色空心圈 + 对勾（点它取消完成；v2.7.68 起不再隐藏，见下） */
 .todo__check {
   position: absolute;
-  top: 9px;
-  right: 11px;
-  width: 18px;
-  height: 18px;
+  top: 14px;
+  right: 16px;
+  width: 20px;
+  height: 20px;
   padding: 0;
-  border: 1.5px solid rgba(243, 185, 205, 0.85);
+  border: 1.6px solid rgba(243, 185, 205, 0.9);
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
@@ -887,7 +909,7 @@ input {
   align-items: center;
   justify-content: center;
   color: var(--rose-500);
-  opacity: 0.65;
+  opacity: 0.85;
   z-index: 2;
   transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease),
     transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -917,18 +939,26 @@ input {
   transform: scale(0.5);
   transition: opacity 0.15s var(--ease) 0.05s, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) 0.05s;
 }
-/* 完成态：完全隐藏复选框视觉（划线已足以表达完成），
-   但保留透明按钮在原位，用户点右上角仍可取消完成 */
+/* 完成态：对勾要**看得见**（v2.7.68 顺手修的可发现性缺陷）。
+   旧实现把完成态的复选框设成 opacity:0 + border:none —— 「取消完成」这个操作在界面上
+   完全不存在，用户只能靠长按卡片去菜单里找「撤销完成」（或等那 5 秒的撤销 Toast）。
+   现在保留一枚淡色空心圈 + 对勾：看得见、点得着、又不抢划线的视觉主线。 */
 .todo--done .todo__check {
-  border: none;
+  border: 1.6px solid var(--rose-300);
+  background: transparent;
+  opacity: 0.5;      /* 视觉克制，但存在 */
   animation: none;
-  opacity: 0;       /* 视觉隐藏 */
+}
+@media (hover: hover) {
+  .todo--done .todo__check:hover { opacity: 0.9; border-color: var(--rose-400); }
 }
 .todo--done .todo__check:active {
-  opacity: 0;       /* 完成态点击也不显形 */
+  opacity: 1;
+  background: var(--rose-500);
+  border-color: var(--rose-500);
 }
 .todo--done .todo__check svg {
-  opacity: 0;       /* 对勾也不显示 */
+  opacity: 1;        /* 对勾显示出来 */
   transform: scale(1);
   transition: none;
 }
@@ -942,7 +972,7 @@ input {
 }
 
 .todo__text {
-  font-size: 16px;
+  font-size: 16.5px;
   color: var(--color-text);
   word-break: break-word;
   line-height: 1.4;
@@ -2817,15 +2847,21 @@ input {
    配色：稀有=淡粉、史诗=浅紫、传说=香槟金，由浅到深递进。
    ============================================================ */
 
+/* ⚠️ 权重说明（v2.7.68 加固）：这三个选择器刻意写成 `.todo.todo--rare`（0,2,0）而不是
+   单个 `.todo--rare`（0,1,0）。旧写法只靠"排在 .todo--done 后面"取胜 —— 任何人把新的
+   `.todo` / `.todo--done` 规则追加到文件尾部，就会静默吃掉隐藏款的渐变底，
+   而线上 63 条存活待办里有 7 条隐藏款、**全部在已完成区**（一次改版就能让奖杯柜集体变白）。
+   提升权重后，未来的追加不会再翻转胜负。 */
+
 /* 稀有款（rare）：淡粉渐变 + 淡粉四边细边框 */
-.todo--rare {
+.todo.todo--rare {
   background: linear-gradient(155deg, var(--rare-50) 0%, var(--rare-100) 100%);
   border: 1.5px solid var(--rare-300);
   box-shadow: 0 1px 2px rgba(253, 164, 175, 0.18), 0 2px 10px rgba(253, 164, 175, 0.14);
 }
 
 /* 史诗款（epic）：雾紫渐变 + 浅紫四边细边框（v2.7.51 P3.2 引入 --epic-* 语义 token） */
-.todo--epic {
+.todo.todo--epic {
   background: linear-gradient(155deg, var(--epic-50) 0%, var(--epic-100) 100%);
   border: 1.5px solid var(--epic-300);
   box-shadow: 0 1px 2px rgba(139, 92, 246, 0.08), 0 2px 10px rgba(139, 92, 246, 0.10);
@@ -2833,7 +2869,7 @@ input {
 
 /* 传说款（legendary）：香槟金渐变 + 金色四边细边框 + 呼吸光晕
    （v2.7.51 P3.2 引入 --legendary-* 语义 token） */
-.todo--legendary {
+.todo.todo--legendary {
   background: linear-gradient(155deg, var(--legendary-50) 0%, var(--legendary-100) 100%);
   border: 1.5px solid var(--legendary-300);
   box-shadow: 0 1px 2px rgba(245, 158, 11, 0.10), 0 2px 14px rgba(245, 158, 11, 0.14);
