@@ -99,7 +99,8 @@ export function celebrateCompletion(todo, isRemote = false, undoAction = null) {
     if (undoAction) toastOpts.action = { label: '撤销', onClick: undoAction };
     showToast(phrase, toastOpts);
     // 叠加 rarity 专属粒子（复用开奖配色：rare 克制不撒花 / epic 玫红 / legendary 金）
-    celebrateRarity(rarity, text);
+    // 注意：celebrateRarity 只放特效，不再弹提示 —— 上面这条带「撤销」的完成提示必须留在屏上
+    celebrateRarity(rarity);
     // 卡片光环（仅本端完成时，卡片在视野内才发）
     if (!isRemote && obj.id) burstCardRing(obj.id, rarity);
     return;

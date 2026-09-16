@@ -19,7 +19,13 @@
 -- rarity：稀有度。null 或 'common' = 普通款；'rare'/'epic'/'legendary' = 隐藏款
 ALTER TABLE todos ADD COLUMN IF NOT EXISTS rarity TEXT;
 -- rarity_seen：隐藏款是否已被对方"看过"（用于对方端首次见到时播惊喜提示）
--- 新建自己的隐藏款时为 true；通过 Realtime 同步到对方端，对方播完提示后回标 true
+-- 约定（客户端行为，本迁移只建列）：
+--   · 自己开出隐藏款 → 插入时写 false（该版本"对方还没看过"）
+--   · 对方端收到 Realtime 推送 / 冷启动补播 → 播一次惊喜提示 → 回标 true
+--   · 普通款恒为 true（默认值）
+-- ⚠️ 2026-09-16 更正：原注释写"新建自己的隐藏款时为 true"，与上面这套约定自相矛盾 ——
+--   客户端当时确实恒写 true，于是「对方端揭晓提示」这条链路从未触发过（线上 12 条隐藏款
+--   rarity_seen 全为 true，一条提示都没播过）。db.js 已改为隐藏款写 false。
 ALTER TABLE todos ADD COLUMN IF NOT EXISTS rarity_seen BOOLEAN NOT NULL DEFAULT true;
 
 -- 回填：历史待办统一视为已看过的普通款（兼容旧数据）

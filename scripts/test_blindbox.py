@@ -1,12 +1,17 @@
 """
 盲盒 + 图鉴功能 E2E 测试
 
-由于生产库迁移尚未执行（rarity 列/stickers 表不存在），本测试分两部分：
-1. 纯前端逻辑测试（不依赖 DB）：rollRarity 概率分布、applyRarity 角标/背景、图鉴渲染
-2. 页面加载/登录测试：验证模块链无报错、登录后主页渲染、createTodo 降级容错
+分三部分：
+1. 纯前端逻辑测试（不依赖 DB）：rollRarity 概率分布、applyRarity 稀有度 class、图鉴渲染
+2. 页面加载/登录测试：验证模块链无报错、登录后主页渲染、createTodo 落库
+3. 隐藏款链路（强制开奖）：用 localStorage 钩子把开奖锁到指定稀有度，覆盖 15% 概率撞不到的路径
+   —— 提示是否被顶掉、贴纸序号是否重复/空转、完成时「撤销」按钮是否还在、rarity_seen 是否正确
+
+（原注释写「生产库迁移尚未执行，rarity 列/stickers 表不存在」——已过时：2026-09-16 复核确认
+ 线上两张表/列都在（todos.rarity 已回填、stickers 有数据），本测试在测试库上完整跑真实链路。）
 
 测试遵循 AGENTS.md 铁律一：跑在独立测试库（scripts/serve-test.mjs + e2e_common 隔离校验）。
-添加的测试待办用 "E2E-测试-" 前缀，测后只删标记数据。
+添加的测试待办用 "E2E-测试-" 前缀，测后由 reset 脚本硬删（软删除清不干净，见文件末注释）。
 """
 import os
 import sys
@@ -20,6 +25,7 @@ from e2e_common import (
     load_test_creds,
     cleanup_test_data,
     add_todo,
+    wait_add_settled,
     login,
     wait_until,
 )
@@ -166,12 +172,224 @@ with sync_playwright() as p:
         print("=" * 60)
         print("6. 添加待办")
         print("=" * 60)
+        # 先把开奖钉到 common：这一条只是验证 createTodo 落库，若随机开成隐藏款，
+        # 会解锁掉 rare_1，使第 7 步的序号期望整体偏移一位（首版就这么误报过一次）。
+        page.evaluate("() => localStorage.setItem('__e2e_force_rarity', 'common')")
         before_count = page.locator('#todoList .todo').count()
         check("添加待办成功（列表出现）", add_todo(page, 'E2E-测试-盲盒功能验证'))
         after_count = page.locator('#todoList .todo').count()
         check("列表数量 +1", after_count == before_count + 1, f"前{before_count} 后{after_count}")
 
         page.screenshot(path="/tmp/blindbox-after-add.png", full_page=True)
+
+        # ===== 7. 隐藏款链路（用 localStorage 钩子强制开奖）=====
+        print()
+        print("=" * 60)
+        print("7. 隐藏款链路（强制开奖）")
+        print("=" * 60)
+        # 为什么需要钩子：隐藏款是 15% 概率，随机跑撞不到，于是「开出 → 解锁贴纸」这条链
+        # 此前零覆盖 —— 序号算错、提示互相顶掉、完成时撤销按钮被清掉，三个真实缺陷都测不出来。
+        # 钩子只由本测试写入 localStorage，生产代码没有任何入口设置它（行为与不加钩子一致）。
+
+        def toast_text():
+            el = page.locator("#toast")
+            return (el.text_content() or "") if el.count() > 0 else ""
+
+        def force_rarity(r):
+            page.evaluate("(r) => localStorage.setItem('__e2e_force_rarity', r)", r)
+
+        def rare_keys():
+            """图鉴里已解锁的 rare 序号（真实状态，不看 toast 文案）"""
+            return page.evaluate("""async () => {
+                const s = await import('/js/state.js');
+                return s.getStickers().filter((x) => x.rarity === 'rare')
+                    .map((x) => x.stickerKey).sort();
+            }""")
+
+        force_rarity("rare")
+        check("强制开奖钩子已就位",
+              page.evaluate("() => localStorage.getItem('__e2e_force_rarity')") == "rare")
+
+        # --- 7.1 开奖与解锁合成一条提示（旧实现是两条，后一条把前一条顶掉）---
+        # 断言钉在该张贴纸的**名字**上（初心/萌芽/晨光/清欢 各对应一个序号）：
+        # 只匹配 "开出稀有款" 会撞上一条还在屏上的旧提示，把断言读成假通过。
+        t1 = "E2E-测试-强制稀有1"
+        check("强制 rare 添加成功", add_todo(page, t1))
+        merged = wait_until(
+            page,
+            lambda: "开出稀有款" in toast_text() and "解锁「初心」" in toast_text(),
+            desc="合并提示（开奖 + 解锁，含贴纸名）",
+        )
+        check("开奖与解锁合成为一条提示", merged, f"实际: {toast_text()}")
+        check("提示含图鉴进度 1/12", "1/12" in toast_text(), f"实际: {toast_text()}")
+        wait_add_settled(page, t1)
+        check("卡片带 todo--rare 稀有度样式",
+              "todo--rare" in (page.locator(".todo", has_text=t1).first.get_attribute("class") or ""))
+        check("图鉴实际解锁 rare_1", rare_keys() == ["rare_1"], f"实际: {rare_keys()}")
+
+        # --- 7.2 第二条：序号递增，不重复 ---
+        t2 = "E2E-测试-强制稀有2"
+        check("第二条强制 rare 添加成功", add_todo(page, t2))
+        check("第二条解锁的是 rare_2（序号递增、未重复同一张）",
+              wait_until(page, lambda: "解锁「萌芽」" in toast_text(), desc="解锁「萌芽」提示")
+              and rare_keys() == ["rare_1", "rare_2"], f"实际: {toast_text()} / {rare_keys()}")
+        wait_add_settled(page, t2)
+
+        # --- 7.3 集齐：第 5 次不再产生新贴纸，且提示说清「已集齐」---
+        names = {3: "晨光", 4: "清欢"}
+        for i in (3, 4):
+            ti = f"E2E-测试-强制稀有{i}"
+            check(f"第{i}条强制 rare 添加成功", add_todo(page, ti))
+            ok = wait_until(page, lambda: f"解锁「{names[i]}」" in toast_text(), desc=f"解锁「{names[i]}」提示")
+            check(f"第{i}条解锁 rare_{i}（进度 {i}/12）",
+                  ok and f"{i}/12" in toast_text() and len(rare_keys()) == i,
+                  f"实际: {toast_text()} / {rare_keys()}")
+            wait_add_settled(page, ti)
+        t5 = "E2E-测试-强制稀有5"
+        check("集齐后仍能开出隐藏款（第5条）", add_todo(page, t5))
+        full = wait_until(page, lambda: "已集齐" in toast_text(), desc="集齐提示")
+        rare_count = len(rare_keys())
+        check("集齐后不再产生第 5 张贴纸", full and rare_count == 4,
+              f"提示: {toast_text()} / rare 贴纸: {rare_keys()}")
+        wait_add_settled(page, t5)
+
+        # --- 7.4 完成隐藏款：完成提示必须留在屏上（旧实现被开奖提示连「撤销」按钮一起清掉）---
+        page.locator(".todo", has_text=t5).first.locator(".todo__check").click()
+        undo_present = wait_until(
+            page, lambda: page.locator(".toast__action").count() > 0, desc="完成提示带撤销按钮"
+        )
+        done_toast = toast_text()
+        check("完成隐藏款后「撤销」按钮存在", undo_present, f"实际提示: {done_toast}")
+        check("完成文案是「完成」而非「开出」", "完成" in done_toast and "开出" not in done_toast,
+              f"实际: {done_toast}")
+        check("完成提示带图鉴进度", "4/12" in done_toast, f"实际: {done_toast}")
+
+        # --- 7.5 本地状态滞后时序号自愈（不再静默丢一次开奖）---
+        force_rarity("epic")
+        t6 = "E2E-测试-自愈"
+        check("强制 epic 添加成功", add_todo(page, t6))
+        wait_until(page, lambda: "史诗" in toast_text(), desc="epic 开奖提示")
+        wait_add_settled(page, t6)
+        heal = page.evaluate("""async () => {
+            const state = await import('/js/state.js');
+            const bb = await import('/js/blindbox.js');
+            const { db } = await import('/js/db.js');
+            const todo = state.getTodos().find((t) => t.text === 'E2E-测试-自愈');
+            if (!todo) return { error: '找不到待办' };
+            // 模拟「本地状态滞后于数据库」：冷启动时 listStickers 还没回来的状态就是这样
+            state.setStickers([]);
+            const sticker = await bb.onRollRarity({ id: todo.id, rarity: 'epic' }, todo.createdBy);
+            const fresh = await db.listStickers();
+            state.setStickers(fresh); // 还原本地状态，不影响后续断言
+            return {
+                key: sticker && sticker.stickerKey,
+                epicCount: fresh.filter((s) => s.rarity === 'epic').length,
+            };
+        }""")
+        check("本地状态滞后时自愈到 epic_2（旧实现撞车即静默放弃）",
+              heal.get("key") == "epic_2" and heal.get("epicCount") == 2, f"实际: {heal}")
+
+        # --- 7.6 隐藏款写入 rarity_seen=false（对方端揭晓的前提；旧实现恒为 true，链路是死的）---
+        seen = page.evaluate("""async () => {
+            const s = await import('/js/state.js');
+            const t = s.getTodos().find((x) => x.text === 'E2E-测试-自愈');
+            return t ? t.raritySeen : null;
+        }""")
+        check("隐藏款待办 rarity_seen=false（对方端才会播揭晓）", seen is False, f"实际: {seen}")
+
+        # --- 7.7 提示串行：新提示排队，不把上一条顶掉 ---
+        # 先等前面几条提示彻底消失：串行测试必须从「屏幕干净」开始，否则数到的是上一条提示
+        # （第一版就踩了这个坑：断言读到的是上一步的 epic 开奖提示）。
+        check("测试前提示已清空",
+              wait_until(page, lambda: page.locator(".toast--show").count() == 0, desc="无提示在显示"))
+        serial = page.evaluate("""async () => {
+            const { showToast } = await import('/js/toast.js');
+            const el = () => document.getElementById('toast');
+            showToast('串行测试-第一条', { duration: 1200 });
+            const t0 = el().textContent;
+            await new Promise((r) => setTimeout(r, 150));
+            showToast('串行测试-第二条', { duration: 1200 });
+            const t1 = el().textContent;                    // 第一条应仍在显示
+            await new Promise((r) => setTimeout(r, 1650));   // 第一条到期后第二条接上
+            const t2 = el().textContent;
+            return { t0, t1, t2 };
+        }""")
+        check("提示串行：第二条不顶掉第一条",
+              "第一条" in (serial.get("t0") or "") and "第一条" in (serial.get("t1") or ""),
+              f"实际: {serial}")
+        check("提示串行：第一条结束后第二条接上", "第二条" in (serial.get("t2") or ""), f"实际: {serial}")
+
+        # 清掉钩子，避免影响其它用例/后续断言
+        page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")
+        check("钩子已清理", page.evaluate("() => localStorage.getItem('__e2e_force_rarity')") is None)
+
+        # ===== 8. 对方端揭晓（双账号端到端）=====
+        print()
+        print("=" * 60)
+        print("8. 对方端揭晓（第二个账号 e2e-beta）")
+        print("=" * 60)
+        # 为什么要这一节：`rarity_seen` 这条链路曾经**从未触发过**（客户端只写 true、守卫要求 false），
+        # 而它有两个半边 —— 写入方（隐藏款落库时写 false）和读取方（对方端收到后播提示并回标 true）。
+        # 单账号只能验写入方；这里用测试库预置的第二个账号把读取方也跑到（两账号共用测试口令，
+        # auth.js 的 usernameToEmail 兜底会把 'e2e-beta' 映射成 e2e-beta@todo.local）。
+        context2 = browser.new_context()
+        page2 = context2.new_page()
+        page2.set_default_timeout(15000)
+        second_user = os.environ.get("E2E_SECOND_ACCOUNT", "e2e-beta")
+        check("第二账号登录成功", login(page2, BASE, second_user, TEST_PASSWORD), page2.url)
+        # 等 Realtime 订阅真正开始推送：本项目自己记录过「订阅变 SUBSCRIBED 后仍需 ~2-3 秒」，
+        # 这里刻意等一个观察窗口（不是赌异步同步，是被测对象的已知时序）。
+        page2.wait_for_timeout(4000)
+
+        def epic_count2():
+            return page2.evaluate("""async () => {
+                const s = await import('/js/state.js');
+                return s.getStickers().filter((x) => x.rarity === 'epic').length;
+            }""")
+
+        # 记下 beta 登录时的张数，稍后断言它**因为 alpha 这次开奖涨了一张**（共享图鉴同步）
+        epic_before = epic_count2()
+
+        force_rarity("epic")
+        t7 = "E2E-测试-对方揭晓"
+        check("（alpha）强制 epic 添加成功", add_todo(page, t7))
+        wait_until(page, lambda: "解锁" in toast_text(), desc="（alpha）自己的解锁提示")
+        wait_add_settled(page, t7)
+
+        def toast2_text():
+            el = page2.locator("#toast")
+            return (el.text_content() or "") if el.count() > 0 else ""
+
+        revealed = wait_until(
+            page2,
+            lambda: "开出的" in toast2_text() and "史诗" in toast2_text(),
+            timeout_ms=20000,
+            desc="（beta）对方开出的揭晓提示",
+        )
+        check("对方端收到揭晓提示（含归属，旧实现恒为 true 时这条永远是空的）",
+              revealed, f"（beta）实际提示: {toast2_text()}")
+        # 回标校验：beta 播完提示会把 rarity_seen 写回 true，落库可见
+        seen_back = wait_until(
+            page,
+            lambda: page.evaluate("""async () => {
+                const { db } = await import('/js/db.js');
+                const list = await db.listTodos();
+                const t = list.find((x) => x.text === 'E2E-测试-对方揭晓');
+                return !!t && t.raritySeen === true;
+            }"""),
+            desc="对方端回标 rarity_seen=true",
+        )
+        check("对方端看过之后回标 rarity_seen=true（不会重复播）", seen_back)
+
+        # beta 端也能看到共享图鉴的新解锁（Realtime stickers INSERT）
+        shared = wait_until(
+            page2,
+            lambda: epic_count2() >= epic_before + 1,
+            timeout_ms=20000,
+            desc="（beta）共享图鉴同步到新解锁",
+        )
+        check("（beta）共享图鉴同步到新解锁", shared, f"登录时 {epic_before} 张 → 现在 {epic_count2()} 张")
+        context2.close()
 
     browser.close()
 

@@ -59,7 +59,11 @@ export const db = {
    *  容错：若 SQL 迁移未执行（rarity 列不存在，42703），降级为不带 rarity 插入，
    *       保证核心添加功能不受影响（与 listProfiles 对 last_seen_at 的降级同模式）。 */
   async createTodo(text, userId, imagePath, rarity) {
-    const row = { text, created_by: userId, completed: false, rarity: rarity || 'common', rarity_seen: true };
+    // 隐藏款新建时写 rarity_seen=false：对方端首次收到推送时播「惊喜揭晓」，播完回标 true。
+    // 旧实现恒写 true，而 realtime 的揭晓守卫要求 === false —— 于是这条链路从未触发过
+    // （生产库实证 2026-09-16：12 条隐藏款待办，rarity_seen 全为 true，一条揭晓都没播过）。
+    const hidden = !!rarity && rarity !== 'common';
+    const row = { text, created_by: userId, completed: false, rarity: rarity || 'common', rarity_seen: !hidden };
     if (imagePath) row.image_path = imagePath;
     let { data, error } = await supabase
       .from('todos')

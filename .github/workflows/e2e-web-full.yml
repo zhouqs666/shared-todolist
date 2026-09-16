@@ -129,6 +129,12 @@ jobs:
         # （2026-09-14 烧过好几轮 CI）。漂移时这里直接打印可复制的修复 SQL。
         run: node app-e2e/scripts/check-test-schema.mjs
 
+      - name: Preflight · RLS 是否真的生效
+        # 2026-09-16：测试项目被 Supabase 安全顾问报 `rls_disabled_in_public`
+        # （profiles 的 RLS 被手工关过，而 schema.sql 里一直是开的）。
+        # 这条用 anon 视角探针把「RLS 真的开着」变成机器判定 —— 跑得比 E2E 快得多。
+        run: node app-e2e/scripts/check-rls.mjs
+
       - name: Start test server (:3100)
         # 测试服务器在内存里把 supabase.js 改写为测试库（生产文件零改动），
         # 并暴露 /__dbinfo 供测试脚本自证隔离。绝不能用 :3000（那是生产库）。

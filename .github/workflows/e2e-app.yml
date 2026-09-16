@@ -171,6 +171,13 @@ jobs:
       - name: Check test DB schema (fail fast)
         run: cd app-e2e && node scripts/check-test-schema.mjs
 
+      # 同类快速失败（2026-09-16）：测试库的 RLS 被手工关过（安全顾问报
+      # `rls_disabled_in_public`）⇒ 未登录可读写业务数据。5 个 HTTP 请求就能判，
+      # 别等 15 分钟模拟器跑完。注意：本 workflow 直接 `npx wdio`（不走 npm test），
+      # 所以 package.json 的 pretest 在这里不生效，必须显式加这一步。
+      - name: Check test DB RLS (fail fast)
+        run: cd app-e2e && node scripts/check-rls.mjs
+
       - name: Enable KVM for emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -192,8 +199,12 @@ jobs:
             export DEVICE_NAME="emulator-5554"
             export ANDROID_HOME="$ANDROID_HOME"
 
-            # 运行测试（脚本内部管理 Appium 生命周期）
-            bash app-e2e/scripts/ci-run.sh
+            # 跑测试：外面套一层「失败重试一次」（重试原因与实测证据写在
+            # app-e2e/scripts/ci-run-with-retry.sh 的文件头；真回归仍会失败，只吸收环境抖动）
+            #
+            # ⚠️ 这个 script 是**逐行**交给 /usr/bin/sh -c 执行的：不要在这里写跨行的
+            # for/if 结构（会被拆断成语法错误 —— 2026-09-15 踩过），多行逻辑写进脚本文件。
+            bash app-e2e/scripts/ci-run-with-retry.sh
 
       - name: Upload Allure results
         if: always()
