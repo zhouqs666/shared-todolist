@@ -49,6 +49,11 @@ JS_CHAPTERS = """() => [...document.querySelectorAll('#todoList > .tl-chap')].ma
   label: (el.querySelector('.tl-chap__label') || {}).textContent || '',
   sum: (el.querySelector('.tl-chap__sum') || {}).textContent || '',
   isPinned: el.classList.contains('tl-chap--pinned'),
+  // 章头这一行里除文案/小计/分隔线之外的"图形成员"个数（只数直接子元素，图标的 svg 挂在
+  // 自己的 span 里，不该被数两次）。v2.7.74 删掉了置顶章头左侧那枚图钉，这里把它钉成结构
+  // 不变量：章头是纯文字行，任何图标回来都会被这条断言抓住（旧代码上实测红：__pinned__ = 1）。
+  icons: [...el.children].filter((c) =>
+    c.tagName === 'SVG' || c.tagName === 'IMG' || c.classList.contains('tl-chap__pin')).length,
 }))"""
 
 JS_CHAPTER_OF = """(text) => {
@@ -135,13 +140,18 @@ with sync_playwright() as p:
 
     print("== 3. 置顶「甲」⇒ 搬到页首「置顶」章 ==", flush=True)
     pin(page, A)
-    check("页首出现带图钉的「置顶」章", wait_until(
+    check("页首出现「置顶」章", wait_until(
         page, lambda: (pinned_chapter(page) or {}).get("key") == "__pinned__", desc="置顶章出现",
     ))
     pc = pinned_chapter(page) or {}
     check("置顶章在列表最前（页首）", (keys(page) or [None])[0] == "__pinned__", f"实际章的次序 {keys(page)}")
     check("置顶章文案 = 「置顶 · 1」", (pc.get("label"), pc.get("sum")) == ("置顶", "· 1"),
           f"实际 {(pc.get('label'), pc.get('sum'))!r}")
+    check("章头只有文字，不带任何图标（v2.7.74 起）", pc.get("icons") == 0,
+          f"实际章头图形元素 {pc.get('icons')} 个")
+    check("所有章头都不带图标（置顶 / 要做的 / 时光章一致）",
+          all(c.get("icons") == 0 for c in chapters(page)),
+          f"实际 {[(c.get('key'), c.get('icons')) for c in chapters(page)]}")
     check("甲落在置顶章内", (chapter_of(page, A) or {}).get("key") == "__pinned__",
           f"实际 {(chapter_of(page, A) or {}).get('key')!r}")
     check("甲只出现一次（不在时光章里重复出现）", card_count(page, A) == 1, f"实际 {card_count(page, A)} 次")

@@ -1259,15 +1259,8 @@ function createChapter(key, modifier) {
   const li = document.createElement('li');
   li.className = 'tl-chap' + (modifier ? ` ${modifier}` : '');
   li.dataset.chapKey = key;
-  // 置顶章头前的图钉：**只建一次**，且必须独立成元素 —— 「置顶」这个标签文案以后若变化，
-  // updateChapter 走的是 labelEl.textContent 赋值，会把塞在 label 里的图标一起抹掉。
-  if (modifier === 'tl-chap--pinned') {
-    const icon = document.createElement('span');
-    icon.className = 'tl-chap__pin';
-    icon.setAttribute('aria-hidden', 'true'); // 装饰性：章节语义由「置顶」二字承担
-    icon.innerHTML = ICONS.pin;
-    li.appendChild(icon);
-  }
+  // 章头只有文案 + 小计 + 分隔线，**不放任何图标**（v2.7.74：置顶章头左侧那枚图钉已删）：
+  // 标签本身就是「置顶」二字，再插一枚图钉是同义重复；置顶标记由卡片上那枚 📌 承担。
   const label = document.createElement('span');
   label.className = 'tl-chap__label';
   const sum = document.createElement('span');
