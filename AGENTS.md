@@ -106,7 +106,11 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 - ✅ 改完代码 + 测试通过后，跑 `node scripts/release.mjs <版本号> --notes "<说明>"`
 - 脚本自动：注入版本号 → 打包 public/ 为 zip → 上传 Supabase Storage（`app_updates` bucket）→ 写 `app_versions` 表
 - 用户下次**冷启动** App 时自动拉取，无需重装 APK
-- ✅ 告知用户：杀掉 App 重开两次（首次后台下载，二次生效）
+- ✅ 告知用户：**打开一次 App 即可**（不是"重开两次"）
+  ⚠️ 2026-09-17 更正：早先这里写的是「杀掉 App 重开两次（首次后台下载、二次生效）」，
+  与实现不符 —— `update.js` 是 `download → set → 立即 reload()`，**同一个会话内**就完成切换
+  （重载前用原生 SplashScreen 盖住，用户看到「粉色爱心 → 平滑过渡」）。
+  「两次」只在用户于下载完成前就把 App 杀掉时才需要。文档按实现改正（铁律四）。
 
 **执行环境二选一（同一套脚本，不是两条通道）：**
 - **发布前置（2026-09-14 明确）：目标改动必须已合并到 main。**
@@ -253,7 +257,13 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 3. 跑回归测试（`scripts/test_*.py` + `scripts/test_*.mjs`），截图/断言确认；**PR 的 required checks 必须全绿**
 4. 涉及 SQL 改动 → 对话里贴可复制完整 SQL（不是只放 `.sql` 文件）
 5. 涉及 APK 改动 → `apksigner verify` + 检查构建时间 + unzip 确认改动入包
-6. 发布后回读校验 `node scripts/verify-release.mjs`（版本行 / Storage 对象 / 包内 meta）；
+6. **设备侧冒烟（人工，1 分钟）**：把 dry-run 制品装到真机上走一遍关键路径 ——
+   壳能启动 → 登录 → 加一条待办 → 完成一条 → 切后台再回来。
+   **为什么必须有这一步**（2026-09-17 定型）：模拟器套件 2026-09-17 起改为**仅手动触发**，
+   设备侧不再有自动信号；而这条人工冒烟同时覆盖了模拟器套件**从来没覆盖**的部分 ——
+   系统通知、震动、热更新、APK 安装器。
+   走通道 A（热更新）时至少确认一次：打开 App 能看到更新欢迎动画（= 新 bundle 已生效）。
+7. 发布后回读校验 `node scripts/verify-release.mjs`（版本行 / Storage 对象 / 包内 meta）；
    若走 CI 发布，另外把 `index.html` 的 meta 通过 **PR** 补回（见通道 A 的「已知限制」）；
    交付回复列明"已做 X / 已验证 Y / 未验证 Z"（铁律二的硬限制要标）
 
@@ -325,19 +335,27 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 |---|---|---|---|
 | `ci.yml`（3 个 job） | **每次 push / PR** | **约 70 秒** | **必需门禁**：Node 回归 + admin Playwright E2E + actionlint |
 | `e2e-web-full.yml` | 每晚 02:00 + 手动 | 约 4–7 分钟 | 全量业务回归（5 个双账号 E2E） |
-| `e2e-app.yml` | 改 `android/**`、`app-e2e/**`、本 workflow 时；或 `workflow_dispatch` | **约 11 分钟**（打 APK 2 + 模拟器 9） | 真机壳内的设备侧验证 |
+| `e2e-app.yml` | **仅手动**（`workflow_dispatch`） | 约 11 分钟（打 APK 2 + 模拟器 9） | 真机壳内的设备侧验证 —— **按需才跑** |
 
-**为什么 `e2e-app.yml` 的触发面不含 `public/**`**：它一次约 11 分钟，且与夜间全量回归
-**共用并发组 `e2e-test-db`**（同一个测试库，必须串行）、`cancel-in-progress: false`
-（不能被后来的取消）—— 于是每次触发都占住队列十几分钟；而它**不是 required check**：
-挡不住合并，却把 CI 队列和夜间回归一起堵住。它挡住的收益远小于每次前端改动都排队的代价。
+**为什么 `e2e-app.yml` 改成「仅手动」（2026-09-17 定型）**：它对"每次改动都自动跑"是**超配**的。
+① 一次约 11 分钟，且与夜间全量回归**共用并发组 `e2e-test-db`**（同一测试库，必须串行）、
+`cancel-in-progress: false`（不可被取消）⇒ 触发即占住队列十几分钟；
+② 它只覆盖「登录 + 待办增删改查」，而这些**已被 web 双账号 E2E 等价覆盖**，且翻遍提交历史
+与文档，它**没有一条"发现产品缺陷"的记录**（维护史全是修自己）；
+③ 它**常态掉线**（当天 5+ 次全部死于 `adb` 失去响应 = 模拟器进程级死亡，仓库侧修不了），
+把 main 变长期红灯、训练人忽略红色；
+④ 行业对照：设备/模拟器 E2E **不挂在 PR 门禁**是主流做法，云设备的核心价值是"并行覆盖机型矩阵"，
+而本仓双人私用、单一 APK、**没有机型矩阵需求**。
 
-**那"改了前端想验证真机"怎么办**（三条，都不自动挂在这一层）：
-1. `workflow_dispatch` 手动触发一次 —— 需要时再花那 11 分钟；
-2. 常规业务回归由 **web 双账号 E2E** 覆盖（`ci.yml` 必需门禁，5 个用例）——同样的流程，跑在浏览器里；
-3. 真·设备相关改动（`android/**`、`app-e2e/**`）**仍会自动触发**。
+**那设备侧谁验**（两层，都不是自动 CI）：
+1. **发布时人工真机走一遍冒烟**（见「发布前自检」第 6 步）—— 顺带覆盖模拟器套件**从未覆盖**的
+   通知 / 震动 / 热更新 / APK 安装器；`release-apk.mjs` 与 `verify-apk-release.mjs` 另在发布通道
+   校验真构建、签名、包内 meta 与 SHA；
+2. 需要时手动跑一次：`gh workflow run e2e-app.yml`（或 Actions 页面 Run workflow）。
+   **要恢复自动触发**就把 `push/pull_request + paths` 加回去，`paths` 建议只留 `android/**`
+   与 `app-e2e/**` —— **不要含 `public/**`**（那正是摘除它的原因）。
 
-**模拟器失败的分类（同一批改动）**：`ci-run.sh` 在测试失败后会探一次设备是否还在应答
+**模拟器失败的分类**：`ci-run.sh` 在测试失败后会探一次设备是否还在应答
 （`adb shell getprop sys.boot_completed`，连续两次）——
 - 设备仍在 ⇒ 按**代码/测试回归**处理，保留「重试一次」的意义；
 - 设备失联 ⇒ 以专用退出码 `86` 返回，`ci-run-with-retry.sh` **跳过重试**（在死掉的模拟器上重试
@@ -481,7 +499,7 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
 - **测试**：Playwright（Python 双账号 E2E，连测试库）+ Node 局部回归（可 mock）
 - **CI/CD**：GitHub Actions **六个** workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** + 三个结构性检查）、
-  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，**触发面刻意不含 `public/**`**，见「CI 分层」）、
+  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，**仅手动触发**——2026-09-17 起从自动流程摘出，见「CI 分层」）、
   `release-web.yml`（**通道 A 热更新 CD**，仅手动触发）、
   `release-apk.yml`（**通道 B APK 发布 CD**，仅手动触发；工序与 release-web.yml 同构：
   预演真构建 → 审批门 → 发布 → 回读校验）、
