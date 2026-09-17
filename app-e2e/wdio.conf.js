@@ -50,6 +50,23 @@ export const config = {
       // 清数据会回收运行时权限，这里自动重授，避免启动时 POST_NOTIFICATIONS 系统弹窗挡住用例
       'appium:autoGrantPermissions': true,
       'appium:newCommandTimeout': 180,
+      // ⚠️ 必须关掉 UiAutomator2 的「等应用 idle」（2026-09-17 定位；默认上限正是 10000ms）
+      // 本应用有**常驻无限动画**（顶栏心跳、骨架屏 shimmer、隐藏款卡片的镀膜旋转），
+      // 页面永远不会进入 idle ⇒ 每个动作都要把 10 秒等满才返回。
+      // 实测代价：任一次 elementClick 都耗时约 10 秒（同一次运行里多处可佐证），
+      // 直接导致「点那条只活 2.5 秒的撤销 Toast」这类用例**永远点不到**它
+      // —— 而它以前"能过"，只是因为那个按钮收起后仍可点（缺陷，已在 v2.7.75 修掉）。
+      // ⚠️ Appium 2 里这几个值属于 **settings**（`appium:settings`），
+      //    旧的顶层 capability 写法（`appium:waitForIdleTimeout`）实测**不生效**：
+      //    加了之后 elementClick 依然耗时 10.5 秒。所以两者都写上，以 settings 为准。
+      'appium:settings': {
+        waitForIdleTimeout: 0,
+        waitForSelectorTimeout: 0,
+        actionAcknowledgmentTimeout: 0,
+      },
+      'appium:waitForIdleTimeout': 0,
+      // 关掉系统窗口动画，进一步减少与"等待界面稳定"相关的抖动
+      'appium:disableWindowAnimation': true,
       'appium:uiautomator2ServerLaunchTimeout': 60000,
       'appium:adbExecTimeout': 60000,
       'appium:androidHome': process.env.ANDROID_HOME || path.join(process.env.HOME, 'Library/Android/sdk'),

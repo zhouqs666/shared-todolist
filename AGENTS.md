@@ -349,17 +349,49 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 - ✅ 真值只放两处：本地 `.env*`（已 gitignore）与 **GitHub Secrets**（CI 用）
 - ❌ 禁止出现在：`.example` 模板、文档（`*.md`）、代码、测试夹具、注释、SQL 文件、截图
   - 包括**真实账号标识**（邮箱 / 用户名）—— 它们不是密码，但和密码凑在一起就是完整凭据
-- ✅ 自查命令：`git grep -nE "PASSWORD=[^y]|@todo\.local" -- '*.example' '*.md'`（应为空或仅占位符）
+  - ⚠️ **两处功能性例外（不算违规）**：客户端登录映射 `public/js/auth.js`（中文名→邮箱，登录必需）
+    与测试里的 mock JWT payload（装饰字段，无逻辑读取）。它们不含口令，单独泄露不构成凭据。
+    **文档 / SQL / `.example` 没有这个功能理由**，那里出现真实账号标识一律算违规。
+- ✅ 自查命令（工作树）——**判据不是「输出为空」**（伪域名 `@todo.local` 会合法地出现在说明文字里），
+  而是「逐条都能解释」：
+  ```bash
+  # ① 列出仓库里全部凭据类赋值：每一个的「值」都必须是占位符 / process.env 读取 / ${{ secrets.* }}
+  #    出现任何真实字面量 = 立即停下，按下方①②③顺序处理
+  git grep -nEi '(password|passwd|secret|token|api[_-]?key)[[:space:]]*=[[:space:]]*[^[:space:]]+' -- . \
+    ':!package-lock.json' ':!public/js/vendor' ':!AGENTS.md' ':!CODE-REVIEW.md'
+
+  # ② 列出全部账号标识出现点：逐条确认落在「允许的位置」
+  #    允许：客户端登录映射（public/js/auth.js、admin/ 的 AuthContext）、测试账号（e2e-*）、mock JWT payload
+  #    不允许：文档 / SQL / .example —— 那里只能写形状占位（如 <拼音>@todo.local）
+  git grep -n '@todo\.local' -- . ':!AGENTS.md' ':!CODE-REVIEW.md'
+  ```
+  ⚠️ **工作树干净 ≠ 没泄露过** —— 历史提交里的值照样能 `git show` 取出来。所以还要扫历史：
+  ```bash
+  # ③ 刻意**不写死**泄露值（写死就等于又把它存进仓库一次）；列出该键历史上出现过的所有赋值人工过目
+  git log --all -p -S'E2E_TEST_PASSWORD' -- '*.example' \
+    | grep -E '^\+.*E2E_TEST_PASSWORD=' | sort -u
+
+  # ④ 生产数据文件是否曾入库（实例：supabase/backup-stickers-*.json 曾进过历史，含真实 UUID）
+  git log --all --diff-filter=A --name-only --pretty=format: | sort -u | grep -Ei 'backup|incident'
+  ```
 - ✅ **发现泄露时的正确顺序**：① **先改密码/轮换 key**（让泄露值当场失效）→ ② 再清理文件
-  → ③ 复核历史提交里是否还有（`git log --all -S "<泄露值>"`）→ ④ 开 GitHub **secret scanning + push protection**
+  → ③ 复核历史提交里是否还有（上面的 ③④）→ ④ 开 GitHub **secret scanning + push protection**
   - 删文件**不等于**修好：历史提交里仍然有，且可能已被克隆（`git log --all -S` 会告诉你从哪个 commit 开始）
   - 改写历史（force push）在本项目**不做**：main 有分支保护、收益小于代价 —— 轮换凭据才是根治
 
-**血泪教训（2026-09-15）：** `admin/.env.test.example` 里写着真实账号邮箱 `xiaobaobao@todo.local` +
-真实密码（值已在轮换时作废，此处不复述），**从 2026-09-08 起在公开仓库里躺了一周**。而生产账号用的是**同一个邮箱**
-（App 的用户名/邮箱映射就写在 `public/js/auth.js` 里）—— 只要密码复用，"邮箱 + 密码"就是完全公开的，
-任何人都能登进这个双人私密应用读写全部数据。发现时的排查线索：生产库里出现了一条
+**血泪教训（2026-09-15）：** `admin/.env.test.example` 里写着真实账号邮箱（形状 `<拼音>@todo.local`，
+本文件不复述真值）+ 真实密码（值已在轮换时作废），**从 2026-09-08 起在公开仓库里躺了一周**。
+而生产账号用的是**同一个邮箱**（App 的用户名/邮箱映射就写在 `public/js/auth.js` 里）—— 只要密码复用，
+"邮箱 + 密码"就是完全公开的，任何人都能登进这个双人私密应用读写全部数据。发现时的排查线索：生产库里出现了一条
 **查不到来源**的留言（软删除表里没有、代码里也没有物理删除路径），且 App 端表现"今早才出现、随后消失"。
+
+**血泪教训补记（2026-09-17）：** 上面那条规则写完之后，**规则自己举的例子又把真值写回了 AGENTS.md**，
+且规则给出的自查命令有两个缺陷 —— ① 只扫 `'*.example' '*.md'`，扫不到 `.sql` / `.js`
+（`supabase/schema.sql` 与 `PRODUCT-SPEC.md` 里的真实邮箱因此一直没被这条命令抓到）；
+② 命令文本含 `PASSWORD=[^y]`，会**自匹配**记录它的那两个文件，于是永远不可能是"绿"的。
+**推论**：自查命令必须自己先跑一遍、并且**必须能真的变红**（否则和没有一样）。
+另注：同批还发现 `deliverables/` 下有一份机构向学习文档（37KB）躺在公开仓库里 —— 已迁至本机素材库
+（路径见本机记忆，不入库），并已按素材库的构建流程重新生成索引。
 
 **推论写进规则**：凭据卫生的失效**不会报错、不会报警**，只会以"莫名其妙的数据/登录"的形式出现 ——
 所以它必须是**推送前的静态检查**（人工自查命令 + GitHub push protection），不能靠"我记得没写过"。
@@ -416,7 +448,7 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
   发布后回读校验：通道 A 用 `verify-release.mjs`，通道 B 用 `verify-apk-release.mjs`（两者都是只读、可当 CI 门禁）；
   另：`release-web.yml` 的 publish 作业在回读校验后**顺带跑一次 `dora-metrics.mjs`** 写进 Run Summary
   （`continue-on-error: true` —— 观测不该把一次已成功的发布变成红灯）
-- **PWA**：`manifest.webmanifest` + `sw.js`（Service Worker v15，仅浏览器环境生效，原生环境 bypass）
+- **PWA**：`manifest.webmanifest` + `sw.js`（Service Worker，仅浏览器环境生效，原生环境 bypass；版本号见文件内 `VERSION` 常量）
 - **Capacitor 插件**：`SystemBars` / `LocalNotifications` / `SplashScreen` / `CapacitorUpdater`（热更）/ 自研 `ApkInstaller`（APK 自更）
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
 - **测试**：Playwright（Python 双账号 E2E，连测试库）+ Node 局部回归（可 mock）

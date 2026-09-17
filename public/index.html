@@ -23,6 +23,13 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="有爱" />
   <title>有爱</title>
+  <!-- v2.7.75 首屏加速：提前建好到 Supabase 的 DNS + TLS 连接。
+       app.js 求值完就会打第一个请求到该域（auth / todos），而在此之前浏览器
+       要现做一次 DNS 查询 + TLS 握手（弱网/移动网络下这一项就要几百毫秒）。
+       preconnect 让这段时间与「HTML 解析 + 561KB 模块图加载」重叠掉。
+       ⚠️ 域名需与 public/js/supabase.js 的 SUPABASE_URL 保持一致（换项目要同步改）。 -->
+  <link rel="preconnect" href="https://zyceucmmtstszdnugimn.supabase.co" crossorigin />
+  <link rel="dns-prefetch" href="https://zyceucmmtstszdnugimn.supabase.co" />
   <link rel="stylesheet" href="/css/style.css" />
   <script>
     // 应用默认主题（mint）。主题切换 UI 已移除，固定薄荷绿。
@@ -67,13 +74,33 @@
     </div>
   </div>
   <script>
-    // 主页开屏：缩短至 1.2s，快进快出（保留仪式感，不拖沓）
-    setTimeout(function () {
-      var el = document.getElementById('js-splash');
-      if (!el) return;
-      el.style.opacity = '0';
-      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
-    }, 1200);
+    // 开屏撤离：由「首屏数据就绪」驱动，不再与数据脱钩地写死 1.2s。
+    // 原实现固定 1.2s + 0.5s 淡出，且与数据就绪毫无协调 → 两种都别扭：
+    //   · 数据 300ms 就绪：用户仍被强制多看 1.2s 爱心（纯浪费）
+    //   · 数据 3s 才回来：开屏撤走后露出骨架屏 → 观感变成「开屏 → 骨架 → 数据」三段跳
+    //   而原生 SplashScreen 的 launchShowDuration=1500 是硬底：JS 开屏若坚持到 1.7s，
+    //   原生一撤开屏时用户看到的是**第二层开屏**（同一段仪式连播两遍）。
+    // 现在：数据上屏即撤（app.js 调 window.__dismissSplash），但保留 MIN_MS 最短展示；
+    // 数据一直不来（离线/弱网）时 MAX_MS 兜底放行，绝不把用户卡在开屏上。
+    (function () {
+      var MIN_MS = 700;   // 最短展示：保住「开屏」这个仪式，避免闪一下就没
+      var MAX_MS = 1500;  // 兜底：与原生 launchShowDuration 对齐，数据慢就交给骨架屏
+      var t0 = Date.now();
+      var dismissed = false;
+      function dismiss() {
+        if (dismissed) return;
+        dismissed = true;
+        var el = document.getElementById('js-splash');
+        if (!el) return;
+        el.style.opacity = '0';
+        setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+      }
+      // 由 app.js 在「真实待办已上屏」时调用
+      window.__dismissSplash = function () {
+        setTimeout(dismiss, Math.max(0, MIN_MS - (Date.now() - t0)));
+      };
+      setTimeout(dismiss, MAX_MS);
+    })();
   </script>
 
   <!-- 顶部加载进度条 -->

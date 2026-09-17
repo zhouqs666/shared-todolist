@@ -34,8 +34,8 @@ import {
 import { initRealtime, initPresence } from './realtime.js';
 import { initTheme } from './theme.js';
 import { initNotify, requestPermission, isNative } from './notify.js';
-import { initMessages, onNoteAdded, onNoteRemoved, onNoteUpdated } from './messages.js';
-import { initReactions, renderReactions, onReactionAdded, onReactionRemoved, REACTION_EMOJIS, isMyReaction, toggleReaction, getReactionSvg, getReactionLabel } from './reactions.js';
+import { initMessages, refreshNotes, onNoteAdded, onNoteRemoved, onNoteUpdated } from './messages.js';
+import { initReactions, refreshReactions, renderReactions, onReactionAdded, onReactionRemoved, REACTION_EMOJIS, isMyReaction, toggleReaction, getReactionSvg, getReactionLabel } from './reactions.js';
 import { pickImage, pickImages, uploadTodoImage } from './image-utils.js';
 import { checkForUpdate, setUpdateSupabase, notifyAppReady, getCurrentBundleInfo, getTotalUpdateCount } from './update.js';
 // App 内 APK 更新（原生壳更新）：先查壳更新，无壳更新才回落 bundle 热更新
@@ -105,6 +105,125 @@ function hideLoading() {
   }, 600);
 }
 
+// ===== 全量列表拉取的「代」闸 + 订阅对账（v2.7.75）=====
+// 为什么需要代闸：启动后会有多次全量拉取可能并发（启动首拉、订阅确认对账、回前台重拉）。
+// 若不设闸，**先发出的旧快照可能后到达并覆盖掉更新的那一份** —— 表现为列表回退到几秒前的状态。
+let listFetchSeq = 0;
+let listAppliedSeq = 0;
+
+/**
+ * 发起一次全量拉取但**不落地**（请求立刻发出，落地时机由调用方决定）。
+ * 拆成「发起/落地」两段是为了同时满足两件冲突的诉求：
+ *   · 首屏要快 → 请求必须在 init 早期就发出（不能等 auth / notify）；
+ *   · 首屏要正确 → 结果必须在 setRenderFn(render) 注册**之后**才落地，
+ *     否则 setTodos 那一刻没有渲染订阅者，列表会白着。
+ */
+function beginTodoListFetch() {
+  const seq = ++listFetchSeq;
+  const promise = db.listTodos();
+  promise.catch(() => {}); // 兜住「等待期间」的 rejection，避免 unhandled rejection
+  // 记住发起时的「已应用事件数」，供 applyTodoListFetch 判断这份快照有没有被事件超越
+  const eventSeq = realtimeCh && realtimeCh.getTodoEventSeq ? realtimeCh.getTodoEventSeq() : 0;
+  return { seq, promise, eventSeq };
+}
+
+/**
+ * 把「服务端全量列表」落地 —— 但**保留本地尚未同步的离线待办**（id 前缀 `offline-`）。
+ *
+ * 为什么要单独包一层（2026-09-17，CODE-REVIEW 维度 B 的「整份 setTodos 覆盖本地状态」）：
+ * 离线新增的条目只存在于本机队列（还没拿到服务端 id），服务端列表里当然没有它 ——
+ * 任何一次整份替换都会把它抹掉。而整份替换的触发点不止一处（首次加载、回前台、断线重连），
+ * 于是「离线添加一条 → 切后台再回来 → 那条凭空消失」（数据其实还在 localStorage 队列里，
+ * 但用户视角就是丢了，最可能的反应是再手打一遍 → 制造重复条目）。
+ * 放在这个**唯一出口**上做保留，而不是指望每个调用方记得 —— 与 state.setTodos 过滤墓碑同源。
+ *
+ * 残留的已知边界：启动基线那一次（不带 skipIfEventsLanded）落地时，若本端刚乐观新增
+ * 且服务端已提交、而快照早于该次提交，这条会被短暂抹掉 —— 随后由 Realtime 回声补回；
+ * 若回声也已消费，则在下一次同步（回前台 / 重连）时恢复。影响是瞬时显示，不丢数据。
+ * （对账路径已由 applyTodoListFetch 的 skipIfEventsLanded 闸挡住这类回退。）
+ */
+function applyServerTodoList(serverTodos) {
+  // 注释里说的「保留本地待同步项」仅针对 `offline-` 前缀的条目：
+  // 服务端 id 是 UUID、不可能带这个前缀，所以这里只需按前缀筛，不必再和服务端列表比对
+  // （早先写过一个 `!serverIds.has(t.id)` 条件是恒真的死条件，已删）。
+  const serverIds = new Set(serverTodos.map((t) => t.id));
+  const stillPending = getTodos().filter((t) => t.id.startsWith('offline-') && !serverIds.has(t.id));
+  setTodos(sortTodos([...serverTodos, ...stillPending]));
+}
+
+/**
+ * 把一次拉取的结果落地（带「代」闸：只有比已落地更新的一次才允许写入）。
+ * 不设闸的话，**先发出的旧快照可能后到达并覆盖掉更新的那一份**（列表回退几秒前的状态）。
+ *
+ * @param {{seq:number,promise:Promise,eventSeq:number}} fetch beginTodoListFetch 的返回值
+ * @param {{skipIfEventsLanded?:boolean}} opts
+ *        skipIfEventsLanded：本次拉取期间若有 Realtime 事件落地就**放弃整份替换**。
+ *        用于「对账」路径（回前台 / 断线重连）。为什么必须有这道闸：拉取快照取的是
+ *        「请求发出那一刻」的服务端状态，而事件可能在之后落地 —— 整份替换会把它们回退。
+ *        实测踩过：对端刚置顶的待办被一次对账抹掉，E2E「对端不刷新就看到置顶章」红灯。
+ *        放弃替换是保守选择：本地保持现状，下一次同步再对齐，绝不会「看着数据回退」。
+ *        ⚠️ 启动基线**不能**带这道闸 —— 它的顺序由 realtime.js 的事件缓冲保证
+ *        （先落基线、再重放事件）；跳过它会让首屏变空列表。
+ * @returns {Promise<Array|null>} 列表；被任一道闸丢弃时返回 null
+ */
+function applyTodoListFetch({ seq, promise, eventSeq }, { skipIfEventsLanded = false } = {}) {
+  return promise.then((todos) => {
+    if (seq < listAppliedSeq) return null;
+    if (skipIfEventsLanded && realtimeCh && realtimeCh.getTodoEventSeq
+        && realtimeCh.getTodoEventSeq() !== eventSeq) {
+      console.warn('[sync] 拉取期间有新事件落地，放弃本次整份替换以免回退更新的数据');
+      return null;
+    }
+    listAppliedSeq = seq;
+    applyServerTodoList(todos);
+    return todos;
+  });
+}
+
+/** 发起并落地一次全量拉取（订阅对账 / 回前台重拉用 —— 这类场景需要「不被事件超越」保护） */
+async function refreshTodoList() {
+  return applyTodoListFetch(beginTodoListFetch(), { skipIfEventsLanded: true });
+}
+
+let reconciling = false;
+
+/**
+ * 断线重连 / 回前台后的对账：把「收不到事件的那段窗口」里对方做的变更补回来。
+ *
+ * 背景（为什么必须有这一步）：Supabase Realtime 的复制槽在客户端连上时才建立，
+ * **不重放历史**。所以「断线期间」对方的操作本端全部丢失：
+ *   · todos 有回前台重拉兜底
+ *   · 但**留言与表情原先只在冷启动拉一次**，断了就永久漏 ——
+ *     表现是「对方写的悄悄话铃铛一直不亮」「对方贴的爱心不显示」。
+ *
+ * ⚠️ **为什么不在冷启动（首次订阅）时也调它**（2026-09-17 实测教训）：
+ * 这里对 todos 是**整体替换**。冷启动时它在订阅确认后 ~2-3 秒执行，而那一刻
+ * 正是用户/对方开始操作的时刻 —— 实测直接踩中：对端刚置顶的待办被这次对账
+ * 用「更早的旧快照」覆盖回去，于是「对端不刷新就看到置顶章」这条 E2E 红了。
+ * 换句话说：**补拉不能覆盖掉刚刚由 Realtime 落地的更新**。
+ *   冷启动的漏事件窗口由「先订阅再拉取」的**顺序**来收敛（窗口从「auth+profiles+
+ *   notify+reactions 串行那么长」缩到「fetch 快照 → 复制槽建立」的亚秒级），
+ *   不需要也不该用一次整体替换去补；残留的亚秒窗口由回前台/重连的对账兜底。
+ */
+async function reconcileRemoteState() {
+  if (reconciling) return;
+  reconciling = true;
+  try {
+    try {
+      await refreshTodoList();
+    } catch (e) {
+      console.warn('[sync] 对账待办失败:', e && e.message);
+    }
+    // 留言/表情只在冷启动拉过一次，断线期间的会永久漏，这里必须补拉
+    await refreshNotes();
+    await refreshReactions();
+    render(getTodos()); // 表情是 render() 里按卡片绘制的，补拉后要重绘
+  } finally {
+    // 必须 finally：否则中途抛错会让 reconciling 永远为 true，此后所有对账都被静默跳过
+    reconciling = false;
+  }
+}
+
 // ===== 启动 =====
 (async function init() {
   // 主题先初始化（不依赖任何数据/网络，越早越好，避免用户感知延迟）
@@ -139,6 +258,21 @@ function hideLoading() {
     checkForUpdate().catch((e) => console.warn('[update] 启动检查异常:', e && e.message));
   }, 1800);
 
+  // 启动就绪信号：首次列表已落地 + render 回调已注册（订阅对账要等它，见下）
+  let resolveBootReady;
+  const bootReady = new Promise((resolve) => { resolveBootReady = resolve; });
+
+  // realtimeCh 声明在模块作用域（模块级函数要用），这里只声明启动期的拉取句柄
+  let todosFetch = null;
+
+  // ===== 启动并行化（v2.7.75）=====
+  // profiles 与 todos / auth 之间没有依赖（Supabase 客户端自动附带本地 session 的 JWT），
+  // 所以它可以最早发出；而 todos 的首次拉取有**顺序约束**（必须晚于订阅，
+  // 见下方 ①② ），故不在这里发。
+  const profilesPromise = db.listProfiles();
+  profilesPromise.catch(() => {}); // 未登录时会 401，属预期（下面 user 为 null 就跳登录页）
+
+  let reactionsPromise = null;
   try {
     const user = await auth.getCurrentUser();
     if (!user) {
@@ -148,10 +282,54 @@ function hideLoading() {
     currentUser = user;
     renderMe();
 
+    // ===== 建立 Realtime 订阅（todos / daily_notes / reactions / stickers 四表）=====
+    // ① ⚠️ 位置约束（2026-09-17 实测）：必须在 auth 之后。
+    //     postgres_changes 走 RLS 过滤 —— socket 上若还没有 JWT，订阅会**报成功**
+    //     却一条事件都收不到（静默失效）。实测症状：对端置顶后本端 10s 内毫无反应，
+    //     而页面其它功能（REST 拉取）完全正常 —— 因为 REST 会同步读本地 session 的 token，
+    //     realtime socket 的鉴权却是异步初始化的。
+    // ② 订阅**先于**首次拉取发起：复制槽在 socket 连上时才建立、不重放历史，
+    //     所以「先订阅、再拉取」能把漏事件窗口压到最小（原实现是先拉后订阅，窗口更大）。
+    realtimeCh = initRealtime({
+      getTodos,
+      setTodos,
+      setOnline: updateOnlineUI,
+      notifyCompleted,
+      getCurrentUserId: () => currentUser && currentUser.id,
+      displayNameOf: (userId) => displayOf(userId).name,
+      onNoteAdded,
+      onNoteRemoved,
+      onNoteUpdated,
+      onReactionAdded,
+      onReactionRemoved,
+      // 隐藏款揭晓：对方开出的隐藏款首次推来，本端播惊喜提示
+      onRarityReveal: handleRarityReveal,
+      // 图鉴贴纸解锁：双端同步更新图鉴状态 + 红点 + 撒花
+      onStickerUnlocked: handleStickerUnlockedFromRealtime,
+      getInFlightIntent, // 完成切换竞态守卫：丢弃与本端意图相反的陈旧回声
+      // 断线重连 → 对账（todos / 留言 / 表情，详见 reconcileRemoteState）
+      // ⚠️ 只在**重连**时做，不在冷启动（firstTime=true）时做：冷启动那次整体替换
+      // 会用旧快照覆盖掉刚被 Realtime 落地的更新（实测踩过，见 reconcileRemoteState 注释）。
+      onSubscribed: ({ firstTime }) => {
+        if (firstTime) return;
+        bootReady.then(() => reconcileRemoteState()).catch(() => {});
+      },
+    });
+
+    // ③ 衔接订阅之后立刻发起首次拉取（首屏真正要等的数据），并让 todo 事件先缓冲
+    todosFetch = beginTodoListFetch();
+
+    // 表情反应数据与上面并行发出；渲染前才 await（见下方）
+    // 必须在 listTodos 渲染前就绪，否则首屏待办会先无表情再补上（闪一下）
+    reactionsPromise = initReactions({
+      currentUser,
+      onRemoteReaction: pulseTodoOnRemoteReaction,
+    });
+
     // 构建 userId → {displayName, avatar, lastSeenAt} 映射
-    // lastSeenAt 用于 isPartnerVisitedToday() 判断"对方今天来过"→ 触发开场光晕
+    // lastSeenAt 用于「对方今天来过」判断 → 触发开场光晕
     try {
-      const profiles = await db.listProfiles();
+      const profiles = await profilesPromise;
       userMap = {};
       profiles.forEach((p) => {
         userMap[p.id] = { displayName: p.displayName, avatar: p.avatar, lastSeenAt: p.lastSeenAt };
@@ -205,23 +383,35 @@ function hideLoading() {
     if (!granted) console.info('[notify] 通知权限未授予');
   });
 
-  // 初始化「任务表情反应」（必须在 listTodos 渲染前，确保首屏待办就有表情数据）
-  await initReactions({
-    currentUser,
-    onRemoteReaction: pulseTodoOnRemoteReaction,
-  });
+  // 表情反应数据：与 todos / profiles 并行发出（见上方「启动并行化」），此处等它到位即可。
+  // 必须等：首屏渲染就要表情，否则卡片会先无表情再补上（闪一下）。
+  if (reactionsPromise) await reactionsPromise;
 
-  // 先拉一次列表兜底（弥补 Realtime 订阅期间的 INSERT 事件丢失）
+  // 首屏列表（兜底拉取：与 auth/profiles/reactions 并行，见上方「启动并行化」）。
+  // 用 refreshTodoList() 而非裸 db.listTodos()：让本批也占一个「代」序号，
+  // 这样它与「订阅确认对账」谁先落地都成立，不会出现旧快照覆盖新数据。
   try {
-    const todos = await db.listTodos();
-    setTodos(sortTodos(todos));
+    const todos = await applyTodoListFetch(todosFetch);
+    // todos 为 null = 本次被代闸丢弃（已有更新的一份落地了），此时用当前状态即可
+    const list = todos || getTodos();
     // 补播「本端不在线时对方开出的隐藏款」（Realtime 只在线的瞬间推一次）
-    if (todos.some((t) => isHidden(t.rarity) && t.raritySeen === false && t.createdBy !== currentUser.id)) {
+    if (list.some((t) => isHidden(t.rarity) && t.raritySeen === false && t.createdBy !== currentUser.id)) {
       setTimeout(() => revealUnseenRarityFromPartner(getTodos()), 800);
     }
   } catch (err) {
     handleError(toAppError(err), '加载列表失败');
     render(getTodos());
+  } finally {
+    // 真实待办已上屏（或加载失败后已给出反馈）：撤开屏交给 index.html 侧控制
+    // （最短展示时间在那里保证；这里只负责发「数据就绪」这个信号）
+    if (typeof window.__dismissSplash === 'function') window.__dismissSplash();
+    // 放行启动期缓冲的 todos 事件 —— **必须**在基线快照落地之后，
+    // 否则「先落地旧快照、后收到新事件」的顺序会被反转（见 realtime.js 的事件缓冲注释）
+    if (realtimeCh && typeof realtimeCh.releaseTodoEventBuffer === 'function') {
+      realtimeCh.releaseTodoEventBuffer();
+    }
+    // 放行订阅对账（它一直等着「首次拉取已落地 + render 已注册」这个信号）
+    resolveBootReady();
   }
 
   // 图鉴：预加载贴纸数据（异步 fire-and-forget，不阻塞 init 关键路径）。
@@ -246,29 +436,12 @@ function hideLoading() {
     },
   });
 
-  // 建立 Realtime 订阅（含 todos / daily_notes / reactions / stickers 四表）
-  // 监听器治理（技术清单第5条）：保存返回值，beforeunload 时 cleanup
+  // 监听器治理（技术清单第5条）：realtimeCh / presence 等句柄保存下来，beforeunload 时 cleanup。
+  // 注意：Realtime 订阅本体已在 init 最前面建立（见上方「先订阅、再拉取」），
+  // 这里只声明后续会赋值的定时器/心跳句柄。
   let presence = null, lastSeenTimer = null, heartTintTimer = null;
   // （presence/lastSeenTimer 在下方 if(partnerId) 块内赋值，heartTintTimer 在紧跟其后，
   //   cleanup 需跨作用域访问，故提前用 let 声明在此）
-  const realtimeCh = initRealtime({
-    getTodos,
-    setTodos,
-    setOnline: updateOnlineUI,
-    notifyCompleted,
-    getCurrentUserId: () => currentUser && currentUser.id,
-    displayNameOf: (userId) => displayOf(userId).name,
-    onNoteAdded,
-    onNoteRemoved,
-    onNoteUpdated,
-    onReactionAdded,
-    onReactionRemoved,
-    // 隐藏款揭晓：对方开出的隐藏款首次推来，本端播惊喜提示
-    onRarityReveal: handleRarityReveal,
-    // 图鉴贴纸解锁：双端同步更新图鉴状态 + 红点 + 撒花
-    onStickerUnlocked: handleStickerUnlockedFromRealtime,
-    getInFlightIntent, // 完成切换竞态守卫：丢弃与本端意图相反的陈旧回声
-  });
 
   // 初始化「每日留言板」（不阻塞主流程，异步加载）
   initMessages({ currentUser, userMap }).catch((err) =>
@@ -339,8 +512,11 @@ function hideLoading() {
   const handleAppVisibility = () => {
     const visible = document.visibilityState === 'visible';
     if (visible) {
-      // 回前台：重拉列表兜底（弥补后台期间的事件，避免短暂陈旧）
-      db.listTodos().then((todos) => setTodos(sortTodos(todos))).catch(() => {});
+      // 回前台：重拉兜底（弥补后台期间的事件，避免陈旧）。
+      // 后台期间 WebSocket 可能已被系统挂起/断开，而 Realtime 不重放历史，
+      // 所以「回前台」等同于一次重连 —— todos / 留言 / 表情都要补，
+      // 与 realtime 的 onSubscribed(重连) 走同一条对账路径，避免两套逻辑各补一半。
+      reconcileRemoteState().catch(() => {});
       // 恢复 presence 心跳
       if (presence && typeof presence.resume === 'function') presence.resume();
       // 恢复 last_seen 心跳 + 立即写一次
@@ -434,6 +610,10 @@ function bindEvents() {
     // ESC 收起
     if (e.key === 'Escape') closeAddPanel();
   });
+  // 记录「用户在提交飞行期间是否又敲过字」：用于决定提交成功后要不要清空输入框 / 收面板。
+  // 为什么不用「输入框内容 == 提交内容」来判断（早先的写法）：用户想连打两条**相同文案**
+  // 时（例如两条「买牛奶」），内容恰好相等会被误判为"没改过"，于是刚敲的那半句被静默清掉。
+  todoInput.addEventListener('input', () => { addInputDirty = true; });
   addBtn.addEventListener('click', addTodo);
   // 预挂图按钮：选图存入 pendingImage，面板上方浮现缩略图预览（可 × 取消）
   if (attachBtn) {
@@ -449,6 +629,20 @@ function bindEvents() {
 
 /** 已选图片的本地预览 URL（× 取消/提交/关面板时 revoke，防内存泄漏） */
 let attachPreviewUrl = null;
+
+/**
+ * Realtime 订阅句柄。
+ * ⚠️ 声明在**模块作用域**（不是 init 内）：模块级的 beginTodoListFetch / applyTodoListFetch
+ * 要用它读 getTodoEventSeq 判断「拉取期间有没有事件落地」。放在 init 内会变成
+ * ReferenceError（作用域错误，语法检查发现不了，只有真跑起来才暴露 —— 实测被 E2E 抓到）。
+ */
+let realtimeCh = null;
+
+/**
+ * 「提交飞行期间用户又编辑过输入框」标记（由 input 事件置位，提交时清零）。
+ * 决定提交成功后要不要清空输入框 + 收面板 —— 见 addTodo 里的用法。
+ */
+let addInputDirty = false;
 
 /** 渲染预挂图预览：缩略图 + × 取消（悬浮在添加面板上方） */
 function renderAttachPreview(file) {
@@ -519,6 +713,7 @@ async function addTodo() {
   const text = todoInput.value.trim();
   if (!text) return;
 
+  addInputDirty = false; // 从这一刻起，若输入框再被编辑，说明用户在敲下一条
   addBtn.disabled = true;
   addBtn.classList.add('add-panel__btn--loading');
   showLoading();
@@ -554,17 +749,25 @@ async function addTodo() {
         console.warn('[app] 贴纸解锁失败:', e.message)
       );
     }
-    todoInput.value = '';
     resetPendingImage(); // 提交成功才清预挂图（失败路径不清，保留以便重试）
-    closeAddPanel(); // 提交成功收起面板
+    // 提交期间用户可能已经接着敲了下一条（网络慢 / 带图上传时这个窗口很大，
+    // 而输入框既不 disabled 也不清空）。判据用「input 事件有没有再触发过」，
+    // 而不是「内容是否相同」—— 后者在用户连打两条**同文案**待办时会误判，
+    // 把刚敲的那半句静默清掉（详见 addInputDirty 声明处）。
+    if (!addInputDirty) {
+      todoInput.value = '';
+      closeAddPanel(); // 提交成功收起面板
+    }
   } catch (err) {
     if (isOfflineError(err)) {
       // M2 离线：暂存到本地 + 乐观显示 pending 待办，联网后自动补发
       stashOfflineTodo(text, rarity);
       showToast('当前离线，已暂存，联网后自动同步');
-      todoInput.value = '';
       resetPendingImage();
-      closeAddPanel();
+      if (!addInputDirty) {
+        todoInput.value = '';
+        closeAddPanel();
+      }
     } else {
       handleError(toAppError(err), '添加失败');
     }
@@ -1220,7 +1423,7 @@ function floatDots(count) {
         `width:${size}px`,
         `height:${size}px`,
         'border-radius:50%',
-        'background:radial-gradient(circle, rgba(251,113,133,0.95) 0%, rgba(251,113,133,0.3) 70%, transparent 100%)',
+        'background:radial-gradient(circle, rgba(var(--color-primary-rgb),0.95) 0%, rgba(var(--color-primary-rgb),0.3) 70%, transparent 100%)',
         'pointer-events:none',
         'z-index:9999',
         '--dx:' + dx + 'px',
@@ -1320,8 +1523,14 @@ function render() {
     ctaPrimary.className = 'btn btn--primary';
     ctaPrimary.textContent = '写第一条';
     ctaPrimary.addEventListener('click', () => {
-      const addBtn = document.getElementById('addBtn') || document.querySelector('.add-fab');
-      if (addBtn) addBtn.click();
+      // 打开输入面板。
+      // 2026-09-17 修：原实现是 `document.getElementById('addBtn').click()` —— 那是
+      // **添加面板内部**的提交按钮，而空状态下面板是关着的、输入框是空的，
+      // addTodo() 首行 `if (!text) return` 必然直接返回 = 点了没反应。
+      // 更糟的是 closeAddPanel() 不清输入框：若框里残留上次没提交的草稿，
+      // 这个"没反应"的按钮会静默把那条草稿提交成一条新待办。
+      // （备用选择器 `.add-fab` 全仓不存在，佐证这里本来就写错了目标。）
+      openAddPanel();
     });
     const ctaGhost = document.createElement('button');
     ctaGhost.type = 'button';
