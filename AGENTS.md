@@ -322,45 +322,48 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 ```
 - **required checks 只含 `ci.yml` 的三个 job**（`Node Regression + Version Check` /
   `Admin E2E (Playwright + Allure)` / `Workflow Lint (actionlint)`）
-- ⚠️ **不要把 `e2e-app.yml` / `release-web.yml` 的 job 设为 required**：前者有 `paths` 过滤、
-  后者只在手动触发 → 它们在不匹配的 PR 上**永远不会运行**，check 会一直停在 "Expected"，把 PR 永久卡死
+- ⚠️ **不要把 `release-web.yml`（以及将来任何带 `paths` 过滤 / 仅手动触发的 workflow）的 job 设为 required**：
+  它们在不匹配的 PR 上**永远不会运行**，check 会一直停在 "Expected"，把 PR 永久卡死
 - 为什么这是唯一让 CI 有牙齿的方式：required checks 生效前，CI 跑得再红也不影响合并
 
 ### CI 分层：哪些改动该跑哪一层（2026-09-17 定型）
 
-这三层的划分是**刻意的**。起因是一次实测：一个只改了颜色的小改动，把整条流水线拖进
-十几分钟起步的**排队**（06:17 触发的 run，其 job 直到 06:23 才开始；06:27 那个等到 06:39）。
+分层目标是**把「自动跑」压到最少**：让「改一个颜色」的反馈从十几分钟降到 70 秒。
+起因是一次实测 —— 只改了颜色的小改动把整条流水线拖进十几分钟起步的**排队**
+（06:17 触发的 run，其 job 直到 06:23 才开始；06:27 那个等到 06:39）。
 
 | 层 | 何时跑 | 耗时（实测） | 角色 |
 |---|---|---|---|
 | `ci.yml`（3 个 job） | **每次 push / PR** | **约 70 秒** | **必需门禁**：Node 回归 + admin Playwright E2E + actionlint |
-| `e2e-web-full.yml` | 每晚 02:00 + 手动 | 约 4–7 分钟 | 全量业务回归（5 个双账号 E2E） |
-| `e2e-app.yml` | **仅手动**（`workflow_dispatch`） | 约 11 分钟（打 APK 2 + 模拟器 9） | 真机壳内的设备侧验证 —— **按需才跑** |
+| `e2e-web-full.yml` | 每晚 02:00 + 手动 | 约 4–7 分钟 | 全量业务回归（5 个双账号 E2E）+ 测试库三项 preflight |
 
-**为什么 `e2e-app.yml` 改成「仅手动」（2026-09-17 定型）**：它对"每次改动都自动跑"是**超配**的。
-① 一次约 11 分钟，且与夜间全量回归**共用并发组 `e2e-test-db`**（同一测试库，必须串行）、
-`cancel-in-progress: false`（不可被取消）⇒ 触发即占住队列十几分钟；
-② 它只覆盖「登录 + 待办增删改查」，而这些**已被 web 双账号 E2E 等价覆盖**，且翻遍提交历史
-与文档，它**没有一条"发现产品缺陷"的记录**（维护史全是修自己）；
-③ 它**常态掉线**（当天 5+ 次全部死于 `adb` 失去响应 = 模拟器进程级死亡，仓库侧修不了），
-把 main 变长期红灯、训练人忽略红色；
-④ 行业对照：设备/模拟器 E2E **不挂在 PR 门禁**是主流做法，云设备的核心价值是"并行覆盖机型矩阵"，
-而本仓双人私用、单一 APK、**没有机型矩阵需求**。
+### 设备侧（模拟器）**不再进 CI** —— 2026-09-17 定型
 
-**那设备侧谁验**（两层，都不是自动 CI）：
-1. **发布时人工真机走一遍冒烟**（见「发布前自检」第 6 步）—— 顺带覆盖模拟器套件**从未覆盖**的
-   通知 / 震动 / 热更新 / APK 安装器；`release-apk.mjs` 与 `verify-apk-release.mjs` 另在发布通道
-   校验真构建、签名、包内 meta 与 SHA；
-2. 需要时手动跑一次：`gh workflow run e2e-app.yml`（或 Actions 页面 Run workflow）。
-   **要恢复自动触发**就把 `push/pull_request + paths` 加回去，`paths` 建议只留 `android/**`
-   与 `app-e2e/**` —— **不要含 `public/**`**（那正是摘除它的原因）。
+原先的 `.github/workflows/e2e-app.yml`（打测试 APK + 模拟器 + Appium，约 11 分钟）**已删除**。理由：
 
-**模拟器失败的分类**：`ci-run.sh` 在测试失败后会探一次设备是否还在应答
-（`adb shell getprop sys.boot_completed`，连续两次）——
-- 设备仍在 ⇒ 按**代码/测试回归**处理，保留「重试一次」的意义；
-- 设备失联 ⇒ 以专用退出码 `86` 返回，`ci-run-with-retry.sh` **跳过重试**（在死掉的模拟器上重试
-  只是把 11 分钟再烧一遍；实测 2026-09-17 连续 4 次运行都这样白等了一轮），并明确打印
-  「基础设施故障、测试没跑完，不要当成已通过」。
+1. **成本**：一次约 11 分钟，且与夜间全量回归**共用并发组 `e2e-test-db`**（同一测试库，必须串行）、
+   `cancel-in-progress: false`（不可被取消）⇒ 触发即占住队列十几分钟；
+2. **收益**：它只覆盖「登录 + 待办增删改查」，而这些**已被 web 双账号 E2E 等价覆盖**；且翻遍提交历史
+   与文档，它**没有一条「发现产品缺陷」的记录** —— 维护史全是修自己（重试包装 / `adb` 无超时的
+   4h09m 卡死 / ANR 弹窗劫持 a11y 树 / 元素定位 / 10.4s 次交互…）；
+3. **稳定性**：它**常态掉线**（`adb` 失去响应 = 模拟器进程级死亡，仓库侧修不了），
+   把 main 变长期红灯、训练人忽略红色；
+4. **行业对照**：设备 E2E **不挂在 PR 门禁**是主流做法；云设备的核心价值是「并行覆盖机型矩阵」，
+   而本仓双人私用、单一 APK、**没有机型矩阵需求** —— 那份价值不存在。
+
+**那设备侧谁验**：**发布时人工真机走一遍冒烟**（见「发布前自检」第 6 步）——
+它同时覆盖模拟器套件**从未覆盖**的通知 / 震动 / 热更新 / APK 安装器；
+`release-apk.mjs` 与 `verify-apk-release.mjs` 另在发布通道校验真构建、签名、包内 meta 与 SHA。
+
+**这个取舍的代价（明确列出，别当成"没有成本"）**：
+- 设备侧验证 **100% 依赖发布时那一次人工冒烟** —— 不做就等于没验；
+- `android/` 层若被改坏，要到**下次发 APK** 才发现（`release-apk.yml` 的 `dry_run=true` 会真构建 + 签名 + unzip 校验）；
+- `app-e2e/` 套件**保留在仓库里**（可按需在本机接模拟器/真机跑，见 `app-e2e/README.md`），
+  但不再有任何自动信号。
+
+**要恢复设备测试**：新建一个工作流（或从 git 历史取回 `e2e-app.yml`），`paths` 只留
+`android/**` 与 `app-e2e/**`（**不要含 `public/**`**），并把 `app-e2e/README.md` 里记的
+`check-e2e-env-keys.mjs` 生成方列表一并加回。
 
 ### commit message 规范（Conventional Commits，中文描述）
 - `feat:` 新功能 / `fix:` 修复 / `refactor:` 重构 / `docs:` 文档 / `chore:` 杂项
@@ -498,8 +501,7 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 - **Capacitor 插件**：`SystemBars` / `LocalNotifications` / `SplashScreen` / `CapacitorUpdater`（热更）/ 自研 `ApkInstaller`（APK 自更）
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
 - **测试**：Playwright（Python 双账号 E2E，连测试库）+ Node 局部回归（可 mock）
-- **CI/CD**：GitHub Actions **六个** workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** + 三个结构性检查）、
-  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，**仅手动触发**——2026-09-17 起从自动流程摘出，见「CI 分层」）、
+- **CI/CD**：GitHub Actions **五个** workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** + 三个结构性检查）、
   `release-web.yml`（**通道 A 热更新 CD**，仅手动触发）、
   `release-apk.yml`（**通道 B APK 发布 CD**，仅手动触发；工序与 release-web.yml 同构：
   预演真构建 → 审批门 → 发布 → 回读校验）、

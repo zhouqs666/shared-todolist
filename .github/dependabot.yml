@@ -36,8 +36,8 @@
 # 5. **首次运行会是"补课式爆发"**：本文件上线前依赖已经漂了一段时间，所以第一个周一就开出十几条 PR。
 #    **这是预期行为，不是噪声失控** —— 稳态每周只会是几条。另外 `open-pull-requests-limit` 是
 #    **按 ecosystem 各算各的**（5 个 ecosystem × 5 ≈ 最多 25 条并发），所以刻意压小（3~5）：
-#    噪声预算是有限的，这些 PR 每个都要跑 required checks（ci.yml 三个 job），
-#    而 app-e2e / android 相关的改动还会触发 ~8 分钟模拟器套件。宁可少开几个、逐个看。
+#    噪声预算是有限的，这些 PR 每个都要跑 required checks（ci.yml 三个 job，约 70 秒）。
+#    （2026-09-17 起模拟器套件已移出 CI、不再被自动触发 —— 见 AGENTS.md「CI 分层」。）
 #
 # 6. ⚠️ **`update-types: [minor, patch]` 不等于"安全升级"，对 `0.x` 依赖尤其危险**
 #    semver 里 `0.x.y` 的**中间位就是 breaking 位**（`^0.21.5` 只允许 `<0.22.0`），
@@ -116,9 +116,10 @@ updates:
         update-types: ['minor', 'patch']
 
   # ── 4. APP 自动化工程（app-e2e）────────────────────────────────────────────
-  # ⚠️ 这个目录的改动会触发 `e2e-app.yml`（约 8 分钟模拟器 + Appium）。
-  # 慢是真慢，但也是这里最该被跑一遍的地方：WebdriverIO / Appium 的升级
-  # 恰恰是最容易「本地没事、CI 上找不到元素」的那类变化。
+  # ⚠️ 2026-09-17 起该套件**已移出 CI**（CI 里不再自动跑模拟器），所以这里的升级
+  # **不会**自动获得设备侧验证。而 WebdriverIO / Appium 的升级恰恰是最容易
+  # 「本地没事、CI 上找不到元素」的那类变化 ⇒ 升级后需要时手动跑一次：
+  #     node scripts/build-test-apk.mjs && cd app-e2e && npm test（见 app-e2e/README.md）。
   - package-ecosystem: npm
     directory: /app-e2e
     schedule:

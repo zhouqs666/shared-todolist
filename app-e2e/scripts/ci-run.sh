@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # CI 专用测试运行脚本：设备准备 → 启动 Appium → 跑 WebdriverIO → 停 Appium
-# 被 e2e-app.yml 的 android-emulator-runner 调用
+# 原被 e2e-app.yml 的 android-emulator-runner 调用。
+#
+# ⚠️ 2026-09-17 起 `e2e-app.yml` 已从 CI 删除（设备侧改由「发布时人工真机冒烟」承担，
+#    理由见 AGENTS.md「CI 分层」）⇒ 本脚本**当前不再被任何工作流调用**。
+#    保留原因：它编码了若干实测踩出来的硬知识（adb 无超时导致的 4h09m 卡死、
+#    基础设施故障与代码回归的分类），将来若要恢复设备测试可直接复用。
+#    本地按需跑套件请直接 `cd app-e2e && npm test`（不需要本脚本）。
 set -euo pipefail
 
 APPIUM_PORT=4723

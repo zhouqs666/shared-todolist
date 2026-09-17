@@ -11,8 +11,11 @@
  * 检查三方的凭证键集合是否一致（`E2E_SUPABASE_*` / `E2E_TEST_*`）：
  *   A. 被读取方：app-e2e/** 与 scripts/*.py、scripts/e2e_common.py 里出现的键
  *   B. 模板：app-e2e/.env.test.example（新同学照它填）
- *   C. 生成方：两个工作流里 printf 出来的 .env.test 键（CI 真正用的）
- * 三者不一致 → 非零退出。凡是「代码要读的键」，模板和两个工作流的生成列表都必须有。
+ *   C. 生成方：工作流里 printf 出来的 .env.test 键（CI 真正用的）
+ * 三者不一致 → 非零退出。凡是「代码要读的键」，模板与**每个**生成它的工作流都必须有。
+ *
+ * ⚠️ 2026-09-17 起生成方只剩一个（`e2e-web-full.yml`）—— `e2e-app.yml` 已从 CI 移除
+ *    （模拟器套件改按需手动跑）。若将来恢复设备测试的自动触发，把它的路径加回下面的列表。
  *
  * 刻意只管凭证类键（前缀 `E2E_SUPABASE_` / `E2E_TEST_`）：
  *   E2E_BASE / E2E_KEEP_DATA 这类是**运行期开关**（不是凭证、不进 .env.test），
@@ -69,8 +72,8 @@ for (const rel of readers) {
 const examplePath = join(ROOT, 'app-e2e', '.env.test.example');
 const declared = ASSIGNED_KEYS(readFileSync(examplePath, 'utf8'));
 
-// ---------- C. 两个工作流的生成列表 ----------
-const workflows = ['.github/workflows/e2e-app.yml', '.github/workflows/e2e-web-full.yml'];
+// ---------- C. 生成 .env.test 的工作流列表 ----------
+const workflows = ['.github/workflows/e2e-web-full.yml'];
 const generated = new Map();
 for (const rel of workflows) {
   const abs = join(ROOT, rel);
@@ -127,4 +130,4 @@ if (problems) {
   console.log(`✗ 共 ${problems} 处不一致：CI 会在运行到一半时才失败，请先修这里。\n`);
   process.exit(1);
 }
-console.log('✅ 三方（代码读取 / 模板 / 两个工作流生成）凭证键一致\n');
+console.log('✅ 三方（代码读取 / 模板 / 工作流生成）凭证键一致\n');
