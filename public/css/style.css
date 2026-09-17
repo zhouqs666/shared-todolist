@@ -754,20 +754,11 @@ input {
 /* 置顶章（页首，v2.7.72）：形态沿用「要做的」那套轻量引子 —— 页首两章读作一组
    （我钉住的 / 我要做的），时光章保持 16.5px 重型标签，两层不互相抢。
    标签取主色而不是 stone：它是全页唯一「由用户主动制造」的区块，值得一个暖色。
-   图钉与文案同为 11px 那行的成员，align-self:center 让它不被 flex 的 baseline 拽偏。 */
+   ⚠️ 章头**不放图标**（v2.7.74 删掉左侧那枚图钉）：标签本身已是「置顶」二字，再插一枚图钉是
+   同义重复，且它与卡片上那枚 📌 只隔几像素，读起来像"两处都在说同一件事"。
+   置顶标记收归卡片一处（`.todo__pin-icon`）。 */
 .tl-chap--pinned {
   margin: 2px 4px 10px;
-}
-.tl-chap--pinned .tl-chap__pin {
-  display: inline-flex;
-  align-items: center;
-  align-self: center;
-  color: var(--color-primary);
-  flex-shrink: 0;
-}
-.tl-chap--pinned .tl-chap__pin svg {
-  width: 13px;
-  height: 13px;
 }
 .tl-chap--pinned .tl-chap__label {
   font-family: var(--font-en);
