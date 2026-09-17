@@ -125,8 +125,9 @@ input, textarea, [contenteditable] {
   --gold-500: #f59e0b;
   --gold-600: #d97706;
 
-  /* 图鉴未解锁剪影墨色：暖灰，对 --color-bg 对比 ≈3.3:1（WCAG 图形最低 3:1） */
-  --sticker-locked-ink: #8f8782;
+  /* 图鉴未解锁剪影墨色：粉灰，对 --color-bg 对比 3.63:1（WCAG 图形最低 3:1）
+     原 #8f8782 是暖灰（色相 23°），属 v2.7.59 暖色板的遗留；改为粉灰后与 --stone 系同源 */
+  --sticker-locked-ink: #8d8189;
 
   /* === v2.7.49 字体三轨（渐进式，fallback 完整）===
      --font-cn：中文宋体栈（首选霞鹜文楷，需自行引入 web font 后生效；
@@ -530,9 +531,12 @@ input {
   font-weight: 300;
   letter-spacing: 2px;
   text-align: center;
-  /* 极淡半透明粉底，贴顶无圆角 */
-  background: rgba(251, 113, 133, 0.08);
-  color: rgba(159, 18, 57, 0.45);
+  /* 极淡半透明粉底，贴顶无圆角。
+     底色/文字原本是 Tailwind rose 系（rgba(251,113,133) 底 + rgba(159,18,57) 字），
+     与品牌樱粉不是同一色阶；且文字 0.45 透明度实测对比仅 2.36:1（WCAG AA 正文需 4.5:1）。
+     改用主色 tint 作底 + 语义 muted 文字，一次解决「色系不同源」与「读不清」两件事。 */
+  background: rgba(var(--color-primary-rgb), 0.08);
+  color: var(--color-text-muted);
   /* 平滑展开/收起（高度 + 透明度，像窗帘）*/
   transition: max-height 0.35s ease, opacity 0.35s ease, padding 0.35s ease;
   max-height: 32px;
@@ -556,7 +560,7 @@ input {
   width: 3px;
   height: 3px;
   border-radius: 50%;
-  background: rgba(159, 18, 57, 0.45);
+  background: var(--color-text-muted);
   animation: dot-bounce 1.2s ease-in-out infinite;
 }
 .offline-bar__dots i:nth-child(2) { animation-delay: 0.2s; }
@@ -1114,8 +1118,10 @@ input {
   left: 50%;
   bottom: 30px;
   transform: translateX(-50%) translateY(24px);
-  /* v2.7.50 Toast 升级：暖墨背景 + backdrop-filter blur(8px)（已有）+ 圆角 14→12 + 阴影暖色染色 */
-  background: rgba(47, 40, 32, 0.92);
+  /* v2.7.50 Toast 升级：墨色背景 + backdrop-filter blur(8px)（已有）+ 圆角 14→12 + 阴影暖色染色
+     底色 = --stone-900 #352530 的 rgba 形式（原 rgba(47,40,32) 是 v2.7.59 的暖棕 stone-900，
+     色相 32° 与现行粉灰 320° 不同源；白字深底不易察觉，但同样属退役色板残留） */
+  background: rgba(53, 37, 48, 0.92);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   color: #fff;
@@ -1202,13 +1208,16 @@ input {
 }
 
 .skeleton__box {
-  /* v2.7.53 A6 骨架屏 shimmer 暖化：原冷色 rgba(254,205,211,*) → 暖蜜桃 rose-100/200 + cream-100
-     与设计 prototype-07 对齐，整体更'暖' */
+  /* shimmer = 当前 rose-100 / rose-200 的 rgba 形式（保留 0.45/0.55 透明度，
+     视觉重量与 v2.7.53 一致，只把色相从暖蜜桃扳回樱粉）。
+     ⚠️ 这里是字面量而非 var()：v2.7.53 写成暖蜜桃（当时色板确实是暖米色系），
+     v2.7.61 色板整体翻回樱粉时**没能跟着变**，导致首屏骨架屏成为全站唯一的暖色孤点。
+     现在由 test_sakura_colors.mjs 的色相区间检查兜住同类漂移 —— 改色板时会被 CI 拦下。 */
   background: linear-gradient(
     90deg,
-    rgba(249, 227, 212, 0.45) 0%,
-    rgba(241, 196, 168, 0.55) 50%,
-    rgba(249, 227, 212, 0.45) 100%
+    rgba(253, 240, 245, 0.45) 0%,   /* rose-100 #fdf0f5 */
+    rgba(249, 214, 226, 0.55) 50%,  /* rose-200 #f9d6e2 */
+    rgba(253, 240, 245, 0.45) 100%
   );
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
@@ -1844,7 +1853,7 @@ input {
   opacity: 0.7;
   transition: background 0.15s var(--ease), opacity 0.15s;
 }
-.note-write__close:hover { background: rgba(194,65,12,0.1); opacity: 1; }
+.note-write__close:hover { background: rgba(var(--color-primary-rgb), 0.1); opacity: 1; }
 .note-write__title {
   position: absolute;   /* 居中仪式感：标题不受左侧关闭按钮宽度影响，绝对居中 */
   left: 50%;
@@ -2029,7 +2038,7 @@ input {
   height: 72px;
   border-radius: 50%;
   background: rgba(255,255,255,0.6);
-  box-shadow: 0 0 0 6px rgba(194,65,12,0.08);
+  box-shadow: 0 0 0 6px rgba(var(--color-primary-rgb), 0.08);
   color: var(--rose-500);
   display: flex;
   align-items: center;
@@ -2058,7 +2067,7 @@ input {
   max-width: 340px;
   white-space: pre-wrap;
   word-break: break-word;
-  box-shadow: 0 4px 20px rgba(194,65,12,0.08);
+  box-shadow: 0 4px 20px rgba(184, 90, 124, 0.08);
 }
 .note-read__hint {
   font-size: 12px;
@@ -2074,7 +2083,7 @@ input {
   color: #fff;
   font-size: 15px;
   font-weight: 500;
-  box-shadow: 0 4px 16px rgba(194,65,12,0.32);
+  box-shadow: 0 4px 16px rgba(184, 90, 124, 0.32);
   transition: filter 0.15s var(--ease), transform 0.1s var(--ease);
 }
 .note-read__dismiss:hover { filter: brightness(1.06); }
@@ -2089,7 +2098,7 @@ input {
   transition: text-shadow 0.6s ease-out;
 }
 .note-read--pressing .note-read__content {
-  text-shadow: 0 0 10px rgba(251, 113, 133, 0.45);
+  text-shadow: 0 0 10px rgba(var(--color-primary-rgb), 0.45);
 }
 /* 松手时：发光快速收回（利落放弃），覆盖上面的慢过渡 */
 .note-read:not(.note-read--pressing) .note-read__content {
@@ -2292,8 +2301,11 @@ input {
   padding: 0;
   border: none;
   border-radius: 7px;
-  background: var(--color-accent-soft, rgba(244, 114, 182, 0.14));
-  color: var(--color-accent, #f472b6);
+  /* --color-accent / --color-accent-soft 全仓从未定义 → 这两行一直在走 fallback
+     （Tailwind pink-400 #f472b6，色相 329°/饱和 86%，与品牌樱粉不同色阶）。
+     改用语义主色 + --color-primary-rgb tint，顺带去掉悬空 token。 */
+  background: rgba(var(--color-primary-rgb), 0.14);
+  color: var(--color-primary);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: transform 0.15s var(--ease), background 0.15s var(--ease);
@@ -2302,7 +2314,7 @@ input {
 .todo__image-badge svg { width: 13px; height: 13px; }
 .todo__image-badge:active { transform: scale(0.9); }
 @media (hover: hover) {
-  .todo__image-badge:hover { background: var(--color-accent, #f472b6); color: #fff; }
+  .todo__image-badge:hover { background: var(--color-primary); color: #fff; }
 }
 @media (prefers-reduced-motion: reduce) {
   .todo__image-badge { animation: none; transition: none; }
@@ -2481,7 +2493,7 @@ input {
 }
 .img-lightbox__act--confirm {
   background: #b85a7c;
-  box-shadow: 0 4px 16px rgba(159, 18, 57, 0.5);
+  box-shadow: 0 4px 16px rgba(184, 90, 124, 0.5);
   animation: del-confirm-pulse 0.6s var(--ease);
 }
 @keyframes del-confirm-pulse {
@@ -2780,7 +2792,8 @@ input {
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: rgba(47, 40, 32, 0.82);
+  /* = --stone-900 #352530 的 rgba 形式（原 rgba(47,40,32) 是退役的暖棕 stone-900） */
+  background: rgba(53, 37, 48, 0.82);
   color: #fff;
   display: flex;
   align-items: center;
@@ -3150,7 +3163,7 @@ input {
   height: 7px;
   border-radius: 50%;
   background: var(--rose-400);
-  box-shadow: 0 0 0 2px var(--color-bg), 0 0 4px rgba(251, 113, 133, 0.5);
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 4px rgba(var(--color-primary-rgb), 0.5);
 }
 .sticker-badge.hidden {
   display: none;
@@ -3408,11 +3421,11 @@ input {
 }
 .sticker-cell--rare {
   background: linear-gradient(160deg, var(--rose-50), var(--rose-100));
-  border-color: rgba(254, 205, 211, 0.6);
+  border-color: rgba(249, 214, 226, 0.6);
 }
 .sticker-cell--rare .sticker-cell__plate {
   box-shadow: 0 1px 2px rgba(150, 74, 102, 0.08), 0 2px 6px rgba(150, 74, 102, 0.07),
-    0 0 0 1.5px rgba(251, 113, 133, 0.3);
+    0 0 0 1.5px rgba(var(--color-primary-rgb), 0.3);
 }
 .sticker-cell--epic {
   background: linear-gradient(160deg, var(--violet-50), var(--violet-100));
@@ -3822,8 +3835,13 @@ input {
   cursor: pointer;
   letter-spacing: 0.2px;
   transition: background 0.15s var(--ease);
-  pointer-events: auto; /* toast 容器 pointer-events:none，按钮需单独恢复可点 */
+  /* ⚠️ 这里**不能**无条件写 pointer-events:auto。
+     .toast 靠 opacity:0 收起（opacity 不参与命中测试），所以收起后按钮仍在原地可点：
+     表现为「提示早就消失了，屏幕底部还留着一个透明热区」，误触会真的执行撤销/恢复；
+     且它 z-index 高于添加面板，会吃掉点输入框的抬手（键盘弹不出来）。
+     把恢复可点挂到 .toast--show 上 —— 收起状态自动不可点，淡出动画不受影响。 */
 }
+.toast--show .toast__action { pointer-events: auto; }
 .toast__action:active { background: rgba(255, 255, 255, 0.32); }
 
 /* ===== 账号菜单（头像长按：回收站 + 退出登录） ===== */
