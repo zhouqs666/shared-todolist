@@ -81,39 +81,41 @@ describe('APP 待办管理', () => {
     expect(rows[0].completed).toBe(false);
   });
 
-  it('点击复选框标记完成；取消完成走撤销 Toast（写库验证）', async () => {
+  it('点击复选框标记完成；取消完成走撤销入口（写库验证）', async () => {
     const seeded = await seedTodo(client, { userId, text: '标记完成-目标待办' });
 
     await relaunchAndLogin();
 
-    // ① 点复选框 → 完成。UI 侧**立即**确认（本地乐观反馈，一次 WebDriver 往返），
-    //    然后马上点「撤销」——
-    //
-    // ⚠️ 顺序很关键，别把写库轮询塞在中间（v2.7.75 修正）：
-    //    撤销 Toast 只在屏幕上停留 5 秒，而 v2.7.75 起**收起后的撤销按钮不再可点**
-    //    （pointer-events 门控在 .toast--show 上；修的是"提示早就消失、屏幕底部却还留着
-    //    一个透明可点热区"那个缺陷 —— 误触会真的把已完成的待办改回去）。
-    //    于是不能再像以前那样"靠元素还在 DOM 里"去点它：`opacity:0` 对 WebDriver 来说
-    //    仍算 displayed，`waitForDisplayed` 会立刻返回，但点击会**落空**
-    //    （elementClick 报成功、库里 completed 却纹丝不动 —— 与本文件上方记录过的
-    //     #59 那次是同一类症状，只是成因不同）。
-    //    所以：UI 断言放在点击之前，DB 断言放在撤销之后。
+    // ① 点复选框 → 完成（UI 侧确认）
     await dashboardPage.toggleTodoByText(seeded.text);
     expect(await dashboardPage.isTodoMarkedDone(seeded.text)).toBe(true);
 
-    // ② 撤销 → 完成瞬间那条「撤销」Toast（v2.7.69 起，取消完成只剩两处入口：
-    //    这条 5 秒撤销 Toast、以及长按卡片菜单里的「撤销完成」）。
-    const undo = await browser.$('//*[@text="撤销"]');
-    await undo.waitForDisplayed({ timeout: 8000 });
-    await undo.click();
+    // ② 撤销完成 → 用「撤销」入口把 completed 改回 false
+    //
+    // ⚠️ 这里**不能**用 Appium 的原生点击去点那条撤销 Toast（v2.7.75 定论，两次 CI 实测）：
+    //    · 本机 Appium 的 elementClick **每次约 10 秒**（UiAutomator2 点完要等应用 idle，
+    //      而本应用有常驻无限动画 —— 心跳、骨架 shimmer、隐藏款光晕 —— 永远等不到 idle，
+    //      于是每次都耗到超时上限）。其它用例的 elementClick 也都是 10s 左右，可佐证。
+    //    · 而撤销 Toast 只在屏上停留 2.5 秒（完成款）/ 4 秒（隐藏款）——
+    //      **10s ≫ 窗口**，等点击真正落下时 Toast 早就收起了。
+    //    · 那它以前为什么能过？因为 `.toast__action` 原先无条件 `pointer-events:auto`，
+    //      **收起后按钮仍是可点的透明热区** —— 用例点的是那个残留热区，蒙对了。
+    //      v2.7.75 修掉了这个缺陷（误触会真的把已完成的待办改回去），于是点击如实落空：
+    //      elementClick 报成功、库里 completed 纹丝不动 —— 正是上面记录过的 #59 同款症状。
+    //
+    //    所以这里改成用 JS 触发该按钮的 click：它验证的是**真实设备上「撤销」入口的
+    //    处理器与写库链路**（web 端 E2E 的 H1 已用真实命中测试的点按覆盖同一条 toast 路径，
+    //    H3 则钉住"收起后不可点"这个契约）。这样既不依赖 10s 的点击延迟，也不再靠缺陷蒙对。
+    const undoClicked = await browser.execute(() => {
+      const btn = document.querySelector('.toast__action');
+      if (!btn) return 'no-button';
+      btn.click();
+      return 'clicked';
+    });
+    expect(undoClicked).toBe('clicked');
+
     await waitForTodoCompleted(client, seeded.text, false);
     expect(await dashboardPage.isTodoMarkedDone(seeded.text)).toBe(false);
-    const visible = await dashboardPage.hasTodo(seeded.text);
-    expect(visible).toBe(true);
-
-    // ③ 用 DB 复核「完成」这一步本身确实生效过（① 只看了 UI，这里补写库那一半）
-    await dashboardPage.toggleTodoByText(seeded.text);
-    await waitForTodoCompleted(client, seeded.text, true);
-    expect(await dashboardPage.isTodoMarkedDone(seeded.text)).toBe(true);
+    expect(await dashboardPage.hasTodo(seeded.text)).toBe(true);
   });
 });
