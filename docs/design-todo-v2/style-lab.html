@@ -619,9 +619,10 @@ document.getElementById('copySummary').onclick = () => {
   setTimeout(() => (b.textContent = '复制参数摘要'), 1200);
 };
 
-// 允许用 ?css=<url> 覆盖样式表地址（做对照/验证时用），默认加载仓库里的真实文件
-const cssParam = new URLSearchParams(location.search).get('css');
-if (cssParam) document.getElementById('appcss').href = cssParam;
+/* 这里刻意**不**提供"用 query 参数指定样式表地址"的入口：
+   把 location.search 的值塞进 <link href> 会被静态扫描判为不可信输入
+   （CodeQL 在 PR #69 上报了 1 high + 1 medium），而它的唯一用途是给一次性对照实验用 ——
+   实验改为在测试脚本里加载后直接改 link.href，不必给仓库留这个口子。 */
 
 buildControls();
 render();
