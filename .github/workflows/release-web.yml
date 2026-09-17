@@ -175,7 +175,8 @@ jobs:
           path: .release-tmp/*.zip
           retention-days: 7
           if-no-files-found: warn
-          # .release-tmp 是点开头的隐藏目录，upload-artifact@v4 默认跳过隐藏文件，
+          # .release-tmp 是点开头的隐藏目录，upload-artifact 默认跳过隐藏文件
+          # （v4 与 v7 行为一致，故此处不写版本号以免再次过期），
           # 不显式打开的话这一步会静默「找不到文件」（2026-09-14 首跑实测踩到）
           include-hidden-files: true
 
