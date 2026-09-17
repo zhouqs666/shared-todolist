@@ -3,6 +3,8 @@
  *
  * 机制：
  *   添加待办时 15% 概率开出"隐藏款"，命中后按 6:3:1 分稀有度 rare/epic/legendary。
+ *   抽选只在**还没集齐**的档位里进行（2026-09-17 修）：旧实现不看图鉴进度，某一档 4 张
+ *   集齐后仍会开出该档，卡片显示稀有度、撒花照放，却一张贴纸都解锁不了 —— 那次开奖白开。
  *   隐藏款有特殊稀有度背景 + 角标（applyRarity）；高稀有度添加时撒花（celebrateRarity）。
  *   开出隐藏款时解锁对应图鉴贴纸（onRollRarity）。
  *
@@ -21,8 +23,14 @@ const HIDDEN_RATE = 0.15; // 添加待办时开出隐藏款的总概率（15%）
 // 命中隐藏款后的稀有度加权（6:3:1）
 const RARITY_WEIGHTS = { rare: 60, epic: 30, legendary: 10 };
 
+// 抽选与展示顺序：rare → epic → legendary（由低到高，与 sticker-book 一致）
+const RARITY_ORDER = ['rare', 'epic', 'legendary'];
+
 // 每个稀有度的贴纸数量（图鉴全集 12 张 = 4+4+4）
 export const STICKERS_PER_RARITY = 4;
+
+// 图鉴全集张数
+const TOTAL_STICKERS = STICKERS_PER_RARITY * 3;
 
 /**
  * 稀有度元数据：class 后缀、Toast 文案、撒花配色、贴纸名称 + 贴纸图标。
@@ -146,12 +154,63 @@ export function isHidden(rarity) {
 }
 
 /**
+ * 本地已知的图鉴进度：各档已解锁张数。
+ *
+ * ⚠️ 口径是**本地状态**（getStickers），可能滞后于数据库（冷启动时 listStickers 还没回来、
+ * 双端同刻开出同一档）。它只用于「优先开还给得出贴纸的档位」，滞后时最坏结果是白开一次
+ * （由 onRollRarity 的已集齐兜底 + 状态对齐收尾），不会产生重复贴纸或数据不一致。
+ */
+export function rarityProgress() {
+  const counts = { rare: 0, epic: 0, legendary: 0 };
+  for (const s of getStickers()) {
+    if (s && counts[s.rarity] !== undefined) counts[s.rarity]++;
+  }
+  return counts;
+}
+
+/** 还有未解锁贴纸的档位（本地状态口径）；12 张全齐时返回空数组 */
+export function availableRarities() {
+  const counts = rarityProgress();
+  return RARITY_ORDER.filter((r) => counts[r] < STICKERS_PER_RARITY);
+}
+
+/** 图鉴是否已全部集齐（本地状态口径） */
+export function isBookComplete() {
+  return availableRarities().length === 0;
+}
+
+/**
+ * 按权重从 pool 里抽一档；权重在 pool 内部**重新归一**（相对比例不变：
+ * rare 已集齐时 epic:legendary 仍是 3:1，而不是各 50%）。
+ * @param {string[]} pool 参与抽选的档位
+ * @param {Object} [weights] 权重表
+ * @returns {string|null} pool 为空（或权重全为 0）时返回 null
+ */
+export function pickRarityByWeight(pool, weights = RARITY_WEIGHTS) {
+  const usable = pool.filter((r) => weights[r] > 0);
+  if (!usable.length) return null;
+  const total = usable.reduce((sum, r) => sum + weights[r], 0);
+  let r = Math.random() * total;
+  for (const rarity of usable) {
+    r -= weights[rarity];
+    if (r < 0) return rarity;
+  }
+  return usable[usable.length - 1]; // 浮点误差兜底（Math.random() < 1 ⇒ 正常到不了这里）
+}
+
+/**
  * 开奖：返回本次添加的稀有度。
  *
  * E2E 测试钩子：localStorage 里显式放着 `__e2e_force_rarity`（'rare'/'epic'/'legendary'/'common'）
  * 时直接返回该值。为什么需要它：隐藏款是 15% 概率，E2E 无法稳定复现「开出隐藏款 → 解锁贴纸」
  * 这条链，于是这条链此前完全没有测试覆盖（2026-09-16 补）。生产环境没有任何入口写这个 key，
  * 行为与不加钩子时完全一致。
+ * ⚠️ 钩子是**显式覆盖**（含集齐的档位，也照返回）：E2E 靠它验「本地状态滞后 ⇒ 白开一次
+ * → 已集齐提示」这条兜底路径（2026-09-17）。
+ *
+ * 档位选择性（2026-09-17 修）：命中隐藏款后只在**还有未解锁贴纸**的档位里按权重抽。
+ * 否则某一档集齐后仍会被开出 —— 卡片显示该稀有度、撒花照放，却没有任何贴纸可解锁，
+ * 用户看到的是「开出稀有款 → 稀有图鉴已集齐」的空开（业主 2026-09-17 报的 bug）。
  * @returns {'rare'|'epic'|'legendary'|'common'} 85% 返回 'common'
  */
 export function rollRarity() {
@@ -162,13 +221,10 @@ export function rollRarity() {
   if (forced === 'common' || (forced && RARITY_META[forced])) return forced;
 
   if (Math.random() >= HIDDEN_RATE) return 'common';
-  // 命中隐藏款，按权重分稀有度
-  const total = RARITY_WEIGHTS.rare + RARITY_WEIGHTS.epic + RARITY_WEIGHTS.legendary;
-  let r = Math.random() * total;
-  if (r < RARITY_WEIGHTS.rare) return 'rare';
-  r -= RARITY_WEIGHTS.rare;
-  if (r < RARITY_WEIGHTS.epic) return 'epic';
-  return 'legendary';
+  const pool = availableRarities();
+  // 12 张全齐后没有可补的档位：回落到三档全池 —— 隐藏款本身（配色/撒花/对方端揭晓）仍是惊喜，
+  // 不能因为"收集满了"就把盲盒从这个 App 里摘掉；提示文案在 onRollRarity 里另作区分。
+  return pickRarityByWeight(pool.length ? pool : RARITY_ORDER);
 }
 
 /**
@@ -254,7 +310,6 @@ export async function onRollRarity(todo, userId) {
   if (!isHidden(todo.rarity)) return null;
   const rarity = todo.rarity;
   const meta = RARITY_META[rarity];
-  const total = STICKERS_PER_RARITY * 3;
 
   // 本地已知该档解锁数：只当起点，不当结论（可能滞后于数据库）
   const known = getStickers().filter((s) => s.rarity === rarity).length;
@@ -275,26 +330,40 @@ export async function onRollRarity(todo, userId) {
 
     // 本端立即更新图鉴状态（Realtime 也会推回来，addOrUpdateSticker 幂等）
     addOrUpdateSticker(sticker);
-    if (staleLocal) {
-      // 撞过已占用的序号 = 本地状态本来就落后于数据库（冷启动/并发开奖）。
-      // 只补这一张会让图鉴进度显示出偏小的数字（如 1/12 实际是 2/12），所以拉一次全量对齐。
-      try {
-        setStickers(await db.listStickers());
-      } catch (err) {
-        console.warn('[blindbox] 对齐图鉴失败（已忽略）:', err.message);
-      }
-    }
+    // 撞过已占用的序号 = 本地状态本来就落后于数据库（冷启动/并发开奖）。
+    // 只补这一张会让图鉴进度显示出偏小的数字（如 1/12 实际是 2/12），所以拉一次全量对齐。
+    if (staleLocal) await syncStickersFromDb();
     const name = meta.stickerNames[n - 1] || `${meta.label}${n}`;
     showToast(
-      `${meta.toast} 解锁「${name}」· 图鉴 ${getStickers().length}/${total}`,
+      `${meta.toast} 解锁「${name}」· 图鉴 ${getStickers().length}/${TOTAL_STICKERS}`,
       rollToastOpts(rarity, stickerKey)
     );
     return sticker;
   }
 
-  // 该档 4 张都已解锁：本次不再产生新贴纸（图鉴不会出现重复条目）
-  showToast(`${meta.toast} ${meta.label}图鉴已集齐，继续探索其它稀有度吧`, rollToastOpts(rarity));
+  // 该档 4 张都已解锁：本次不再产生新贴纸（图鉴不会出现重复条目）。
+  // 正常路径走不到这里 —— rollRarity 已把集齐的档位排除在抽选之外；能走到说明本地状态
+  // 滞后于数据库，所以顺手对齐一次：否则接下来的开奖还会继续选中这一档、继续白开。
+  if (staleLocal) await syncStickersFromDb();
+  showToast(
+    isBookComplete()
+      ? `${meta.toast} 图鉴 12 张已全部集齐，这张留作纪念 ✨`
+      : `${meta.toast} ${meta.label}图鉴已集齐，继续探索其它稀有度吧`,
+    rollToastOpts(rarity)
+  );
   return null;
+}
+
+/**
+ * 拉全量图鉴对齐本地状态。
+ * 失败只告警不抛：本地状态滞后是"下次开奖再补"的问题，不该打断这次开奖的提示。
+ */
+async function syncStickersFromDb() {
+  try {
+    setStickers(await db.listStickers());
+  } catch (err) {
+    console.warn('[blindbox] 对齐图鉴失败（已忽略）:', err.message);
+  }
 }
 
 /** 开奖提示的样式：稀有度配色 + 图标（解锁时用该张贴纸的图标，未解锁用该档首张） */

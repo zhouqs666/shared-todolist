@@ -2,7 +2,8 @@
 盲盒 + 图鉴功能 E2E 测试
 
 分三部分：
-1. 纯前端逻辑测试（不依赖 DB）：rollRarity 概率分布、applyRarity 稀有度 class、图鉴渲染
+1. 纯前端逻辑测试（不依赖 DB）：rollRarity 概率分布 + **档位选择性**（已集齐的档位退出抽选池，
+   含"12 张全齐后回落三档全池"）、applyRarity 稀有度 class、图鉴渲染
 2. 页面加载/登录测试：验证模块链无报错、登录后主页渲染、createTodo 落库
 3. 隐藏款链路（强制开奖）：用 localStorage 钩子把开奖锁到指定稀有度，覆盖 15% 概率撞不到的路径
    —— 提示是否被顶掉、贴纸序号是否重复/空转、完成时「撤销」按钮是否还在、rarity_seen 是否正确
@@ -26,6 +27,7 @@ from e2e_common import (
     cleanup_test_data,
     add_todo,
     wait_add_settled,
+    wait_toast_gone,
     login,
     wait_until,
 )
@@ -131,6 +133,63 @@ with sync_playwright() as p:
         check("rare 有 todo--rare class", "todo--rare" in dom_result["rare"]["classes"])
         check("epic 有 todo--epic class", "todo--epic" in dom_result["epic"]["classes"])
         check("legendary 有 todo--legendary class", "todo--legendary" in dom_result["legendary"]["classes"])
+
+        # --- 4b. 档位选择性：已集齐的档位必须退出抽选池（2026-09-17 修）---
+        # 为什么必须在这里测（而不是靠真实添加去撞）：旧实现不看图鉴进度，某一档 4 张集齐后
+        # 仍会被开出 —— 卡片显示该稀有度、撒花照放，却一张贴纸都解锁不了（"开出稀有款 →
+        # 稀有图鉴已集齐"），这次开奖等于白开。要撞出这条路径得先集齐 4 张再等 15% 概率，
+        # 所以直接构造图鉴状态去驱动**真实的** rollRarity / availableRarities。
+        # 构造出来的状态在 finally 里还原成真实状态（下面 7.x 的断言依赖真实图鉴是空白）。
+        page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")  # 钩子是显式覆盖，会绕过档位池
+        stickers_before = page.evaluate("async () => (await import('/js/state.js')).getStickers().length")
+        select = page.evaluate("""async () => {
+            const state = await import('/js/state.js');
+            const bb = await import('/js/blindbox.js');
+            const real = state.getStickers();
+            const fake = (rarity, n) => Array.from({ length: n }, (_, i) => ({
+                id: `${rarity}_${i + 1}`, stickerKey: `${rarity}_${i + 1}`, rarity,
+                unlockedBy: null, todoId: null, unlockedAt: new Date().toISOString(),
+            }));
+            const run = (n) => {
+                const c = { common: 0, rare: 0, epic: 0, legendary: 0 };
+                for (let i = 0; i < n; i++) c[bb.rollRarity()]++;
+                return c;
+            };
+            try {
+                state.setStickers(fake('rare', 4));                       // 稀有档集齐
+                const afterRare = run(2000);
+                const availAfterRare = bb.availableRarities();
+                const bookDoneAfterRare = bb.isBookComplete();
+                state.setStickers([...fake('rare', 4), ...fake('epic', 4), ...fake('legendary', 4)]);
+                const allDone = run(2000);                                // 12 张全齐
+                const availAll = bb.availableRarities();
+                const bookDoneAll = bb.isBookComplete();
+                return { afterRare, availAfterRare, bookDoneAfterRare, allDone, availAll, bookDoneAll };
+            } finally {
+                state.setStickers(real);
+            }
+        }""")
+        after_rare, all_done = select["afterRare"], select["allDone"]
+        hidden_rare = after_rare["rare"] + after_rare["epic"] + after_rare["legendary"]
+        hidden_all = all_done["rare"] + all_done["epic"] + all_done["legendary"]
+        epic_share = after_rare["epic"] / max(1, hidden_rare)
+        check("稀有集齐后 availableRarities 只剩 epic/legendary",
+              select["availAfterRare"] == ["epic", "legendary"], f"实际: {select['availAfterRare']}")
+        check("稀有集齐但其余未齐时不算全书集齐", select["bookDoneAfterRare"] is False)
+        check("稀有集齐后 2000 次开奖不再开出稀有（旧实现照开 = 白开）",
+              after_rare["rare"] == 0, f"实际: {after_rare}")
+        check("隐藏款总概率不受影响（仍约 15%）",
+              0.12 < hidden_rare / 2000 < 0.18, f"实际 {hidden_rare / 2000:.1%}")
+        check("剩余档位权重重新归一（epic 占比约 75%，不是各 50%）",
+              0.68 < epic_share < 0.82, f"实际 {epic_share:.0%}")
+        check("12 张全齐后 availableRarities 为空、isBookComplete 为真",
+              select["availAll"] == [] and select["bookDoneAll"] is True,
+              f"实际: {select['availAll']} / {select['bookDoneAll']}")
+        check("12 张全齐后仍能开出隐藏款，且三档都在池里（盲盒不因收集满而消失）",
+              hidden_all > 0 and all(all_done[r] > 0 for r in ("rare", "epic", "legendary")),
+              f"实际: {all_done}")
+        check("构造用的假图鉴已还原（真实 stickers 未被污染）",
+              page.evaluate("async () => (await import('/js/state.js')).getStickers().length") == stickers_before)
 
         # 图鉴弹层测试
         print()
@@ -252,6 +311,60 @@ with sync_playwright() as p:
         check("集齐后不再产生第 5 张贴纸", full and rare_count == 4,
               f"提示: {toast_text()} / rare 贴纸: {rare_keys()}")
         wait_add_settled(page, t5)
+
+        # --- 7.3b 上一条能走到「已集齐」是**因为钩子显式覆盖**（它绕过档位池）---
+        # 真实路径下（无钩子）此时 rare 已是 4/4，开奖必须不再落到 rare。这一条是业主报的 bug
+        # 的回归断言 —— 用的是**真实图鉴状态**（不是 4b 那种构造状态）：读 state 判可用档位，
+        # 再跑 1000 次真实 rollRarity 数有没有 rare。
+        page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")
+        real_pool = page.evaluate("""async () => {
+            const bb = await import('/js/blindbox.js');
+            const state = await import('/js/state.js');
+            const counts = { common: 0, rare: 0, epic: 0, legendary: 0 };
+            for (let i = 0; i < 1000; i++) counts[bb.rollRarity()]++;
+            return {
+                avail: bb.availableRarities(),
+                bookDone: bb.isBookComplete(),
+                progress: bb.rarityProgress(),
+                counts,
+                realRare: state.getStickers().filter((s) => s.rarity === 'rare').length,
+            };
+        }""")
+        check("真实图鉴：rare 已 4/4，可用档位只剩 epic/legendary",
+              real_pool["realRare"] == 4 and real_pool["avail"] == ["epic", "legendary"],
+              f"实际: {real_pool}")
+        check("真实图鉴下 1000 次开奖不再开出 rare（无钩子的真实路径）",
+              real_pool["counts"]["rare"] == 0, f"实际: {real_pool['counts']}")
+
+        # --- 7.3c 12 张全齐时的提示文案 ---
+        # 构造 12/12（不真去集齐：那要 12 次开奖，还会污染后面 7.5 的序号期望）。
+        # onRollRarity 在「该档已知 4/4」时循环一次都不执行 ⇒ 不产生任何数据库写入，只走兜底文案。
+        check("文案断言前提示已清空",
+              wait_until(page, lambda: page.locator(".toast--show").count() == 0, desc="无提示在显示"))
+        book_done = page.evaluate("""async () => {
+            const state = await import('/js/state.js');
+            const bb = await import('/js/blindbox.js');
+            const real = state.getStickers();
+            const fake = (rarity, n) => Array.from({ length: n }, (_, i) => ({
+                id: `${rarity}_${i + 1}`, stickerKey: `${rarity}_${i + 1}`, rarity,
+                unlockedBy: null, todoId: null, unlockedAt: new Date().toISOString(),
+            }));
+            const todo = state.getTodos().find((t) => t.text === 'E2E-测试-强制稀有5');
+            try {
+                state.setStickers([...fake('rare', 4), ...fake('epic', 4), ...fake('legendary', 4)]);
+                await bb.onRollRarity({ id: todo.id, rarity: 'rare' }, todo.createdBy);
+                return { bookComplete: bb.isBookComplete() };
+            } finally {
+                state.setStickers(real);
+            }
+        }""")
+        shown = wait_until(page, lambda: "全部集齐" in toast_text(), desc="12 张全齐文案")
+        check("12 张全齐时提示说「已全部集齐」，不再说「继续探索其它稀有度」",
+              shown and book_done["bookComplete"] and "继续探索其它稀有度" not in toast_text(),
+              f"实际: {toast_text()}")
+        check("构造 12/12 期间没有多解锁贴纸（该分支不写库）",
+              len(rare_keys()) == 4, f"实际: {rare_keys()}")
+        wait_toast_gone(page)
 
         # --- 7.4 完成隐藏款：完成提示必须留在屏上（旧实现被开奖提示连「撤销」按钮一起清掉）---
         page.locator(".todo", has_text=t5).first.locator(".todo__check").click()
