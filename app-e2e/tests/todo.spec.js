@@ -86,18 +86,23 @@ describe('APP 待办管理', () => {
 
     await relaunchAndLogin();
 
-    // ① 点复选框 → 完成（轮询测试库确认 completed=true）
+    // ① 点复选框 → 完成。UI 侧**立即**确认（本地乐观反馈，一次 WebDriver 往返），
+    //    然后马上点「撤销」——
+    //
+    // ⚠️ 顺序很关键，别把写库轮询塞在中间（v2.7.75 修正）：
+    //    撤销 Toast 只在屏幕上停留 5 秒，而 v2.7.75 起**收起后的撤销按钮不再可点**
+    //    （pointer-events 门控在 .toast--show 上；修的是"提示早就消失、屏幕底部却还留着
+    //    一个透明可点热区"那个缺陷 —— 误触会真的把已完成的待办改回去）。
+    //    于是不能再像以前那样"靠元素还在 DOM 里"去点它：`opacity:0` 对 WebDriver 来说
+    //    仍算 displayed，`waitForDisplayed` 会立刻返回，但点击会**落空**
+    //    （elementClick 报成功、库里 completed 却纹丝不动 —— 与本文件上方记录过的
+    //     #59 那次是同一类症状，只是成因不同）。
+    //    所以：UI 断言放在点击之前，DB 断言放在撤销之后。
     await dashboardPage.toggleTodoByText(seeded.text);
-    await waitForTodoCompleted(client, seeded.text, true);
-    // UI 侧同验一次：已完成 ⇒ 复选框的无障碍标签变成「标为未完成」
     expect(await dashboardPage.isTodoMarkedDone(seeded.text)).toBe(true);
 
-    // ② 取消完成 → 完成瞬间那条「撤销」Toast（v2.7.69 起，取消完成只剩两处入口：
+    // ② 撤销 → 完成瞬间那条「撤销」Toast（v2.7.69 起，取消完成只剩两处入口：
     //    这条 5 秒撤销 Toast、以及长按卡片菜单里的「撤销完成」）。
-    //
-    // ⚠️ 这里**曾经**是「再点一下复选框」—— v2.7.69 有意移除了那个入口（已完成卡片的复选框
-    //    变成 opacity:0 + pointer-events:none）。用例没跟着改，于是在 #59 之后连红 3 个 commit
-    //    （elementClick 命令返回成功、库里 completed 却回不到 false，两次重试都一样）。
     const undo = await browser.$('//*[@text="撤销"]');
     await undo.waitForDisplayed({ timeout: 8000 });
     await undo.click();
@@ -105,5 +110,10 @@ describe('APP 待办管理', () => {
     expect(await dashboardPage.isTodoMarkedDone(seeded.text)).toBe(false);
     const visible = await dashboardPage.hasTodo(seeded.text);
     expect(visible).toBe(true);
+
+    // ③ 用 DB 复核「完成」这一步本身确实生效过（① 只看了 UI，这里补写库那一半）
+    await dashboardPage.toggleTodoByText(seeded.text);
+    await waitForTodoCompleted(client, seeded.text, true);
+    expect(await dashboardPage.isTodoMarkedDone(seeded.text)).toBe(true);
   });
 });
