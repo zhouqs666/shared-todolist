@@ -6,8 +6,8 @@ name: Web E2E Full (定时全量回归)
 # 分层触发的行业实践：
 #   - PR 门禁（ci.yml）要**快而稳**：跑得慢会拖住每一次合并，跑得不稳会让团队开始
 #     无视红灯。所以 required check 里只放 Node 回归 + admin Playwright + actionlint。
-#   - 全量回归（本工作流）可以**慢而全**：4 个双账号 Playwright E2E 覆盖回收站/
-#     删除撤销/完成撤销/离线补发/盲盒图鉴 —— 价值最高、但也最依赖时序，
+#   - 全量回归（本工作流）可以**慢而全**：5 个双账号 Playwright E2E 覆盖回收站/
+#     删除撤销/完成撤销/离线补发/置顶章节/盲盒图鉴 —— 价值最高、但也最依赖时序，
 #     放夜里跑，红了不影响任何人当天的工作，第二天照诊断流程查即可。
 #   ⚠️ 因此本工作流**刻意不进 main 的 required checks**（也不该进）：
 #      它不在 PR 上运行，设成 required 只会让 check 永远停在 "Expected"（批次 B 的坑）。
@@ -136,7 +136,7 @@ jobs:
             > app-e2e/.env.test
           echo "✓ .env.test 已生成（键位与 e2e-app.yml 一致）"
 
-      # 两个 preflight 都是「几十秒内快速失败」：与其让 4 个用例各挂一次、
+      # 两个 preflight 都是「几十秒内快速失败」：与其让 5 个用例各挂一次、
       # 再从「元素找不到」的日志里反推环境问题，不如先确认环境本身是对的。
       - name: Preflight · Web 通道隔离检查（铁律一）
         run: node scripts/check-test-env.mjs
