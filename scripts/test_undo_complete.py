@@ -163,6 +163,29 @@ with sync_playwright() as p:
     # UI 删除是软删除，行仍在表里；统一硬删一次（自带生产库硬闸）
     cleanup_test_data()
 
+    # ===== H3 回归（v2.7.75）：收起后的撤销按钮不得可点 =====
+    # 为什么单独守这一条：.toast 靠 opacity:0 收起（opacity 不参与命中测试），
+    # 而 .toast__action 原先是无条件 pointer-events:auto —— 于是提示早就消失、
+    # 屏幕底部却留着一个**透明但可点**的热区，误触会真的执行「撤销恢复/撤销完成」；
+    # 且它 z-index 高于添加面板，会吃掉点输入框的抬手（键盘弹不出来）。
+    # 修法是把恢复可点门控到 .toast--show 上。这里直接钉住这个 CSS 契约：
+    # 收起态必须是 none；展开态必须回到 auto（否则撤销就点不了了）。
+    h3 = page.evaluate("""() => {
+      const t = document.createElement('div');
+      t.className = 'toast';
+      const b = document.createElement('button');
+      b.className = 'toast__action';
+      t.appendChild(b);
+      document.body.appendChild(t);
+      const hidden = getComputedStyle(b).pointerEvents;
+      t.classList.add('toast--show');
+      const shown = getComputedStyle(b).pointerEvents;
+      t.remove();
+      return { hidden, shown };
+    }""")
+    check("H3 收起态撤销按钮不可点（pointer-events: none）", h3["hidden"] == "none", f"实际 {h3}")
+    check("H3 展开态撤销按钮可点（pointer-events: auto）", h3["shown"] == "auto", f"实际 {h3}")
+
     # 汇总
     print(f"\n== 结果: {results['pass']} 通过 / {results['fail']} 失败 ==", flush=True)
     if errors:

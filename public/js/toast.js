@@ -17,21 +17,57 @@
  *   · 「图片上传失败，可长按待办补图」（被开奖提示顶掉 → 用户以为图片传成功了）
  *   · 完成隐藏款待办的「撤销」按钮（被开奖提示顶掉 → 误完成后没有撤回入口）
  * 排队只保留最新一条（旧排队项丢弃）：宁可少弹一条，也不要让过期信息延迟出现。
+ *
+ * 【2026-09-17 修正】上面的「只保留最新一条」对**普通信息**成立，但对**带操作入口的提示
+ * （opts.action，如删除后的「撤销」）不成立** —— 那是恢复数据的入口，丢了就是功能缺失：
+ * 删除待办弹的「已移到回收站 + 撤销」只要落进排队，期间来任何一条别的提示就会被静默丢掉，
+ * 用户以为"这次删了没得撤"。
+ * 现在的不变量（比早先写的"永不被丢弃"更准确）：
+ *   · 带入口的提示不会被**普通信息**挤掉，且优先插队首；
+ *   · 连删多条时队列有界，超出上界会丢**最旧**的入口（不是最新的那条 —— 用户最可能想撤的是刚做的）；
+ *   · `urgent`（错误提示）仍然抢占，但**保留**排队中的入口一起等下一条。
  */
 
 let toastTimer = null;
 let showing = false;
 const queue = [];
 
+/** 提示是否带操作入口（如「撤销」）—— 入口是功能，不是信息，不该被普通提示挤掉 */
+const hasAction = (opts) => !!(opts && opts.action && opts.action.label);
+
+/** 队列上限 */
+const MAX_QUEUE = 4;
+
 export function showToast(msg, opts = {}) {
   const toast = ensureToast();
   if (!opts.urgent && showing) {
-    // 丢弃旧排队项：延迟弹出的过期提示比不弹更让人困惑
-    queue.length = 0;
-    queue.push({ msg, opts });
+    if (hasAction(opts)) {
+      // 入口优先：插队首，保证下一个显示的就是它
+      queue.unshift({ msg, opts });
+    } else if (queue.some((q) => hasAction(q.opts))) {
+      // 队列里已有入口 —— 不能清空，排到它后面
+      queue.push({ msg, opts });
+    } else {
+      // 普通提示之间维持原设计：过期文案比不弹更让人困惑，只留最新一条
+      queue.length = 0;
+      queue.push({ msg, opts });
+    }
+    // 压回上界：优先丢普通信息；整队都是入口时丢**最旧**的那条
+    // （入口用 unshift 入队 ⇒ 数组尾是最旧的；用户最可能想撤的是刚做的那次）
+    while (queue.length > MAX_QUEUE) {
+      const idx = queue.findIndex((q) => !hasAction(q.opts));
+      if (idx !== -1) queue.splice(idx, 1);
+      else queue.pop();
+    }
     return;
   }
-  if (opts.urgent) queue.length = 0;
+  if (opts.urgent) {
+    // 错误提示抢占当前提示，但**保留**排队中的操作入口 ——
+    // 撤销是恢复数据的唯一入口，不该被一条错误文案吞掉
+    const keepActions = queue.filter((q) => hasAction(q.opts));
+    queue.length = 0;
+    queue.push(...keepActions);
+  }
   display(toast, msg, opts);
 }
 

@@ -38,7 +38,7 @@
   ```bash
   node scripts/serve-test.mjs      # 测试服务器，端口 3100，连独立测试库
   node scripts/reset-test-db.mjs   # 归零测试库（清 E2E 残留 + 贴纸）
-  node scripts/run-web-e2e.mjs     # 推荐：一次跑完 4 个用例（逐个归零 + 失败重试一次 + flaky 显式标记 + 汇总表）
+  node scripts/run-web-e2e.mjs     # 推荐：一次跑完 5 个用例（逐个归零 + 失败重试一次 + flaky 显式标记 + 汇总表）
   python3 scripts/test_undo_complete.py   # 也可单跑某个：脚本自动连 3100 + 自证隔离
   ```
   测试脚本默认连 3100（测试库），**禁止指向 3000**（那是生产库）。指向生产会被 `e2e_common.py` 直接拦下、退出码 2。
@@ -52,8 +52,8 @@
   ⚠️ 但**门禁覆盖 ≠ 测试全覆盖**，这是**有意的分层**（2026-09-14 批次 C 定型）：
   - **PR 门禁要「快而稳」**：只放 Node 回归 + admin Playwright E2E + workflow 静态检查。跑得慢会拖住每次合并，
     跑得不稳会让团队开始无视红灯。
-  - **全量回归要「慢而全」**：4 个双账号 Playwright E2E（`scripts/test_blindbox.py` / `test_offline.py` /
-    `test_trash.py` / `test_undo_complete.py`）走 **`.github/workflows/e2e-web-full.yml`** ——
+  - **全量回归要「慢而全」**：5 个双账号 Playwright E2E（`scripts/test_blindbox.py` / `test_offline.py` /
+    `test_trash.py` / `test_undo_complete.py` / `test_pin.py`）走 **`.github/workflows/e2e-web-full.yml`** ——
     **每晚 02:00（北京）定时**跑（`schedule`，cron 按 UTC 写）+ 可手动 `workflow_dispatch`，
     由 `scripts/run-web-e2e.mjs` 驱动（逐文件归零 / 失败重试一次 / FLAKY 显式标记 / 汇总进 Run Summary）。
   - ⚠️ **该工作流不设 required check**（它不在 PR 上运行；设了会让 check 永远停在 "Expected" 而卡死 PR）。
@@ -106,7 +106,11 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 - ✅ 改完代码 + 测试通过后，跑 `node scripts/release.mjs <版本号> --notes "<说明>"`
 - 脚本自动：注入版本号 → 打包 public/ 为 zip → 上传 Supabase Storage（`app_updates` bucket）→ 写 `app_versions` 表
 - 用户下次**冷启动** App 时自动拉取，无需重装 APK
-- ✅ 告知用户：杀掉 App 重开两次（首次后台下载，二次生效）
+- ✅ 告知用户：**打开一次 App 即可**（不是"重开两次"）
+  ⚠️ 2026-09-17 更正：早先这里写的是「杀掉 App 重开两次（首次后台下载、二次生效）」，
+  与实现不符 —— `update.js` 是 `download → set → 立即 reload()`，**同一个会话内**就完成切换
+  （重载前用原生 SplashScreen 盖住，用户看到「粉色爱心 → 平滑过渡」）。
+  「两次」只在用户于下载完成前就把 App 杀掉时才需要。文档按实现改正（铁律四）。
 
 **执行环境二选一（同一套脚本，不是两条通道）：**
 - **发布前置（2026-09-14 明确）：目标改动必须已合并到 main。**
@@ -253,7 +257,13 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 3. 跑回归测试（`scripts/test_*.py` + `scripts/test_*.mjs`），截图/断言确认；**PR 的 required checks 必须全绿**
 4. 涉及 SQL 改动 → 对话里贴可复制完整 SQL（不是只放 `.sql` 文件）
 5. 涉及 APK 改动 → `apksigner verify` + 检查构建时间 + unzip 确认改动入包
-6. 发布后回读校验 `node scripts/verify-release.mjs`（版本行 / Storage 对象 / 包内 meta）；
+6. **设备侧冒烟（人工，1 分钟）**：把 dry-run 制品装到真机上走一遍关键路径 ——
+   壳能启动 → 登录 → 加一条待办 → 完成一条 → 切后台再回来。
+   **为什么必须有这一步**（2026-09-17 定型）：模拟器套件 2026-09-17 起改为**仅手动触发**，
+   设备侧不再有自动信号；而这条人工冒烟同时覆盖了模拟器套件**从来没覆盖**的部分 ——
+   系统通知、震动、热更新、APK 安装器。
+   走通道 A（热更新）时至少确认一次：打开 App 能看到更新欢迎动画（= 新 bundle 已生效）。
+7. 发布后回读校验 `node scripts/verify-release.mjs`（版本行 / Storage 对象 / 包内 meta）；
    若走 CI 发布，另外把 `index.html` 的 meta 通过 **PR** 补回（见通道 A 的「已知限制」）；
    交付回复列明"已做 X / 已验证 Y / 未验证 Z"（铁律二的硬限制要标）
 
@@ -316,6 +326,42 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
   后者只在手动触发 → 它们在不匹配的 PR 上**永远不会运行**，check 会一直停在 "Expected"，把 PR 永久卡死
 - 为什么这是唯一让 CI 有牙齿的方式：required checks 生效前，CI 跑得再红也不影响合并
 
+### CI 分层：哪些改动该跑哪一层（2026-09-17 定型）
+
+这三层的划分是**刻意的**。起因是一次实测：一个只改了颜色的小改动，把整条流水线拖进
+十几分钟起步的**排队**（06:17 触发的 run，其 job 直到 06:23 才开始；06:27 那个等到 06:39）。
+
+| 层 | 何时跑 | 耗时（实测） | 角色 |
+|---|---|---|---|
+| `ci.yml`（3 个 job） | **每次 push / PR** | **约 70 秒** | **必需门禁**：Node 回归 + admin Playwright E2E + actionlint |
+| `e2e-web-full.yml` | 每晚 02:00 + 手动 | 约 4–7 分钟 | 全量业务回归（5 个双账号 E2E） |
+| `e2e-app.yml` | **仅手动**（`workflow_dispatch`） | 约 11 分钟（打 APK 2 + 模拟器 9） | 真机壳内的设备侧验证 —— **按需才跑** |
+
+**为什么 `e2e-app.yml` 改成「仅手动」（2026-09-17 定型）**：它对"每次改动都自动跑"是**超配**的。
+① 一次约 11 分钟，且与夜间全量回归**共用并发组 `e2e-test-db`**（同一测试库，必须串行）、
+`cancel-in-progress: false`（不可被取消）⇒ 触发即占住队列十几分钟；
+② 它只覆盖「登录 + 待办增删改查」，而这些**已被 web 双账号 E2E 等价覆盖**，且翻遍提交历史
+与文档，它**没有一条"发现产品缺陷"的记录**（维护史全是修自己）；
+③ 它**常态掉线**（当天 5+ 次全部死于 `adb` 失去响应 = 模拟器进程级死亡，仓库侧修不了），
+把 main 变长期红灯、训练人忽略红色；
+④ 行业对照：设备/模拟器 E2E **不挂在 PR 门禁**是主流做法，云设备的核心价值是"并行覆盖机型矩阵"，
+而本仓双人私用、单一 APK、**没有机型矩阵需求**。
+
+**那设备侧谁验**（两层，都不是自动 CI）：
+1. **发布时人工真机走一遍冒烟**（见「发布前自检」第 6 步）—— 顺带覆盖模拟器套件**从未覆盖**的
+   通知 / 震动 / 热更新 / APK 安装器；`release-apk.mjs` 与 `verify-apk-release.mjs` 另在发布通道
+   校验真构建、签名、包内 meta 与 SHA；
+2. 需要时手动跑一次：`gh workflow run e2e-app.yml`（或 Actions 页面 Run workflow）。
+   **要恢复自动触发**就把 `push/pull_request + paths` 加回去，`paths` 建议只留 `android/**`
+   与 `app-e2e/**` —— **不要含 `public/**`**（那正是摘除它的原因）。
+
+**模拟器失败的分类**：`ci-run.sh` 在测试失败后会探一次设备是否还在应答
+（`adb shell getprop sys.boot_completed`，连续两次）——
+- 设备仍在 ⇒ 按**代码/测试回归**处理，保留「重试一次」的意义；
+- 设备失联 ⇒ 以专用退出码 `86` 返回，`ci-run-with-retry.sh` **跳过重试**（在死掉的模拟器上重试
+  只是把 11 分钟再烧一遍；实测 2026-09-17 连续 4 次运行都这样白等了一轮），并明确打印
+  「基础设施故障、测试没跑完，不要当成已通过」。
+
 ### commit message 规范（Conventional Commits，中文描述）
 - `feat:` 新功能 / `fix:` 修复 / `refactor:` 重构 / `docs:` 文档 / `chore:` 杂项
 - **一个功能 = 一个 PR**（2026-09-14 对齐 squash merge）：分支内可以自由拆多个 commit 方便回溯，
@@ -349,17 +395,49 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 - ✅ 真值只放两处：本地 `.env*`（已 gitignore）与 **GitHub Secrets**（CI 用）
 - ❌ 禁止出现在：`.example` 模板、文档（`*.md`）、代码、测试夹具、注释、SQL 文件、截图
   - 包括**真实账号标识**（邮箱 / 用户名）—— 它们不是密码，但和密码凑在一起就是完整凭据
-- ✅ 自查命令：`git grep -nE "PASSWORD=[^y]|@todo\.local" -- '*.example' '*.md'`（应为空或仅占位符）
+  - ⚠️ **两处功能性例外（不算违规）**：客户端登录映射 `public/js/auth.js`（中文名→邮箱，登录必需）
+    与测试里的 mock JWT payload（装饰字段，无逻辑读取）。它们不含口令，单独泄露不构成凭据。
+    **文档 / SQL / `.example` 没有这个功能理由**，那里出现真实账号标识一律算违规。
+- ✅ 自查命令（工作树）——**判据不是「输出为空」**（伪域名 `@todo.local` 会合法地出现在说明文字里），
+  而是「逐条都能解释」：
+  ```bash
+  # ① 列出仓库里全部凭据类赋值：每一个的「值」都必须是占位符 / process.env 读取 / ${{ secrets.* }}
+  #    出现任何真实字面量 = 立即停下，按下方①②③顺序处理
+  git grep -nEi '(password|passwd|secret|token|api[_-]?key)[[:space:]]*=[[:space:]]*[^[:space:]]+' -- . \
+    ':!package-lock.json' ':!public/js/vendor' ':!AGENTS.md' ':!CODE-REVIEW.md'
+
+  # ② 列出全部账号标识出现点：逐条确认落在「允许的位置」
+  #    允许：客户端登录映射（public/js/auth.js、admin/ 的 AuthContext）、测试账号（e2e-*）、mock JWT payload
+  #    不允许：文档 / SQL / .example —— 那里只能写形状占位（如 <拼音>@todo.local）
+  git grep -n '@todo\.local' -- . ':!AGENTS.md' ':!CODE-REVIEW.md'
+  ```
+  ⚠️ **工作树干净 ≠ 没泄露过** —— 历史提交里的值照样能 `git show` 取出来。所以还要扫历史：
+  ```bash
+  # ③ 刻意**不写死**泄露值（写死就等于又把它存进仓库一次）；列出该键历史上出现过的所有赋值人工过目
+  git log --all -p -S'E2E_TEST_PASSWORD' -- '*.example' \
+    | grep -E '^\+.*E2E_TEST_PASSWORD=' | sort -u
+
+  # ④ 生产数据文件是否曾入库（实例：supabase/backup-stickers-*.json 曾进过历史，含真实 UUID）
+  git log --all --diff-filter=A --name-only --pretty=format: | sort -u | grep -Ei 'backup|incident'
+  ```
 - ✅ **发现泄露时的正确顺序**：① **先改密码/轮换 key**（让泄露值当场失效）→ ② 再清理文件
-  → ③ 复核历史提交里是否还有（`git log --all -S "<泄露值>"`）→ ④ 开 GitHub **secret scanning + push protection**
+  → ③ 复核历史提交里是否还有（上面的 ③④）→ ④ 开 GitHub **secret scanning + push protection**
   - 删文件**不等于**修好：历史提交里仍然有，且可能已被克隆（`git log --all -S` 会告诉你从哪个 commit 开始）
   - 改写历史（force push）在本项目**不做**：main 有分支保护、收益小于代价 —— 轮换凭据才是根治
 
-**血泪教训（2026-09-15）：** `admin/.env.test.example` 里写着真实账号邮箱 `xiaobaobao@todo.local` +
-真实密码（值已在轮换时作废，此处不复述），**从 2026-09-08 起在公开仓库里躺了一周**。而生产账号用的是**同一个邮箱**
-（App 的用户名/邮箱映射就写在 `public/js/auth.js` 里）—— 只要密码复用，"邮箱 + 密码"就是完全公开的，
-任何人都能登进这个双人私密应用读写全部数据。发现时的排查线索：生产库里出现了一条
+**血泪教训（2026-09-15）：** `admin/.env.test.example` 里写着真实账号邮箱（形状 `<拼音>@todo.local`，
+本文件不复述真值）+ 真实密码（值已在轮换时作废），**从 2026-09-08 起在公开仓库里躺了一周**。
+而生产账号用的是**同一个邮箱**（App 的用户名/邮箱映射就写在 `public/js/auth.js` 里）—— 只要密码复用，
+"邮箱 + 密码"就是完全公开的，任何人都能登进这个双人私密应用读写全部数据。发现时的排查线索：生产库里出现了一条
 **查不到来源**的留言（软删除表里没有、代码里也没有物理删除路径），且 App 端表现"今早才出现、随后消失"。
+
+**血泪教训补记（2026-09-17）：** 上面那条规则写完之后，**规则自己举的例子又把真值写回了 AGENTS.md**，
+且规则给出的自查命令有两个缺陷 —— ① 只扫 `'*.example' '*.md'`，扫不到 `.sql` / `.js`
+（`supabase/schema.sql` 与 `PRODUCT-SPEC.md` 里的真实邮箱因此一直没被这条命令抓到）；
+② 命令文本含 `PASSWORD=[^y]`，会**自匹配**记录它的那两个文件，于是永远不可能是"绿"的。
+**推论**：自查命令必须自己先跑一遍、并且**必须能真的变红**（否则和没有一样）。
+另注：同批还发现 `deliverables/` 下有一份机构向学习文档（37KB）躺在公开仓库里 —— 已迁至本机素材库
+（路径见本机记忆，不入库），并已按素材库的构建流程重新生成索引。
 
 **推论写进规则**：凭据卫生的失效**不会报错、不会报警**，只会以"莫名其妙的数据/登录"的形式出现 ——
 所以它必须是**推送前的静态检查**（人工自查命令 + GitHub push protection），不能靠"我记得没写过"。
@@ -416,16 +494,16 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
   发布后回读校验：通道 A 用 `verify-release.mjs`，通道 B 用 `verify-apk-release.mjs`（两者都是只读、可当 CI 门禁）；
   另：`release-web.yml` 的 publish 作业在回读校验后**顺带跑一次 `dora-metrics.mjs`** 写进 Run Summary
   （`continue-on-error: true` —— 观测不该把一次已成功的发布变成红灯）
-- **PWA**：`manifest.webmanifest` + `sw.js`（Service Worker v15，仅浏览器环境生效，原生环境 bypass）
+- **PWA**：`manifest.webmanifest` + `sw.js`（Service Worker，仅浏览器环境生效，原生环境 bypass；版本号见文件内 `VERSION` 常量）
 - **Capacitor 插件**：`SystemBars` / `LocalNotifications` / `SplashScreen` / `CapacitorUpdater`（热更）/ 自研 `ApkInstaller`（APK 自更）
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
 - **测试**：Playwright（Python 双账号 E2E，连测试库）+ Node 局部回归（可 mock）
 - **CI/CD**：GitHub Actions **六个** workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** + 三个结构性检查）、
-  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，有 `paths` 过滤）、
+  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，**仅手动触发**——2026-09-17 起从自动流程摘出，见「CI 分层」）、
   `release-web.yml`（**通道 A 热更新 CD**，仅手动触发）、
   `release-apk.yml`（**通道 B APK 发布 CD**，仅手动触发；工序与 release-web.yml 同构：
   预演真构建 → 审批门 → 发布 → 回读校验）、
-  `e2e-web-full.yml`（**定时全量回归**：每晚 02:00 北京 / `schedule` + `workflow_dispatch`，跑 4 个双账号 Python E2E）、
+  `e2e-web-full.yml`（**定时全量回归**：每晚 02:00 北京 / `schedule` + `workflow_dispatch`，跑 5 个双账号 Python E2E）、
   `codeql.yml`（**静态代码扫描**：push / PR / 每周一定时；`security-events: write` 是它唯一需要的写权限）。
   main 已开**分支保护**，required checks 取 `ci.yml` 三个 job；改代码走分支 + PR（见「铁律五 → main 分支保护」）
   ⚠️ `schedule` 的 cron **按 UTC 解释**，且定时任务只在**默认分支**上运行（夜里跑的是 main 上已合并的代码）

@@ -1,5 +1,5 @@
 /**
- * Web 通道全量回归运行器（4 个双账号 Playwright E2E）
+ * Web 通道全量回归运行器（5 个双账号 Playwright E2E）
  *
  * 为什么要有这个脚本，而不是在工作流里写个 for 循环：
  *   1. **逐文件独立的干净初态**：每个文件跑之前先归零测试库（硬删 E2E- 待办 + 贴纸）。
@@ -16,7 +16,7 @@
  *
  * 用法：
  *   node scripts/serve-test.mjs &            # 先起测试服务器（本脚本不会替你起，隔离必须显式）
- *   node scripts/run-web-e2e.mjs             # 跑全部 4 个
+ *   node scripts/run-web-e2e.mjs             # 跑全部 5 个
  *   node scripts/run-web-e2e.mjs --files test_trash,test_offline
  *   node scripts/run-web-e2e.mjs --keep-data # 失败现场保留（E2E_KEEP_DATA=1，不归零）
  *   node scripts/run-web-e2e.mjs --no-retry  # 关闭重试（排查 flaky 时用，看清楚第一次到底怎么挂的）
@@ -36,8 +36,8 @@ const SCRIPTS = join(ROOT, 'scripts');
 const BASE = process.env.E2E_BASE || 'http://localhost:3100';
 const PYTHON = process.env.PYTHON || 'python3';
 
-/** 全量清单（顺序刻意稳定：先不写库的完成撤销，再回收站，再离线，最后盲盒） */
-const ALL_FILES = ['test_undo_complete', 'test_trash', 'test_offline', 'test_blindbox'];
+/** 全量清单（顺序刻意稳定：先不写库的完成撤销，再回收站，再离线，再置顶章节，最后盲盒） */
+const ALL_FILES = ['test_undo_complete', 'test_trash', 'test_offline', 'test_pin', 'test_blindbox'];
 
 const argv = process.argv.slice(2);
 const hasFlag = (f) => argv.includes(f);

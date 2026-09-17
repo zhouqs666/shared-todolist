@@ -131,7 +131,9 @@ export async function notify(title, body) {
           body,
           channelId: CHANNEL_ID,
           smallIcon: 'ic_stat_icon',
-          iconColor: '#ec4899',
+          // 品牌樱粉（--rose-500）；原 #ec4899 是 Tailwind pink-500，与色板不同源。
+          // 与 capacitor.config.json 的 LocalNotifications.iconColor 保持一致。
+          iconColor: '#e884a8',
           schedule: { at: new Date(Date.now() + 50) }, // 延迟 50ms，确保通知能弹出
         },
       ],
