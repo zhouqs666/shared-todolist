@@ -160,4 +160,28 @@ export class DashboardPage {
     );
     return await el.waitForExist({ timeout }).catch(() => false);
   }
+
+  /**
+   * 长按卡片 → 在弹出菜单里点「撤销完成」（把已完成的待办改回未完成）
+   *
+   * 为什么走这条而不是那条会自己消失的「撤销」Toast（2026-09-17 定论）：
+   *   本机 Appium 的 elementClick **每次约 10 秒**（实测 10.4s；同一次运行里每次点击都这样），
+   *   而完成款撤销 Toast 只在屏上停留约 2.5 秒 ⇒ **等点击落下时它早已收起**，
+   *   这条路径在设备上根本无法用点按验证。
+   *   （它以前"能过"只是因为那个按钮收起后仍可点 —— 一个已在 v2.7.75 修掉的缺陷。）
+   *   长按菜单没有时间窗口，是设备上可靠的等价入口；Toast 路径由 web E2E 的 H1
+   *   （真实命中测试的点按）与 H3（收起后不可点的契约）覆盖。
+   */
+  async uncompleteByMenu(text, timeout = 10000) {
+    const cardText = await this.driver.$(`//*[@resource-id="todoList"]//*[@text="${text}"]`);
+    await cardText.waitForDisplayed({ timeout });
+    // 长按用 Appium 的 mobile 命令（原生上下文可用；不用 JS —— 测试跑在 NATIVE_APP 上下文）
+    await this.driver.executeScript('mobile: longClickGesture', {
+      elementId: cardText.elementId,
+      duration: 800,
+    });
+    const btn = await this.driver.$('//*[@text="撤销完成"]');
+    await btn.waitForDisplayed({ timeout });
+    await btn.click();
+  }
 }

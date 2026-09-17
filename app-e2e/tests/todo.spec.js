@@ -90,23 +90,22 @@ describe('APP 待办管理', () => {
     await dashboardPage.toggleTodoByText(seeded.text);
     expect(await dashboardPage.isTodoMarkedDone(seeded.text)).toBe(true);
 
-    // ② 撤销完成 → 点那条「撤销」Toast（v2.7.69 起，取消完成只剩两处入口：
-    //    这条撤销 Toast、以及长按卡片菜单里的「撤销完成」）。
+    // ② 撤销完成 → 走长按菜单里的「撤销完成」
     //
-    // ⚠️ 这里曾经连红两次，根因值得记住（v2.7.75 定位）：
-    //    · 撤销 Toast 只在屏上停留约 2.5 秒（完成款）；
-    //    · 而本机 Appium 的 elementClick **每次约 10 秒** —— UiAutomator2 动作后会等应用
-    //      "idle"，默认等待上限正是 10000ms，而本应用有常驻无限动画（心跳 / shimmer /
-    //      隐藏款镀膜旋转），永远等不到 idle ⇒ 每次都耗满 10 秒，点击落下时 Toast 早已收起。
+    // ⚠️ 这里曾经连红多次，根因值得记住（v2.7.75 定位）：
+    //    · 完成款撤销 Toast 只在屏上停留约 2.5 秒；
+    //    · 而本机 Appium 的 elementClick **每次约 10.4 秒**（UiAutomator2 动作后等应用 idle，
+    //      本应用有常驻无限动画 —— 心跳 / shimmer / 隐藏款镀膜旋转 —— 永远等不到 idle，
+    //      于是每次耗满上限）。10s ≫ 2.5s ⇒ 点击落下时 Toast 早已收起。
+    //      （试过 `appium:waitForIdleTimeout` 与 Appium 2 的 `appium:settings` 两种写法，
+    //        实测**都没能改变这 10.4 秒**，故不在配置上继续纠缠。）
     //    · 那它以前为什么能过？因为 `.toast__action` 当时无条件 `pointer-events:auto` ——
     //      收起后按钮仍是**可点的透明热区**，用例点的是那个残留热区，靠缺陷蒙对了。
     //      v2.7.75 修掉该缺陷（误触会真的把已完成的待办改回去）后，点击如实落空：
     //      elementClick 报成功、库里 completed 纹丝不动（与本文件上方 #59 同款症状）。
-    //    ⇒ 修法在 `wdio.conf.js`：`appium:waitForIdleTimeout: 0`，让动作立即返回。
-    //      这里保留**真实点按**这条路径（不用 JS 触发），因为它才是用户真会做的事。
-    const undo = await browser.$('//*[@text="撤销"]');
-    await undo.waitForDisplayed({ timeout: 8000 });
-    await undo.click();
+    //    ⇒ 改用**没有时间窗口**的等价入口（长按菜单）。Toast 那条入口由 web E2E 覆盖：
+    //      test_undo_complete.py 的 H1 用真实命中测试点它、H3 钉住"收起后不可点"的契约。
+    await dashboardPage.uncompleteByMenu(seeded.text);
     await waitForTodoCompleted(client, seeded.text, false);
     expect(await dashboardPage.isTodoMarkedDone(seeded.text)).toBe(false);
     expect(await dashboardPage.hasTodo(seeded.text)).toBe(true);
