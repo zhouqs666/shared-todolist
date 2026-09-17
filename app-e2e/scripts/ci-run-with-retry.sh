@@ -16,14 +16,26 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
+# ci-run.sh 用这个专用退出码表示「模拟器已失联（基础设施故障）」——
+# 那种情况下**不该重试**：重试是在同一个（已死的）模拟器会话里再跑一遍 wdio，
+# 只会白烧 ~11 分钟且结果相同。实测 2026-09-17 连续 4 次运行都这样白等了一轮。
+DEVICE_LOST_EXIT=86
+
 for attempt in 1 2; do
   echo "=== Appium 第 ${attempt} 次尝试 ==="
-  if bash "${HERE}/ci-run.sh"; then
+  bash "${HERE}/ci-run.sh"
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
     echo "✅ 第 ${attempt} 次通过"
     exit 0
   fi
+  if [ "$rc" -eq "$DEVICE_LOST_EXIT" ]; then
+    echo "✗ 模拟器已掉线（基础设施故障，非代码回归）—— 不在死设备上重试，直接结束"
+    echo "  → 处置：重跑该 job，或用 workflow_dispatch 手动触发。测试**没有跑完**，不要当成'已通过'。"
+    exit "$rc"
+  fi
   if [ "${attempt}" = "1" ]; then
-    echo "⚠️ 第 1 次失败 → 重试一次（既往观测多为环境抖动；若第 2 次同样失败，则是真回归）"
+    echo "⚠️ 第 1 次失败（退出码 $rc）→ 重试一次（既往观测多为环境抖动；若第 2 次同样失败，则是真回归）"
   else
     echo "✗ 两次都失败：按真回归处理"
     exit 1

@@ -24,6 +24,11 @@ let userMap = {};
 
 /** 全部留言（自己发的 + 对方发的） */
 let notes = [];
+/**
+ * 「已由 Realtime 落地」的留言变更计数 —— 供 refreshNotes 判断某次补拉的快照是否已过时：
+ * 拉取期间若有留言落地，那份快照就比本地旧，整份替换会把它抹掉（反而造成"铃铛不亮"）。
+ */
+let noteEventSeq = 0;
 
 // DOM 引用
 let bellEl = null;       // 顶栏神秘图标
@@ -127,11 +132,33 @@ export async function initMessages({ currentUser: user, userMap: map }) {
   });
 
   // 拉取留言（逐条保留，按时间正序）
+  await refreshNotes();
+}
+
+/**
+ * 重新拉取留言并刷新铃铛（冷启动 / 断线重连 / 回前台共用）。
+ * 为什么需要：留言**只在冷启动拉这一次**，而 Realtime 的复制槽不重放历史 ——
+ * 断线期间（切后台被系统挂起、切网络、隧道）对方写的「心里话」本端永远收不到，
+ * 表现是**顶栏铃铛一直不亮**，用户根本不知道有留言。
+ * 所以断线重连 / 回前台必须补拉一次。
+ *
+ * ⚠️ 「拉取期间有新留言落地」时必须放弃本次替换（见 noteEventSeq）：
+ * 否则会把刚由 Realtime 推来的那条抹掉 —— 反而制造了本函数要修的那个症状（铃铛不亮）。
+ */
+export async function refreshNotes() {
+  const seqAtIssue = noteEventSeq;
   try {
-    notes = await db.listNotes();
+    const fresh = await db.listNotes();
+    if (noteEventSeq !== seqAtIssue) {
+      console.warn('[messages] 补拉期间收到新留言落地，放弃本次整份替换以免抹掉它');
+      return notes;
+    }
+    notes = fresh;
     refreshBell();
+    return notes;
   } catch (err) {
     console.error('[messages] 加载留言失败:', err);
+    return null;
   }
 }
 
@@ -518,6 +545,7 @@ export function onNoteAdded(note) {
   if (!note) return;
   // id 去重（本端发送会回声）
   if (notes.some((n) => n.id === note.id)) return;
+  noteEventSeq++; // 标记「本地已比任何在途补拉的快照更新」，见 refreshNotes
   notes.push(note);
   notes.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   refreshBell();
@@ -525,6 +553,7 @@ export function onNoteAdded(note) {
 
 /** 留言被删除（阅后即焚 DELETE，或对方发新留言清掉了旧的） */
 export function onNoteRemoved(id) {
+  noteEventSeq++; // 同上：本地已更新，在途补拉的旧快照不许覆盖
   notes = notes.filter((n) => n.id !== id);
   refreshBell();
 }
@@ -532,6 +561,7 @@ export function onNoteRemoved(id) {
 /** 留言被更新（标记已读 UPDATE）—— 发送方借此感知对方已读，但无需 UI 变化 */
 export function onNoteUpdated(note) {
   if (!note) return;
+  noteEventSeq++;
   notes = notes.map((n) => (n.id === note.id ? note : n));
   refreshBell();
 }

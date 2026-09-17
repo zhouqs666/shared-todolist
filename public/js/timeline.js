@@ -5,6 +5,11 @@
  * （时区日界、章节顺序），抽成纯函数才能用合成夹具钉住 —— scripts/test_timeline_grouping.mjs
  * 不联网、进 CI。渲染（章节头进 DOM、复用人节点）留在 app.js。
  *
+ * 本模块导出两个层次：
+ *   · groupByLocalPeriod —— **只**负责时光章怎么切（一个区）
+ *   · buildTodoLayout   —— **整页**自上而下的章序（置顶 / 要做的 / 时光章）
+ *     app.js 的 render() 只按它的产出摆放节点，不再自己决定顺序与文案。
+ *
  * ⚠️ 时区（头号陷阱）：completed_at 是 timestamptz，存的是 UTC 瞬时。
  *    分组必须按**设备本地时间**取年月日 —— getFullYear()/getMonth()/getDate()，
  *    **禁止 toISOString().slice(0, 10)**：那按 UTC 切天，北京时间晚上 8 点之后
@@ -173,4 +178,83 @@ export function groupByLocalPeriod(todos, now) {
     subtitle: c.subtitle,
     todos: c.todos,
   }));
+}
+
+/** 页首置顶章的 key（与时光章的 day:/month: 前缀不撞，也与下面的 __open__ 不撞） */
+export const PINNED_CHAPTER_KEY = '__pinned__';
+/** 未完成区小标题的 key */
+export const OPEN_CHAPTER_KEY = '__open__';
+
+/** 差额提示：某章有 N 条被置顶章收走时挂在章头。全角括号把它明确标成"附注"，不与小计混读 */
+const pinnedNote = (n) => (n > 0 ? `（${n} 件在置顶）` : '');
+
+/**
+ * 整页布局：**置顶 → 要做的 → 时光章节**，自上而下。
+ *
+ * 为什么要单独一层（而不是在 render 里拼三遍 filter）：这次改动的头号风险是
+ * 「某条待办从页面上凭空消失」—— 它不报错、不告警，用户会以为数据丢了。
+ * 把"谁摆在哪个章、每个章头写什么"收进一个纯函数，才能用不变量钉住它
+ * （scripts/test_timeline_grouping.mjs 第 11 组：每条恰好出现一次）。
+ *
+ * 三条口径（都是决策，不是实现细节）：
+ *   ① **置顶是一层，不是排序优先级**。置顶项搬到页首独立成章，且**只在这里出现一次**
+ *      （一个 id 一个 DOM 节点：app.js 的复用池按 data-id 索引，同一节点不可能同时摆在两处）。
+ *      为什么要独立成章：分章会给每个章内重排（cmpCompletedDesc），置顶作为"排序优先级"
+ *      在分章这一步会被整条丢掉 —— 实测一条置顶的已完成项仍排在它所属章的中间。
+ *   ② **小计记"账"，不记"可见卡片"**。时光章的小计是"那天一起完成了几件"，不该因为
+ *      某条被拿到页首就少记一笔 ⇒ 分组与计数永远按**全量**算，只把置顶项从**卡片列表**里摘掉，
+ *      差额用「（N 件在置顶）」写在章头，读者能当场对上账（N 张卡 + N 件在置顶 = 章头总数）。
+ *   ③ **空章头不渲染**。某章名下条目全被置顶时，只剩一个标签没有卡片 —— 看起来像 bug，
+ *      那天的时间信息由置顶章卡片的 meta（"谁完成 · 完成于何时"）承担。
+ *
+ * 置顶章内**保持传入顺序**（不在此处重排）：app.js 传入的是 sortTodos 的结果
+ * （未完成在前 → 创建时间倒序），排序语义留在 state.js 一处。
+ *
+ * @param {Array<Object>} todos 全量待办（含未完成）
+ * @param {Date|string|number} [now] 「今天」的基准时刻（测试注入用）
+ * @returns {Array<{key:string,label:string,subtitle:string,modifier?:string,todos:Array<Object>}>}
+ */
+export function buildTodoLayout(todos, now) {
+  const list = Array.isArray(todos) ? todos : [];
+  const chapters = [];
+
+  // ① 置顶章（页首）
+  const pinned = list.filter((t) => t && t.pinned);
+  if (pinned.length > 0) {
+    chapters.push({
+      key: PINNED_CHAPTER_KEY,
+      label: '置顶',
+      subtitle: `· ${pinned.length}`,
+      modifier: 'tl-chap--pinned',
+      todos: pinned,
+    });
+  }
+
+  // ② 未完成区：小标题「要做的 · N」。没有它，下面「今天」章节头会紧跟在未完成卡片后面，
+  //    读起来像"这些是今天的待办"。
+  const openAll = list.filter((t) => t && !t.completed);
+  const openVisible = openAll.filter((t) => !t.pinned);
+  if (openVisible.length > 0) {
+    chapters.push({
+      key: OPEN_CHAPTER_KEY,
+      label: '要做的',
+      subtitle: `· ${openAll.length}${pinnedNote(openAll.length - openVisible.length)}`,
+      modifier: 'tl-chap--open',
+      todos: openVisible,
+    });
+  }
+
+  // ③ 已完成区：按完成时间分章（分组规则在 groupByLocalPeriod —— 纯函数、有单测）
+  for (const chap of groupByLocalPeriod(list, now)) {
+    const visible = chap.todos.filter((t) => !t.pinned);
+    if (visible.length === 0) continue; // 口径③：空章头不渲染
+    chapters.push({
+      key: chap.key,
+      label: chap.label,
+      subtitle: chap.subtitle + pinnedNote(chap.todos.length - visible.length),
+      todos: visible,
+    });
+  }
+
+  return chapters;
 }

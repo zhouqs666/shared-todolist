@@ -65,6 +65,11 @@ export function getReactionLabel(key) {
 
 /** @type {Object<string, Array>} todoId → reactions[] */
 let reactionsByTodo = {};
+/**
+ * 「已由 Realtime 落地」的表情变更计数 —— 供 refreshReactions 判断某次补拉的快照是否已过时：
+ * 拉取期间若有表情落地，那份快照就比本地旧，整份替换会把它抹掉。
+ */
+let reactionEventSeq = 0;
 /** @type {Object|null} 当前用户 */
 let currentUser = null;
 /** @type {Function|null} 对方贴表情时的回调（app.js 用于该 todo 上的小动画） */
@@ -79,14 +84,36 @@ let onRemoteReactionFn = null;
 export async function initReactions({ currentUser: user, onRemoteReaction }) {
   currentUser = user;
   onRemoteReactionFn = onRemoteReaction || null;
+  await refreshReactions();
+}
+
+/**
+ * 重新拉取全部表情（冷启动 / 断线重连共用）。
+ * 为什么需要：表情**只在冷启动拉这一次**，而 Realtime 的复制槽不重放历史 ——
+ * 断线期间对方贴的爱心本端永远收不到（要重载页面才显示），所以重连时必须补拉。
+ * 调用方补拉后需自行触发一次渲染（表情是在 render() 里按卡片绘制的）。
+ *
+ * ⚠️ 「拉取期间有新表情落地」时必须放弃本次替换（见 reactionEventSeq）：
+ * 否则会把刚由 Realtime 推来的爱心抹掉。
+ * ⚠️ 另一个已知边界：这里是整体替换，若此刻正好有一次本端 toggleReaction 在飞行中，
+ *    其乐观临时行可能被覆盖，随后由 Realtime 回声补回（窗口极小，仅发生在重连时）。
+ */
+export async function refreshReactions() {
+  const seqAtIssue = reactionEventSeq;
   try {
     const all = await db.listReactions();
+    if (reactionEventSeq !== seqAtIssue) {
+      console.warn('[reactions] 补拉期间有新表情落地，放弃本次整份替换以免抹掉它');
+      return all;
+    }
     reactionsByTodo = {};
     all.forEach((r) => {
       (reactionsByTodo[r.todoId] ||= []).push(r);
     });
+    return all;
   } catch (err) {
     console.error('[reactions] 加载表情失败:', err);
+    return null;
   }
 }
 
@@ -230,6 +257,7 @@ function rerenderTodo(todoId) {
  *  所以按 (userId, emoji) 去重：临时行被真实行替换，绝不重复入列表（否则计数翻倍）。
  */
 export function onReactionAdded(reaction) {
+  reactionEventSeq++; // 标记「本地已比任何在途补拉的快照更新」，见 refreshReactions
   const list = reactionsByTodo[reaction.todoId] || [];
   const normKey = normalizeKey(reaction.emoji);
   const idx = list.findIndex(
@@ -256,6 +284,7 @@ export function onReactionAdded(reaction) {
  *  默认 replica identity 下 DELETE 事件只带主键 id，todoId 可能为空——
  *  此时按 id 从本地缓存反查所属待办（该行一定经 INSERT 回推进过缓存）。 */
 export function onReactionRemoved(reactionId, todoId) {
+  reactionEventSeq++; // 同上
   if (!todoId) {
     for (const [tid, list] of Object.entries(reactionsByTodo)) {
       if (list.some((r) => r.id === reactionId)) { todoId = tid; break; }
