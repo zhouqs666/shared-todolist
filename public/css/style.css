@@ -3991,3 +3991,5 @@ input {
   background: var(--rose-500);
   color: #fff;
 }
+
+/* 临时验证：本条仅为确认「只改 public/** 不再触发模拟器 E2E」，验证后即关闭 PR 不合并 */
