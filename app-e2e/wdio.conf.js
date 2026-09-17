@@ -56,8 +56,14 @@ export const config = {
       // 实测代价：任一次 elementClick 都耗时约 10 秒（同一次运行里多处可佐证），
       // 直接导致「点那条只活 2.5 秒的撤销 Toast」这类用例**永远点不到**它
       // —— 而它以前"能过"，只是因为那个按钮收起后仍可点（缺陷，已在 v2.7.75 修掉）。
-      // 设为 0 后动作立即返回；各用例本就用显式等待（waitForDisplayed / waitForExist）同步，
-      // 不依赖这个隐式等待。副作用是**整个套件明显加快**。
+      // ⚠️ Appium 2 里这几个值属于 **settings**（`appium:settings`），
+      //    旧的顶层 capability 写法（`appium:waitForIdleTimeout`）实测**不生效**：
+      //    加了之后 elementClick 依然耗时 10.5 秒。所以两者都写上，以 settings 为准。
+      'appium:settings': {
+        waitForIdleTimeout: 0,
+        waitForSelectorTimeout: 0,
+        actionAcknowledgmentTimeout: 0,
+      },
       'appium:waitForIdleTimeout': 0,
       // 关掉系统窗口动画，进一步减少与"等待界面稳定"相关的抖动
       'appium:disableWindowAnimation': true,
