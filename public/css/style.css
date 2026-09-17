@@ -57,19 +57,25 @@ input, textarea, [contenteditable] {
   --shadow-md: 0 2px 6px rgba(184, 90, 124, 0.05), 0 8px 24px rgba(184, 90, 124, 0.08);
   --shadow-lg: 0 4px 12px rgba(184, 90, 124, 0.08), 0 16px 40px rgba(184, 90, 124, 0.12);
 
-  /* === v2.7.68 纸与光：卡片材质语义 token ===
-     未完成的卡片是「新纸」（白、浮起），已完成的卡片是「晒过的纸」（暖一度、压平内凹）。
-     为什么单开 token：① 材质差要成对调（调暖调冷只改这 4 个值）；
-     ② 隐藏款靠 .todo.todo--rare 覆盖 background/border，集中在这里才好让位。 */
-  --color-surface-raised: #ffffff;        /* 新纸（卡面起点） */
-  --color-surface-raised-deep: var(--cream-100); /* 新纸（渐变收尾，极淡樱贝） */
-  --color-surface-sunned: #fdf6f1;        /* 晒过的纸（起点，暖一度） */
-  --color-surface-sunned-deep: #f9efe8;   /* 晒过的纸（收尾，更暖） */
-  --color-border-sunned: var(--cream-300); /* 晒过的纸的边缘（比未完成略深一档） */
+  /* === v2.7.72 卡片基线（组件级 token）：普通卡要「安静」，隐藏款才显眼 ===
+     ① 未完成 = 白纸（浮起）；已完成 = **中性粉灰**纸（压平内凹）。
+     ② 已完成刻意不用暖米（v2.7.68 的「晒过的纸」）：暖米本身是一种"色"，与隐藏款的
+        淡粉/淡紫/淡金落在同一条明度线上 —— 而线上 7 张隐藏款**全部在已完成区**，
+        结果是"奖杯柜里分不出哪张是隐藏款"（2026-09 实测确认的业主反馈）。
+     ③ 阴影强度是"普通"的振幅：隐藏款自带档位光晕与镀膜边，普通卡不需要那么高的浮起感
+        （实测降到 0.5×，隐藏款立刻从卡片堆里跳出来）。
+     ④ 这几档色差只有 1~2 个色阶，所以刻意写成字面量而不是 semantic 别名：
+        挂到 cream/stone 上会被后人"看着差不多"随手对齐，层级就丢了。 */
+  --todo-face-a: #ffffff;          /* 普通卡·未完成（起点） */
+  --todo-face-b: #fdfafb;          /* 普通卡·未完成（收尾） */
+  --todo-border: #f8ebf0;          /* 普通卡边框（比 --color-border 浅一档） */
+  --todo-face-done-a: #f7f3f5;     /* 普通卡·已完成（中性粉灰，起点） */
+  --todo-face-done-b: #f1ecef;     /* 普通卡·已完成（收尾） */
+  --todo-border-done: #eee4e9;     /* 普通卡·已完成边框 */
   --shadow-raised: inset 0 1px 0 #fff,
-    0 6px 18px -12px rgba(150, 74, 102, 0.30),
-    0 22px 40px -30px rgba(150, 74, 102, 0.55);
-  --shadow-pressed: inset 0 2px 7px rgba(184, 90, 124, 0.055); /* 压平内凹（晒过的纸） */
+    0 6px 18px -12px rgba(150, 74, 102, 0.15),
+    0 22px 40px -30px rgba(150, 74, 102, 0.275);
+  --shadow-pressed: inset 0 2px 7px rgba(120, 100, 110, 0.028); /* 压平内凹（已完成） */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -99,24 +105,11 @@ input, textarea, [contenteditable] {
   --cream-200: #f5e2e9;
   --cream-300: #e5c6d3;
 
-  /* v2.7.51 P3.2 隐藏款稀有度语义色（Semantic · 二级 token）
-     引用 primitive（rose/violet/gold），但语义上明确表达「稀有度」概念，
-     让 todo--rare/epic/legendary 等组件不再直接耦合 primitive，便于将来调色。
-     rare：樱粉（rose 系，最克制稀有度）
-     epic：雾紫（violet 系，浪漫但不浮夸）
-     legendary：香槟金（gold 系，最具仪式感的高稀有度） */
-  --rare-50: var(--rose-50);
-  --rare-100: var(--rose-100);
-  --rare-300: #fda4af;        /* 樱粉强调（rarity accent pink）*/
-  --rare-500: var(--rose-500);
-  --epic-50: var(--violet-50);
-  --epic-100: var(--violet-100);
-  --epic-300: var(--violet-300);
-  --epic-500: var(--violet-500);
-  --legendary-50: var(--gold-50);
-  --legendary-100: var(--gold-100);
-  --legendary-300: var(--gold-300);
-  --legendary-500: var(--gold-500);
+  /* v2.7.51 引入的 --rare-* / --epic-* / --legendary-* 语义别名已于 v2.7.72 删除：
+     三档工艺各自需要 8 个参数（镀膜两端色 / 高光色 / 未完成与已完成的底色 / 光雾色），
+     别名只覆盖其中 1 个，反而给人「改 token 就能调档位色」的错觉。
+     档位参数现集中在「隐藏款盲盒」小节，由 docs/design-todo-v2/style-lab.html 导出。
+     图鉴/标签用的 --violet-* / --gold-* primitive 不受影响。 */
 
   /* 隐藏款盲盒稀有度色系（克制精致，低饱和渐变背景用）
      rare=淡粉（最浅 rose）、epic=浅紫（violet）、legendary=香槟金。
@@ -478,7 +471,7 @@ input {
   margin: 0 auto;
   padding: 20px 16px calc(40px + var(--safe-bottom));
   /* v2.7.68 纸与光：顶部一抹更紧的柔光，让卡片看起来是浮在光上（body 那层是大范围的氛围光） */
-  background: radial-gradient(620px 400px at 50% -8%, rgba(243, 185, 205, 0.30), transparent 72%);
+  background: radial-gradient(620px 400px at 50% -8%, rgba(243, 185, 205, 0.135), transparent 72%);
 }
 
 /* ===== 顶栏纪念日：在一起 X 天（爱心右边，精致克制） ===== */
@@ -892,12 +885,12 @@ input {
      清理时被删掉，全仓只此一处引用）。变量未定义 = 整条声明在计算期失效 = 卡片的
      background 一直是 transparent、下面那行 var(--color-border-subtle) 同理 ⇒
      「纸」其实既没底色也没 1px 边，全靠页面底色 + 阴影撑着。现改用真实语义 token。 */
-  background: linear-gradient(180deg, var(--color-surface-raised) 0%, var(--color-surface-raised-deep) 100%);
+  background: linear-gradient(180deg, var(--todo-face-a) 0%, var(--todo-face-b) 100%);
   border-radius: 20px;
   padding: 17px 19px 16px;
   margin-bottom: 12px; /* #6: 间距 10→12，呼吸感更好 */
   /* 1px 暖边（不再是悬空变量）+ inset 白高光：纸的厚度感 */
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--todo-border);
   box-shadow: var(--shadow-raised);
   transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), background 0.3s var(--ease);
   /* backwards：配合 JS 的入场延迟，延迟期间的卡片停在起始帧（不闪现） */
@@ -934,17 +927,20 @@ input {
   transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
 
-/* 完成态：从「白纸」变成「晒过的纸」—— 暖一度、压平内凹（v2.7.68 纸与光）。
+/* 完成态：从「白纸」变成「压平的纸」—— 压平内凹、底色转**中性粉灰**（v2.7.72）。
+   ⚠️ v2.7.68 原本用暖米（"晒过的纸"），v2.7.72 改中性：暖米本身是一种色，
+   与隐藏款的淡粉/淡紫/淡金同明度，导致已完成区分不出隐藏款（线上 7 张全在已完成区）。
    与未完成卡的尺寸、信息、位置完全一致，只用材质说「这是过去时」。
    ⚠️ 这里是单类选择器，隐藏款 .todo.todo--rare 权重更高，所以稀有度渐变不会被吃掉
    （刻意如此：线上 7 张隐藏款全部在已完成区，压平可以、变白不行）。 */
 .todo--done {
-  background: linear-gradient(180deg, var(--color-surface-sunned) 0%, var(--color-surface-sunned-deep) 100%);
-  border-color: var(--color-border-sunned);
+  background: linear-gradient(180deg, var(--todo-face-done-a) 0%, var(--todo-face-done-b) 100%);
+  border-color: var(--todo-border-done);
   box-shadow: var(--shadow-pressed);
 }
 .todo--done:hover {
-  box-shadow: var(--shadow-pressed), 0 2px 8px rgba(184, 90, 124, 0.05);
+  /* 与压平内凹同源的中性墨色：完成态已改中性纸，这里若留暖粉会与新底色打架 */
+  box-shadow: var(--shadow-pressed), 0 2px 8px rgba(120, 100, 110, 0.05);
 }
 
 /* 离线待同步态（M2）：半透明 + 轻微降饱和，与正常待办明显区分 */
@@ -2921,59 +2917,172 @@ input {
 }
 
 /* ============================================================
-   隐藏款盲盒：稀有度背景 + 角标 + 传说光晕
-   设计原则（克制精致）：极淡渐变（alpha 0.04~0.12），不用饱和色块；
-   不用角标，改用四边淡色细边框 + 极淡渐变背景体现稀有度。
-   配色：稀有=淡粉、史诗=浅紫、传说=香槟金，由浅到深递进。
+   隐藏款盲盒：三档「工艺」——缎面 / 珠光 / 鎏金（v2.7.72）
+   设计原则（克制精致，但必须一眼可辨）：
+     ① 稀有度不比"光斑数量"，比**工艺**：边是什么材质、光怎么动。
+        稀有 = 缎面：一道宽而柔的高光缓慢扫过（有方向、无边界）
+        史诗 = 珠光：整圈虹彩缓慢流转（欧泊/贝壳那种，没有光斑边界）
+        传说 = 鎏金：金属镜面转动（两处高光 + 两处压暗）+ 外光雾呼吸
+     ② 一律"慢"（24s / 32s / 18s 一圈）：慢才像材质，快就成了跑马灯。
+     ③ 光只在边框环上动 —— 不加任何 DOM 节点、不加图标
+        （2026-09 业主明确否决"给隐藏款加印记/角标"）。
+   实现：背景三层 = 纸面(padding-box) + 工艺层(conic, border-box) + 镀膜底(border-box)。
+        纸面层盖住卡片内部，所以工艺层**只在边框环上可见** —— 不必新增元素，也不必裁剪。
+   参数来源：「隐藏款样式工作台」（docs/design-todo-v2/style-lab.html）——本段由它导出，
+        逐值照抄；要改参数请回工作台调好再导出，不要在别处手改。
    ============================================================ */
 
-/* ⚠️ 权重说明（v2.7.68 加固）：这三个选择器刻意写成 `.todo.todo--rare`（0,2,0）而不是
-   单个 `.todo--rare`（0,1,0）。旧写法只靠"排在 .todo--done 后面"取胜 —— 任何人把新的
-   `.todo` / `.todo--done` 规则追加到文件尾部，就会静默吃掉隐藏款的渐变底，
-   而线上 63 条存活待办里有 7 条隐藏款、**全部在已完成区**（一次改版就能让奖杯柜集体变白）。
-   提升权重后，未来的追加不会再翻转胜负。 */
-
-/* 稀有款（rare）：淡粉渐变 + 淡粉四边细边框 */
-.todo.todo--rare {
-  background: linear-gradient(155deg, var(--rare-50) 0%, var(--rare-100) 100%);
-  border: 1.5px solid var(--rare-300);
-  box-shadow: 0 1px 2px rgba(253, 164, 175, 0.18), 0 2px 10px rgba(253, 164, 175, 0.14);
+/* 让"光沿边框转"可动画：注册 <angle> 类型的自定义属性。
+   支持度：Chrome / Android WebView 85+。**不支持也不会坏** —— 动画不生效，
+   边框退化成静态镀膜边（即"静态版"的样子），这是刻意的 fail-safe。 */
+@property --rar-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
 }
 
-/* 史诗款（epic）：雾紫渐变 + 浅紫四边细边框（v2.7.51 P3.2 引入 --epic-* 语义 token） */
-.todo.todo--epic {
-  background: linear-gradient(155deg, var(--epic-50) 0%, var(--epic-100) 100%);
-  border: 1.5px solid var(--epic-300);
-  box-shadow: 0 1px 2px rgba(139, 92, 246, 0.08), 0 2px 10px rgba(139, 92, 246, 0.10);
-}
+@keyframes rar-circulate { to { --rar-angle: 360deg; } }
 
-/* 传说款（legendary）：香槟金渐变 + 金色四边细边框 + 呼吸光晕
-   （v2.7.51 P3.2 引入 --legendary-* 语义 token） */
-.todo.todo--legendary {
-  background: linear-gradient(155deg, var(--legendary-50) 0%, var(--legendary-100) 100%);
-  border: 1.5px solid var(--legendary-300);
-  box-shadow: 0 1px 2px rgba(245, 158, 11, 0.10), 0 2px 14px rgba(245, 158, 11, 0.14);
-  animation: legendary-glow 3.5s var(--ease) infinite;
-}
-@keyframes legendary-glow {
-  0%, 100% { box-shadow: 0 1px 2px rgba(245, 158, 11, 0.08), 0 2px 14px rgba(245, 158, 11, 0.12); }
-  50% { box-shadow: 0 1px 2px rgba(245, 158, 11, 0.12), 0 2px 20px rgba(245, 158, 11, 0.22); }
-}
-
-/* hover 时渐变更明显一点（限定支持 hover 的设备） */
-@media (hover: hover) {
-  .todo--rare:hover,
-  .todo--epic:hover,
-  .todo--legendary:hover {
-    filter: saturate(1.15);
+/* 外光雾呼吸：只改"浓度与柔度"，**不做 scale**。
+   为什么不缩放：卡片是扁矩形（358×81），放大 3.5% 时左右各外扩 6.3px、上下仅 1.4px
+   ⇒ 看起来像卡片被横向拉伸、且那圈硬边会脱离卡缘变成第二道框（2026-09 实测否决）。 */
+@keyframes rar-breath {
+  0%, 100% {
+    opacity: 0.18;
+    box-shadow: 0 0 14px 0 rgba(var(--rar-glow-rgb), 0.40), 0 0 34px 4px rgba(var(--rar-glow-rgb), 0.18);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 26px 3px rgba(var(--rar-glow-rgb), 0.60), 0 0 62px 14px rgba(var(--rar-glow-rgb), 0.34);
   }
 }
 
-/* 完成态的隐藏款：保持渐变但文字仍弱化（与普通 todo--done 一致） */
-.todo--rare.todo--done,
-.todo--epic.todo--done,
-.todo--legendary.todo--done {
-  filter: saturate(0.7);
+/* ⚠️ 权重说明（v2.7.68 加固，v2.7.72 沿用）：三个选择器刻意写成 `.todo.todo--rare`（0,2,0）
+   而不是单个 `.todo--rare`（0,1,0）。旧写法只靠"排在 .todo--done 后面"取胜 —— 任何人把新的
+   `.todo` / `.todo--done` 规则追加到文件尾部，就会静默吃掉隐藏款的渐变底，
+   而线上 63 条存活待办里有 7 条隐藏款、**全部在已完成区**（一次改版就能让奖杯柜集体变白）。
+   完成态用 (0,3,0) 压过 `.todo--done` 的 saturate(.7)：降饱和正是"变普通"的元凶之一。 */
+
+/* 稀有 rare · 缎面 satin */
+.todo.todo--rare {
+  --rar-glow-rgb: 253, 164, 175;
+  border: 1.5px solid transparent;
+  padding: calc(17px - (1.5px - 1px)) calc(19px - (1.5px - 1px)) calc(16px - (1.5px - 1px));
+  background:
+    linear-gradient(180deg, #fff7fa 0%, #fce6ee 100%) padding-box,
+    conic-gradient(from var(--rar-angle),
+        rgba(255, 242, 246, 0) 0deg,
+        rgba(255, 242, 246, 0.56) 84.8deg,
+        rgba(255, 242, 246, 0) 178.1deg,
+        rgba(255, 242, 246, 0) 205deg,
+        rgba(255, 242, 246, 0.22) 265deg,
+        rgba(255, 242, 246, 0) 325deg) border-box,
+    linear-gradient(155deg, #ffc9da 0%, #fda4af 52%, #ffc9da 100%) border-box;
+  box-shadow: inset 0 1px 0 #fff,
+    0 6px 18px -12px rgba(253, 164, 175, 0.38),
+    0 22px 40px -28px rgba(253, 164, 175, 0.18);
+  animation: todo-enter 0.25s var(--ease) backwards, rar-circulate 24s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+.todo.todo--rare.todo--done {
+  filter: none;
+  background:
+    linear-gradient(180deg, #fdf4f7 0%, #f9e4ec 100%) padding-box,
+    conic-gradient(from var(--rar-angle),
+        rgba(255, 242, 246, 0) 0deg,
+        rgba(255, 242, 246, 0.56) 84.8deg,
+        rgba(255, 242, 246, 0) 178.1deg,
+        rgba(255, 242, 246, 0) 205deg,
+        rgba(255, 242, 246, 0.22) 265deg,
+        rgba(255, 242, 246, 0) 325deg) border-box,
+    linear-gradient(155deg, #ffc9da 0%, #fda4af 52%, #ffc9da 100%) border-box;
+  box-shadow: inset 0 2px 7px rgba(253, 164, 175, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 4px 16px -14px rgba(253, 164, 175, 0.48);
+  animation: todo-enter 0.25s var(--ease) backwards, rar-circulate 24s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+
+/* 史诗 epic · 珠光 pearl */
+.todo.todo--epic {
+  --rar-glow-rgb: 139, 92, 246;
+  border: 2px solid transparent;
+  padding: calc(17px - (2px - 1px)) calc(19px - (2px - 1px)) calc(16px - (2px - 1px));
+  background:
+    linear-gradient(180deg, #f9f5ff 0%, #e7dcfc 100%) padding-box,
+    conic-gradient(from var(--rar-angle),
+        #ae8ff9 0deg, #f1eaff 48deg, #ae8ff9 105deg, #7750da 165deg,
+        #6946c0 205deg, #7750da 245deg, #ae8ff9 300deg, #f1eaff 338deg, #ae8ff9 360deg) border-box,
+    linear-gradient(155deg, #cbb8fb 0%, #8b5cf6 52%, #cbb8fb 100%) border-box;
+  box-shadow: inset 0 0 0 0.6px rgba(255, 255, 255, 0.55),
+    inset 0 1px 0 #fff,
+    0 6px 18px -12px rgba(139, 92, 246, 0.42),
+    0 22px 40px -28px rgba(139, 92, 246, 0.22);
+  animation: todo-enter 0.25s var(--ease) backwards, rar-circulate 32s linear infinite;
+}
+.todo.todo--epic.todo--done {
+  filter: none;
+  background:
+    linear-gradient(180deg, #f6f1fe 0%, #e2d6fa 100%) padding-box,
+    conic-gradient(from var(--rar-angle),
+        #ae8ff9 0deg, #f1eaff 48deg, #ae8ff9 105deg, #7750da 165deg,
+        #6946c0 205deg, #7750da 245deg, #ae8ff9 300deg, #f1eaff 338deg, #ae8ff9 360deg) border-box,
+    linear-gradient(155deg, #cbb8fb 0%, #8b5cf6 52%, #cbb8fb 100%) border-box;
+  box-shadow: inset 0 0 0 0.6px rgba(255, 255, 255, 0.55),
+    inset 0 2px 7px rgba(139, 92, 246, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 4px 16px -14px rgba(139, 92, 246, 0.52);
+  animation: todo-enter 0.25s var(--ease) backwards, rar-circulate 32s linear infinite;
+}
+
+/* 传说 legendary · 鎏金 gilt */
+.todo.todo--legendary {
+  --rar-glow-rgb: 229, 167, 12;
+  border: 3px solid transparent;
+  padding: calc(17px - (3px - 1px)) calc(19px - (3px - 1px)) calc(16px - (3px - 1px));
+  background:
+    linear-gradient(180deg, #fffdf4 0%, #fceecb 100%) padding-box,
+    conic-gradient(from var(--rar-angle),
+      #a47106 0deg, #d2a53f 28deg, #fffdf3 62deg, #ffd977 92deg,
+      #d2a53f 122deg, #a47106 152deg,
+      #d2a53f 196deg, #fffdf3 232deg, #ffd977 262deg,
+      #d2a53f 292deg, #a47106 360deg) border-box,
+    linear-gradient(155deg, #ffd977 0%, #d99a0a 52%, #ffd977 100%) border-box;
+  box-shadow: inset 0 0 0 0.7px rgba(255, 255, 255, 0.55),
+    inset 0 1px 0 #fff,
+    0 6px 18px -12px rgba(229, 167, 12, 0.48),
+    0 22px 40px -28px rgba(229, 167, 12, 0.28),
+    0 0 0 0.7px rgba(229, 167, 12, 0.28);
+  animation: todo-enter 0.25s var(--ease) backwards, rar-circulate 18s linear infinite;
+}
+.todo.todo--legendary::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow:
+    0 0 16px 0 rgba(var(--rar-glow-rgb), 0.45),
+    0 0 40px 6px rgba(var(--rar-glow-rgb), 0.22);
+  animation: rar-breath 4.6s ease-in-out infinite;
+}
+.todo.todo--legendary.todo--done {
+  filter: none;
+  background:
+    linear-gradient(180deg, #fffaf0 0%, #fae8c2 100%) padding-box,
+    conic-gradient(from var(--rar-angle),
+      #a47106 0deg, #d2a53f 28deg, #fffdf3 62deg, #ffd977 92deg,
+      #d2a53f 122deg, #a47106 152deg,
+      #d2a53f 196deg, #fffdf3 232deg, #ffd977 262deg,
+      #d2a53f 292deg, #a47106 360deg) border-box,
+    linear-gradient(155deg, #ffd977 0%, #d99a0a 52%, #ffd977 100%) border-box;
+  box-shadow: inset 0 0 0 0.7px rgba(255, 255, 255, 0.55),
+    inset 0 2px 7px rgba(229, 167, 12, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 4px 16px -14px rgba(229, 167, 12, 0.58),
+    0 0 0 0.7px rgba(229, 167, 12, 0.28);
+  animation: todo-enter 0.25s var(--ease) backwards, rar-circulate 18s linear infinite;
+}
+
+/* 置顶 + 隐藏款：别丢置顶标识（`.todo--pinned` 的 border-left 是单类选择器，会被上面覆盖） */
+.todo.todo--pinned.todo--rare,
+.todo.todo--pinned.todo--epic,
+.todo.todo--pinned.todo--legendary { border-left: 3px solid var(--color-primary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .todo.todo--rare, .todo.todo--epic, .todo.todo--legendary,
+  .todo.todo--legendary::before { animation: none; }
 }
 
 /* ============================================================

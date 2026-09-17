@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="mint">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>隐藏款待办 · 样式工作台</title>
+<!-- 用仓库里真实的样式表（线上同款）；下面注入的才是待定参数 -->
+<link rel="stylesheet" id="appcss" href="../../public/css/style.css" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { display: flex; font-family: -apple-system, "PingFang SC", sans-serif; background: #f7f2f4; color: #352530; }
+
+  .lab { width: 400px; flex-shrink: 0; height: 100vh; overflow-y: auto; background: #fff;
+         border-right: 1px solid #f0dde5; padding: 16px 16px 30px; }
+  .lab h1 { font-size: 16px; margin: 0 0 6px; }
+  .lab p.hint { font-size: 11.5px; color: #8f7d88; line-height: 1.65; margin: 0 0 12px; }
+  .lab p.hint b { color: #b85a7c; }
+
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .presets button, .copy { font-size: 12px; padding: 6px 10px; border-radius: 8px; cursor: pointer;
+    border: 1px solid #f0dde5; background: #fff; color: #4a3a44; }
+  .presets button:hover, .copy:hover { background: #fdf3f7; }
+  .presets button[data-on="1"] { background: #e884a8; border-color: #e884a8; color: #fff; }
+
+  fieldset { border: 1px solid #f2e2e9; border-radius: 12px; margin: 0 0 12px; padding: 10px 12px 12px; }
+  legend { font-size: 12.5px; font-weight: 600; padding: 0 6px; color: #b85a7c; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 7px 0; font-size: 12px; }
+  .row > label { flex: 0 0 98px; color: #6b5560; }
+  .row input[type="range"] { flex: 1; accent-color: #e884a8; min-width: 0; }
+  .row input[type="color"] { width: 30px; height: 22px; padding: 0; border: 1px solid #e5d3dc; border-radius: 5px; background: #fff; }
+  .row select { flex: 1; font-size: 12px; padding: 3px 6px; border: 1px solid #e5d3dc; border-radius: 7px; background: #fff; color: #4a3a44; }
+  .row .val { flex: 0 0 60px; text-align: right; font-family: Menlo, monospace; font-size: 11px; color: #8f7d88; }
+  .row .swatch { width: 22px; height: 22px; border-radius: 5px; border: 1px solid #e5d3dc; flex: 0 0 auto; }
+  .row--toggles { flex-wrap: wrap; gap: 12px; }
+  .row--toggles label { flex: none; display: flex; align-items: center; gap: 5px; color: #4a3a44; }
+  .row--toggles input { accent-color: #e884a8; }
+  .craft-note { font-size: 10.5px; color: #a8939e; margin: 2px 0 6px; line-height: 1.5; }
+
+  .export { position: sticky; bottom: -1px; background: #fff; z-index: 3; margin-top: 6px;
+            box-shadow: 0 -10px 18px -12px rgba(150, 74, 102, .35); }
+  .export legend { color: #352530; }
+  .export textarea { width: 100%; height: 120px; font-family: Menlo, monospace; font-size: 10.5px; line-height: 1.45;
+    border: 1px solid #f0dde5; border-radius: 10px; padding: 9px; color: #4a3a44; background: #fffdfe; resize: vertical; white-space: pre; }
+  .summary { max-height: 60px; overflow: auto; font-family: Menlo, monospace; font-size: 10.5px; color: #6b5560;
+    background: #fbf6f8; border: 1px dashed #ecd6df; border-radius: 9px; padding: 8px; margin: 8px 0; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-all; }
+
+  .stage { flex: 1; height: 100vh; overflow: auto; padding: 22px; display: flex; justify-content: center; }
+  .phone { background: radial-gradient(1100px 480px at 50% -12%, rgba(243, 185, 205, .20), transparent 62%),
+      linear-gradient(180deg, #fffbfc 0%, #fefcfd 42%, #fffbfc 100%);
+    border-radius: 26px; box-shadow: 0 10px 40px rgba(150, 74, 102, .14); overflow: hidden; align-self: flex-start;
+    /* 不让它被 flex 压缩：窗口变窄时预览应保持真机宽度（外面滚动），而不是被挤扁 */
+    flex: 0 0 auto; }
+  .phone__inner { padding: 18px 16px 40px; }
+  .stage__note { position: fixed; right: 18px; bottom: 14px; font-size: 11px; color: #a8939e; }
+</style>
+</head>
+<body>
+
+<div class="lab">
+  <h1>隐藏款待办 · 样式工作台</h1>
+  <p class="hint">
+    这是 <code>public/css/style.css</code> 里「隐藏款盲盒」小节的**参数来源**：左边改参数、右边实时看，
+    左下角「导出 CSS」导出的那一整段直接覆盖进去即可（导出里已按顺序排好：普通卡基线 → 置顶 → 完成态 → 三档工艺）。
+    卡片用的是仓库里真实的样式表，深浅/间距与你手机一致。<br />
+    <b>三档靠"工艺"分层，不比光斑数量</b>：稀有 = 缎面、史诗 = 珠光、传说 = 鎏金；转速和材质强度各自可调（慢 = 贵）。
+  </p>
+
+  <div class="presets" id="presets"></div>
+
+  <fieldset>
+    <legend>全局</legend>
+    <div class="row"><label>机身宽度</label><input type="range" id="g-width" min="320" max="440" step="2" /><span class="val" id="g-width-v"></span></div>
+    <div class="row row--toggles">
+      <label><input type="checkbox" id="g-noSaturate" /> 完成态不降饱和</label>
+      <label><input type="checkbox" id="g-deepen" /> 完成态底色压深</label>
+      <label><input type="checkbox" id="g-doneAnim" /> 完成态保留动效</label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>普通待办（基线）</legend>
+    <div class="row"><label>阴影强度</label><input type="range" id="c-shadow" min="0" max="1.4" step="0.05" /><span class="val" id="c-shadow-v"></span></div>
+    <div class="row"><label>顶部光斑</label><input type="range" id="c-light" min="0" max="1.4" step="0.05" /><span class="val" id="c-light-v"></span></div>
+    <div class="row"><label>边框粗细</label><input type="range" id="c-borderW" min="0" max="2" step="0.5" /><span class="val" id="c-borderW-v"></span></div>
+    <div class="row"><label>边框色</label><input type="color" id="c-border" /><span class="swatch" id="c-border-sw"></span><span class="val" id="c-border-hex"></span></div>
+    <div class="row"><label>底色·上</label><input type="color" id="c-fillTop" /><span class="swatch" id="c-fillTop-sw"></span><span class="val" id="c-fillTop-hex"></span></div>
+    <div class="row"><label>底色·下</label><input type="color" id="c-fillBottom" /><span class="swatch" id="c-fillBottom-sw"></span><span class="val" id="c-fillBottom-hex"></span></div>
+    <div class="row"><label>完成态·上</label><input type="color" id="c-doneFillTop" /><span class="swatch" id="c-doneFillTop-sw"></span><span class="val" id="c-doneFillTop-hex"></span></div>
+    <div class="row"><label>完成态·下</label><input type="color" id="c-doneFillBottom" /><span class="swatch" id="c-doneFillBottom-sw"></span><span class="val" id="c-doneFillBottom-hex"></span></div>
+    <div class="row"><label>完成态边框色</label><input type="color" id="c-doneBorder" /><span class="swatch" id="c-doneBorder-sw"></span><span class="val" id="c-doneBorder-hex"></span></div>
+    <div class="row"><label>完成态边框</label><input type="range" id="c-doneBorderW" min="0" max="1.5" step="0.5" /><span class="val" id="c-doneBorderW-v"></span></div>
+    <div class="craft-note">未完成的普通卡没问题；难分的是<b>已完成</b>的普通卡。用中性纸色 + 可去掉边框，
+      让"有色的"隐藏款在已完成区一眼可辨。</div>
+  </fieldset>
+
+  <div id="tiers"></div>
+
+  <fieldset class="export">
+    <legend>↓ 改完在这里导出（可直接粘给我）</legend>
+    <textarea id="css" readonly spellcheck="false"></textarea>
+    <div class="summary" id="summary"></div>
+    <button class="copy" id="copy">复制 CSS</button>
+    <button class="copy" id="copySummary">复制参数摘要</button>
+  </fieldset>
+</div>
+
+<div class="stage">
+  <div class="phone" id="phone"><div class="phone__inner" id="inner"></div></div>
+  <span class="stage__note">拖动滑杆即时生效 · 缎面/珠光/鎏金的光感在屏幕上才看得到</span>
+</div>
+
+<style id="pv"></style>
+
+<script>
+/* ============================================================
+   模型：每档一种「工艺」+ 一组材质参数
+   工艺决定"边是什么材质、光怎么动"：
+     satin 缎面 —— 一道宽而柔的高光缓慢扫过（有方向、无边界）
+     pearl 珠光 —— 整圈连续虹彩缓慢流转（无光斑，像欧泊/贝壳）
+     gilt  鎏金 —— 金属镜面（两处高光 + 压暗）转动，像金环反光
+     none  无动效
+   ============================================================ */
+const CRAFTS = {
+  satin: { label: '缎面 satin', note: '一道宽柔高光缓慢扫过，像绸缎被灯照到' },
+  pearl: { label: '珠光 pearl', note: '整圈虹彩缓慢流转，无光斑边界（欧泊 / 贝壳）' },
+  gilt: { label: '鎏金 gilt', note: '金属镜面转动（高光 + 压暗），像金环反光' },
+  none: { label: '无动效', note: '静态镀膜边' },
+};
+
+const DEFAULT = {
+  width: 390, noSaturate: true, deepen: true, doneAnim: true,
+  // 普通待办 = 对照基线。隐藏款要显眼，前提是普通卡足够安静。
+  common: {
+    shadow: 0.5,        // 阴影强度（线上现状 = 1）
+    light: 0.45,        // 顶部光斑强度（线上现状 = 1）
+    fillTop: '#ffffff', fillBottom: '#fdfafb',
+    border: '#f8ebf0',
+    borderW: 1,
+    // 完成态的普通卡单独一组：它要"退到后面"，隐藏款才显眼
+    doneFillTop: '#f7f3f5', doneFillBottom: '#f1ecef',
+    doneBorder: '#eee4e9', doneBorderW: 1,
+  },
+  tiers: {
+    rare: {
+      label: '稀有 rare', craft: 'satin',
+      w: 1.5, edgeStrong: '#fda4af', edgeLight: '#ffc9da',
+      fillTop: '#fff7fa', fillBottom: '#fce6ee', doneTop: '#fdf4f7', doneBottom: '#f9e4ec',
+      haloColor: '#fda4af', haloAlpha: 0.18,
+      dur: 24, strength: 0.55, highlight: '#fff2f6', innerLine: 0, outerLine: 0, breath: false, breathDur: 4.6,
+    },
+    epic: {
+      label: '史诗 epic', craft: 'pearl',
+      w: 2, edgeStrong: '#8b5cf6', edgeLight: '#cbb8fb',
+      fillTop: '#f9f5ff', fillBottom: '#e7dcfc', doneTop: '#f6f1fe', doneBottom: '#e2d6fa',
+      haloColor: '#8b5cf6', haloAlpha: 0.22,
+      dur: 32, strength: 0.6, highlight: '#efe8ff', innerLine: 0.6, outerLine: 0, breath: false, breathDur: 4.6,
+    },
+    legendary: {
+      label: '传说 legendary', craft: 'gilt',
+      w: 3, edgeStrong: '#d99a0a', edgeLight: '#ffd977',
+      fillTop: '#fffdf4', fillBottom: '#fceecb', doneTop: '#fffaf0', doneBottom: '#fae8c2',
+      haloColor: '#e5a70c', haloAlpha: 0.28,
+      dur: 18, strength: 0.75, highlight: '#fffbe6', innerLine: 0.7, outerLine: 0.7, breath: true, breathDur: 4.6,
+    },
+  },
+};
+
+const PRESETS = {
+  '现状对照': () => null,
+  '静态（全部无动效）': (s) => {
+    for (const k of ['rare', 'epic', 'legendary']) { s.tiers[k].craft = 'none'; s.tiers[k].breath = false; }
+    return s;
+  },
+  '工艺版（缎面/珠光/鎏金）': (s) => {
+    Object.assign(s.tiers.rare, { craft: 'satin', w: 1.5, dur: 24, strength: 0.55, innerLine: 0, outerLine: 0, breath: false, haloAlpha: 0.18 });
+    Object.assign(s.tiers.epic, { craft: 'pearl', w: 2, dur: 32, strength: 0.6, innerLine: 0.6, outerLine: 0, breath: false, haloAlpha: 0.22 });
+    Object.assign(s.tiers.legendary, { craft: 'gilt', w: 3, dur: 18, strength: 0.75, innerLine: 0.7, outerLine: 0.7, breath: true, haloAlpha: 0.28 });
+    return s;
+  },
+  '普通更安静（推荐）': (s) => {
+    Object.assign(s.common, { shadow: 0.5, light: 0.45, border: '#f8ebf0', borderW: 1 });
+    return s;
+  },
+  '完成卡更中性（推荐）': (s) => {
+    Object.assign(s.common, { doneFillTop: '#f7f3f5', doneFillBottom: '#f1ecef', doneBorder: '#eee4e9', doneBorderW: 1 });
+    return s;
+  },
+  '完成卡更退后（去边框）': (s) => {
+    Object.assign(s.common, { doneFillTop: '#f8f5f6', doneFillBottom: '#f2eef0', doneBorder: '#efe9ec', doneBorderW: 0 });
+    return s;
+  },
+  '普通扁平': (s) => {
+    Object.assign(s.common, { shadow: 0.18, light: 0.2, border: '#f7eef2', borderW: 1, fillTop: '#ffffff', fillBottom: '#ffffff' });
+    return s;
+  },
+  '更醒目': (s) => {
+    Object.assign(s.tiers.rare, { strength: 0.8, dur: 16, w: 2, haloAlpha: 0.26 });
+    Object.assign(s.tiers.epic, { strength: 0.85, dur: 22, w: 2.5, innerLine: 0.8, haloAlpha: 0.32 });
+    Object.assign(s.tiers.legendary, { strength: 1, dur: 12, w: 3.5, innerLine: 1, outerLine: 1, haloAlpha: 0.4, breath: true });
+    return s;
+  },
+  '更克制': (s) => {
+    Object.assign(s.tiers.rare, { strength: 0.35, dur: 34, w: 1.5, haloAlpha: 0.14 });
+    Object.assign(s.tiers.epic, { strength: 0.45, dur: 44, w: 1.5, innerLine: 0.4, haloAlpha: 0.18 });
+    Object.assign(s.tiers.legendary, { craft: 'pearl', strength: 0.6, dur: 30, w: 2, innerLine: 0.5, outerLine: 0.4, haloAlpha: 0.22, breath: false });
+    return s;
+  },
+};
+const DEFAULT_PRESET = '工艺版（缎面/珠光/鎏金）';
+
+/* ===== 小工具 ===== */
+const round = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
+const rgb = (h) => { const n = parseInt(h.replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(', '); };
+const rgba = (h, a) => `rgba(${rgb(h)}, ${round(a, 2)})`;
+const mix = (a, b, t) => {
+  const A = a.slice(1).match(/../g).map((x) => parseInt(x, 16));
+  const B = b.slice(1).match(/../g).map((x) => parseInt(x, 16));
+  return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('');
+};
+
+/* ===== 工艺层（页面注入与导出用同一份）===== */
+function craftLayer(t) {
+  if (t.craft === 'none') return null;
+  const hi = t.highlight, s = t.strength;
+  if (t.craft === 'satin') {
+    const wide = round(60 + 55 * (1 - s), 1);       // 越淡越宽 → 越像柔光
+    return `conic-gradient(from var(--rar-angle),
+        ${rgba(hi, 0)} 0deg,
+        ${rgba(hi, 0.15 + 0.75 * s)} ${wide}deg,
+        ${rgba(hi, 0)} ${round(wide * 2.1, 1)}deg,
+        ${rgba(hi, 0)} 205deg,
+        ${rgba(hi, 0.05 + 0.3 * s)} 265deg,
+        ${rgba(hi, 0)} 325deg)`;
+  }
+  if (t.craft === 'pearl') {
+    const light = mix(t.highlight, '#ffffff', 0.1);          // 最亮的一档 = 高光色
+    const deep = mix(t.edgeStrong, '#3b2a86', 0.1 + 0.25 * s);
+    const mid = mix(t.edgeLight, t.edgeStrong, 0.45);
+    return `conic-gradient(from var(--rar-angle),
+        ${mid} 0deg, ${light} 48deg, ${mid} 105deg, ${deep} 165deg,
+        ${mix(deep, '#000000', 0.12)} 205deg, ${deep} 245deg, ${mid} 300deg, ${light} 338deg, ${mid} 360deg)`;
+  }
+  // gilt：金属镜面
+  const spec = mix(t.highlight, '#ffffff', 0.3 + 0.3 * s);   // 镜面高光 = 高光色
+  const dark = mix(t.edgeStrong, '#5c3a00', 0.2 + 0.3 * s);
+  const half = mix(dark, t.edgeLight, 0.5);
+  return `conic-gradient(from var(--rar-angle),
+      ${dark} 0deg, ${half} 28deg, ${spec} 62deg, ${t.edgeLight} 92deg,
+      ${half} 122deg, ${dark} 152deg,
+      ${half} 196deg, ${spec} 232deg, ${t.edgeLight} 262deg,
+      ${half} 292deg, ${dark} 360deg)`;
+}
+
+function tierCss(name, t, g) {
+  const haloRgb = rgb(t.haloColor);
+  const glowVar = `  --rar-glow-rgb: ${haloRgb};\n`;
+  const foil = `linear-gradient(155deg, ${t.edgeLight} 0%, ${t.edgeStrong} 52%, ${t.edgeLight} 100%)`;
+  const paper = (a, b) => `linear-gradient(180deg, ${a} 0%, ${b} 100%)`;
+  const pad = `calc(17px - (${t.w}px - 1px)) calc(19px - (${t.w}px - 1px)) calc(16px - (${t.w}px - 1px))`;
+  const layer = craftLayer(t);
+  const layers = (a, b) => (layer
+    ? `${paper(a, b)} padding-box,\n    ${layer} border-box,\n    ${foil} border-box`
+    : `${paper(a, b)} padding-box,\n    ${foil} border-box`);
+  const ease = t.craft === 'satin' ? 'cubic-bezier(.45, 0, .55, 1)' : 'linear';
+  const anim = layer
+    ? `todo-enter 0.25s var(--ease) backwards, rar-circulate ${t.dur}s ${ease} infinite`
+    : 'todo-enter 0.25s var(--ease) backwards';
+  const ring = t.innerLine ? `inset 0 0 0 ${t.innerLine}px rgba(255, 255, 255, 0.55),\n    ` : '';
+  const outer = t.outerLine ? `,\n    0 0 0 ${t.outerLine}px rgba(${haloRgb}, 0.28)` : '';
+  const halo = `0 6px 18px -12px rgba(${haloRgb}, ${round(t.haloAlpha + 0.2)}),\n    0 22px 40px -28px rgba(${haloRgb}, ${round(t.haloAlpha)})`;
+
+  let out = `/* ${t.label} · ${CRAFTS[t.craft].label} */
+.todo.todo--${name} {
+${glowVar}  border: ${t.w}px solid transparent;
+  padding: ${pad};
+  background:
+    ${layers(t.fillTop, t.fillBottom)};
+  box-shadow: ${ring}inset 0 1px 0 #fff,
+    ${halo}${outer};
+  animation: ${anim};
+}
+`;
+  if (t.breath) {
+    out += `.todo.todo--${name}::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  /* 只有柔雾、没有硬边环，也不做 scale：几何不变形，靠明暗与柔度呼吸 */
+  box-shadow:
+    0 0 16px 0 rgba(var(--rar-glow-rgb), 0.45),
+    0 0 40px 6px rgba(var(--rar-glow-rgb), 0.22);
+  animation: rar-breath ${t.breathDur || 4.6}s ease-in-out infinite;
+}
+`;
+  }
+  const dTop = g.deepen ? t.doneTop : t.fillTop;
+  const dBottom = g.deepen ? t.doneBottom : t.fillBottom;
+  const doneAnim = g.doneAnim ? anim : 'todo-enter 0.25s var(--ease) backwards';
+  out += `.todo.todo--${name}.todo--done {
+  ${g.noSaturate ? 'filter: none;\n  ' : ''}background:
+    ${layers(dTop, dBottom)};
+  box-shadow: ${ring}inset 0 2px 7px rgba(${haloRgb}, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 4px 16px -14px rgba(${haloRgb}, ${round(t.haloAlpha + 0.3)})${outer};
+  animation: ${doneAnim};
+}
+`;
+  return out;
+}
+
+/* 普通待办基线的 CSS（强度系数直接算成色值，便于粘贴） */
+function commonCss(c) {
+  const k = c.shadow;
+  const a1 = round(0.30 * k, 3), a2 = round(0.55 * k, 3), a3 = round(0.055 * k, 3);
+  return `/* ---- 普通待办基线（更安静，让隐藏款有对比）---- */
+.todo {
+  background: linear-gradient(180deg, ${c.fillTop} 0%, ${c.fillBottom} 100%);
+  border: ${c.borderW}px solid ${c.border};
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 6px 18px -12px rgba(150, 74, 102, ${a1}),
+    0 22px 40px -30px rgba(150, 74, 102, ${a2});
+}
+/* 置顶项必须重新声明：它与 .todo 同为 (0,1,0)，否则会被上面这条的 background 吃掉 */
+.todo--pinned {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.08), rgba(255, 182, 193, 0.08));
+  border-left: 3px solid var(--color-primary);
+}
+/* 已完成：压平内凹。刻意用**中性**的纸色（不是暖米），这样任何"有色"的隐藏款
+   在已完成区都能一眼认出来 —— 暖米底和三档淡色底在明度上几乎一样，是"分不清"的根因。 */
+.todo--done {
+  background: linear-gradient(180deg, ${c.doneFillTop} 0%, ${c.doneFillBottom} 100%);
+  border-color: ${c.doneBorder};
+  border-width: ${c.doneBorderW}px;
+  box-shadow: inset 0 2px 7px rgba(120, 100, 110, ${a3});
+}
+/* 顶部氛围光：可以一并压暗，卡片就不会"浮在光上" */
+.container { background: radial-gradient(620px 400px at 50% -8%, rgba(243, 185, 205, ${round(0.3 * c.light, 3)}), transparent 72%); }
+
+`;
+}
+
+function buildCss(s) {
+  const head = `/* ============================================================
+   隐藏款待办 · 稀有度样式（由「样式工作台」导出）
+   分层方式：三档各一种「工艺」（缎面 / 珠光 / 鎏金），不是光斑数量；
+   转速与材质强度是各自的参数。参数摘要见文件末尾。
+   粘贴位置：public/css/style.css 的「隐藏款盲盒」小节（覆盖原
+   .todo.todo--rare / --epic / --legendary 三条规则）
+   ============================================================ */
+@property --rar-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+
+@keyframes rar-circulate { to { --rar-angle: 360deg; } }
+@keyframes rar-breath {
+  0%, 100% {
+    opacity: 0.18;
+    box-shadow: 0 0 14px 0 rgba(var(--rar-glow-rgb), 0.40), 0 0 34px 4px rgba(var(--rar-glow-rgb), 0.18);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 26px 3px rgba(var(--rar-glow-rgb), 0.60), 0 0 62px 14px rgba(var(--rar-glow-rgb), 0.34);
+  }
+}
+
+`;
+  let out = head + commonCss(s.common) + `.todo.todo--rare, .todo.todo--epic, .todo.todo--legendary { position: relative; }\n\n`;
+  for (const name of ['rare', 'epic', 'legendary']) out += tierCss(name, s.tiers[name], s) + '\n';
+  out += `/* 置顶 + 隐藏款：别丢置顶标识（.todo--pinned 的 border-left 是单类选择器，会被上面覆盖） */
+.todo.todo--pinned.todo--rare,
+.todo.todo--pinned.todo--epic,
+.todo.todo--pinned.todo--legendary { border-left: 3px solid var(--color-primary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .todo.todo--rare, .todo.todo--epic, .todo.todo--legendary,
+  .todo.todo--legendary::before { animation: none; }
+}
+`;
+  return out;
+}
+
+function summary(s) {
+  const lines = [];
+  for (const name of ['rare', 'epic', 'legendary']) {
+    const t = s.tiers[name];
+    lines.push(
+      `${name.padEnd(9)} 工艺 ${CRAFTS[t.craft].label.padEnd(13)} 转速 ${t.dur}s  强度 ${t.strength}` +
+      `  边 ${t.w}px ${t.edgeStrong}(亮端 ${t.edgeLight})  底色 ${t.fillTop}→${t.fillBottom}` +
+      `  完成底 ${t.doneTop}→${t.doneBottom}  内沿高光 ${t.innerLine}px  外沿压边 ${t.outerLine}px` +
+      `  光晕 ${t.haloAlpha} ${t.haloColor}  呼吸 ${t.breath ? '有' : '无'}`
+    );
+  }
+  const c = s.common;
+  lines.push(`普通卡基线  阴影强度 ${c.shadow}  顶部光斑 ${c.light}  底色 ${c.fillTop}→${c.fillBottom}  边框 ${c.borderW}px ${c.border}`);
+  lines.push(`普通卡完成态  底色 ${c.doneFillTop}→${c.doneFillBottom}  边框 ${c.doneBorderW}px ${c.doneBorder}`);
+  lines.push(`完成态：不降饱和 ${s.noSaturate ? '✓' : '✗'}｜底色压深 ${s.deepen ? '✓' : '✗'}｜保留动效 ${s.doneAnim ? '✓' : '✗'}`);
+  return lines.join('\n');
+}
+
+/* ===== 预览卡片（DOM 与 app.js 的 renderItem 一致）===== */
+const CARD = (o) => {
+  const cls = ['todo'];
+  if (o.rarity) cls.push(`todo--${o.rarity}`);
+  if (o.done) cls.push('todo--done');
+  return `<li class="${cls.join(' ')}" data-k="${o.k}">
+    <button class="todo__check${o.done ? ' todo__check--done' : ''}" role="checkbox" aria-checked="${!!o.done}">
+      <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="todo__body">
+      <div class="todo__headline"><div class="todo__text">${o.text}</div></div>
+      <div class="todo__meta"><span class="todo__avatar-dot"></span><span class="todo__meta-text">${o.meta}</span></div>
+    </div>
+  </li>`;
+};
+const CHAP = (label, sum, open) =>
+  `<li class="tl-chap${open ? ' tl-chap--open' : ''}"><span class="tl-chap__label">${label}</span>` +
+  `<span class="tl-chap__sum">${sum}</span><span class="tl-chap__line"></span></li>`;
+
+function preview() {
+  const TIER_CRAFT = () => ['rare', 'epic', 'legendary'].map((n) => CRAFTS[state.tiers[n].craft].label.split(' ')[0]);
+  const cards = (done) => {
+    const [rc, ec, lc] = TIER_CRAFT();
+    const base = done ? '我 · 8月20日 · 完成' : '我 · 刚刚';
+    return [
+      CARD({ k: `common-${done ? 'done' : 'open'}`, text: '普通待办', meta: base, done }),
+      CARD({ k: `rare-${done ? 'done' : 'open'}`, text: '稀有款待办', meta: `${base} · ${rc}`, rarity: 'rare', done }),
+      CARD({ k: `epic-${done ? 'done' : 'open'}`, text: '史诗款待办', meta: `${base} · ${ec}`, rarity: 'epic', done }),
+      CARD({ k: `leg-${done ? 'done' : 'open'}`, text: '传说款待办', meta: `${base} · ${lc}`, rarity: 'legendary', done }),
+    ].join('');
+  };
+  return `<ul class="todo-list">
+${CHAP('未完成', '· 4', true)}
+${cards(false)}
+${CHAP('已完成', '4 件')}
+${cards(true)}
+</ul>`;
+}
+
+/* ===== 控件 ===== */
+const RANGES = [
+  ['w', '边框粗细', 'px', 0.5, 4, 0.5],
+  ['dur', '转速', 's', 4, 60, 1],
+  ['strength', '材质强度', '', 0, 1, 0.05],
+  ['innerLine', '内沿高光线', 'px', 0, 1.2, 0.1],
+  ['outerLine', '外沿压边', 'px', 0, 1.2, 0.1],
+  ['haloAlpha', '光晕强度', '', 0, 0.6, 0.02],
+  ['breathDur', '呼吸周期', 's', 2, 10, 0.2],
+];
+const COLORS = [
+  ['edgeStrong', '边框主色'], ['edgeLight', '边框亮端'], ['highlight', '高光/镜面色'],
+  ['fillTop', '底色·上'], ['fillBottom', '底色·下'],
+  ['doneTop', '完成底·上'], ['doneBottom', '完成底·下'],
+  ['haloColor', '光晕色'],
+];
+
+function buildControls() {
+  document.getElementById('tiers').innerHTML = ['rare', 'epic', 'legendary'].map((name) => {
+    const t = state.tiers[name];
+    const craftRow = `<div class="row"><label>工艺</label>
+      <select data-tier="${name}" data-key="craft">${Object.entries(CRAFTS)
+        .map(([k, v]) => `<option value="${k}"${t.craft === k ? ' selected' : ''}>${v.label}</option>`).join('')}
+      </select></div><div class="craft-note">${CRAFTS[t.craft].note}</div>`;
+    const colors = COLORS.map(([key, label]) => `<div class="row">
+        <label>${label}</label>
+        <input type="color" data-tier="${name}" data-key="${key}" value="${t[key]}" />
+        <span class="swatch" style="background:${t[key]}"></span>
+        <span class="val" data-hex="${name}-${key}">${t[key].toUpperCase()}</span>
+      </div>`).join('');
+    const ranges = RANGES.map(([key, label, unit, min, max, step]) => `<div class="row">
+        <label>${label}</label>
+        <input type="range" data-tier="${name}" data-key="${key}" min="${min}" max="${max}" step="${step}" value="${t[key]}" />
+        <span class="val" data-val="${name}-${key}">${t[key]}${unit}</span>
+      </div>`).join('');
+    const toggles = `<div class="row row--toggles">
+        <label><input type="checkbox" data-tier="${name}" data-key="breath" ${t.breath ? 'checked' : ''} /> 光晕呼吸（传说专属信号）</label>
+      </div>`;
+    return `<fieldset><legend>${t.label}</legend>${craftRow}${colors}${ranges}${toggles}</fieldset>`;
+  }).join('');
+}
+
+function syncInputs() {
+  document.querySelectorAll('[data-tier][data-key]').forEach((el) => {
+    const t = state.tiers[el.dataset.tier];
+    const key = el.dataset.key;
+    if (el.type === 'checkbox') el.checked = !!t[key];
+    else el.value = t[key];
+  });
+  for (const name of ['rare', 'epic', 'legendary']) {
+    const t = state.tiers[name];
+    for (const [key, , unit] of RANGES) {
+      const el = document.querySelector(`[data-val="${name}-${key}"]`);
+      if (el) el.textContent = t[key] + unit;
+    }
+    document.querySelectorAll(`input[type="color"][data-tier="${name}"]`).forEach((el) => {
+      const sw = el.parentElement.querySelector('.swatch');
+      if (sw) sw.style.background = el.value;
+      const hx = document.querySelector(`[data-hex="${name}-${el.dataset.key}"]`);
+      if (hx) hx.textContent = el.value.toUpperCase();
+    });
+  }
+  const c = state.common;
+  const setR = (id, v, unit) => { document.getElementById(id).value = v; document.getElementById(id + '-v').textContent = v + (unit || ''); };
+  setR('c-shadow', c.shadow); setR('c-light', c.light); setR('c-borderW', c.borderW, 'px');
+  setR('c-doneBorderW', c.doneBorderW, 'px');
+  const setC = (id, v) => {
+    const el = document.getElementById(id); el.value = v;
+    document.getElementById(id + '-sw').style.background = v;
+    document.getElementById(id + '-hex').textContent = v.toUpperCase();
+  };
+  setC('c-border', c.border); setC('c-fillTop', c.fillTop); setC('c-fillBottom', c.fillBottom);
+  setC('c-doneFillTop', c.doneFillTop); setC('c-doneFillBottom', c.doneFillBottom); setC('c-doneBorder', c.doneBorder);
+  document.getElementById('g-width').value = state.width;
+  document.getElementById('g-width-v').textContent = state.width + 'px';
+  document.getElementById('g-noSaturate').checked = state.noSaturate;
+  document.getElementById('g-deepen').checked = state.deepen;
+  document.getElementById('g-doneAnim').checked = state.doneAnim;
+  document.getElementById('phone').style.width = state.width + 'px';
+}
+
+let injectionOn = true;
+function render() {
+  document.getElementById('pv').textContent = injectionOn ? buildCss(state) : '/* 现状对照：未注入任何隐藏款样式 */';
+  document.getElementById('inner').innerHTML = preview(state);
+  const off = injectionOn ? '' : '/* ⚠️ 预览当前是「对比线上现状」状态（未注入下面的样式）。*/\n';
+  document.getElementById('css').textContent = off + buildCss(state) + '\n/* ---- 参数摘要 ----\n' + summary(state) + '\n*/';
+  document.getElementById('summary').textContent = summary(state);
+  syncInputs();
+  localStorage.setItem('rarity-lab-v5', JSON.stringify(state));
+}
+
+function load() {
+  try { return JSON.parse(localStorage.getItem('rarity-lab-v7') || 'null'); } catch { return null; }
+}
+
+/** 参数校验：只接受"类型对得上、色值合法"的字段，其余回落到默认值。
+    为什么必须做：一个 NaN 存进 localStorage 会在下次打开时让 buildCss 抛错，
+    整个工作台就再也出不来 —— 宁可丢一次参数，也不能打不开。 */
+function sanitize(raw) {
+  const out = structuredClone(DEFAULT);
+  if (!raw || typeof raw !== 'object') return out;
+  const isHex = (v) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
+  const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
+  for (const k of ['width', 'noSaturate', 'deepen', 'doneAnim']) {
+    if (typeof raw[k] === typeof out[k]) out[k] = raw[k];
+  }
+  for (const tier of ['rare', 'epic', 'legendary']) {
+    const src = raw.tiers && raw.tiers[tier];
+    if (!src) continue;
+    const dst = out.tiers[tier];
+    for (const key of Object.keys(dst)) {
+      if (key === 'label') continue;
+      if (key === 'craft') { if (CRAFTS[src.craft]) dst.craft = src.craft; continue; }
+      if (typeof dst[key] === 'boolean') { if (typeof src[key] === 'boolean') dst[key] = src[key]; continue; }
+      if (isHex(dst[key])) { if (isHex(src[key])) dst[key] = src[key]; continue; }
+      dst[key] = num(src[key], dst[key]);
+    }
+  }
+  const src = raw.common;
+  if (src) {
+    const dst = out.common;
+    for (const key of Object.keys(dst)) {
+      if (isHex(dst[key])) { if (isHex(src[key])) dst[key] = src[key]; continue; }
+      dst[key] = num(src[key], dst[key]);
+    }
+  }
+  return out;
+}
+
+let state = sanitize(load());
+
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (el.dataset.tier && el.dataset.key) {
+    const t = state.tiers[el.dataset.tier];
+    const key = el.dataset.key;
+    t[key] = el.type === 'checkbox' ? el.checked
+      : el.type === 'color' ? el.value
+      : el.tagName === 'SELECT' ? el.value
+      : Number(el.value);
+    if (key === 'craft') buildControls();
+    render();
+    return;
+  }
+  if (el.id && el.id.startsWith('c-')) {
+    const key = el.id.slice(2);
+    state.common[key] = el.type === 'color' ? el.value : Number(el.value);
+    render();
+    return;
+  }
+  switch (el.id) {
+    case 'g-width': state.width = Number(el.value); render(); break;
+    case 'g-noSaturate': state.noSaturate = el.checked; render(); break;
+    case 'g-deepen': state.deepen = el.checked; render(); break;
+    case 'g-doneAnim': state.doneAnim = el.checked; render(); break;
+  }
+});
+
+document.getElementById('presets').innerHTML =
+  Object.keys(PRESETS).map((n) => `<button data-preset="${n}"${n === DEFAULT_PRESET ? ' data-on="1"' : ''}>${n}</button>`).join('') +
+  '<button data-preset="__reset">重置</button>';
+
+document.getElementById('presets').addEventListener('click', (e) => {
+  const name = e.target.dataset.preset;
+  if (!name) return;
+  if (name === '__reset') { state = structuredClone(DEFAULT); injectionOn = true; }
+  else if (name === '现状对照') injectionOn = false;
+  else { injectionOn = true; state = PRESETS[name](structuredClone(state)) || state; }
+  document.querySelectorAll('#presets button').forEach((b) => (b.dataset.on = b.dataset.preset === name ? '1' : '0'));
+  buildControls();
+  render();
+});
+
+document.getElementById('copy').onclick = () => {
+  navigator.clipboard.writeText(document.getElementById('css').textContent);
+  const b = document.getElementById('copy'); b.textContent = '已复制 ✓';
+  setTimeout(() => (b.textContent = '复制 CSS'), 1200);
+};
+document.getElementById('copySummary').onclick = () => {
+  navigator.clipboard.writeText(summary(state));
+  const b = document.getElementById('copySummary'); b.textContent = '已复制 ✓';
+  setTimeout(() => (b.textContent = '复制参数摘要'), 1200);
+};
+
+// 允许用 ?css=<url> 覆盖样式表地址（做对照/验证时用），默认加载仓库里的真实文件
+const cssParam = new URLSearchParams(location.search).get('css');
+if (cssParam) document.getElementById('appcss').href = cssParam;
+
+buildControls();
+render();
+
+/* 自检：真实样式表没加载上时要明说，避免把"样式表没读到"误判成"参数不生效" */
+setTimeout(function selfCheck() {
+  const probe = document.querySelector('.todo');
+  const radius = probe ? getComputedStyle(probe).borderRadius : '';
+  if (radius && parseFloat(radius) >= 18) return;
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99;background:#b3261e;color:#fff;' +
+    'font:12px/1.6 -apple-system,sans-serif;padding:8px 14px;text-align:center';
+  bar.textContent = '⚠️ 没能读到仓库里的 style.css（/Users/admin/Desktop/toDoList/public/css/style.css）' +
+    '，卡片会用浏览器默认样式渲染（实测 border-radius=' + (radius || '空') + '）。' +
+    '请确认本文件仍在 docs/design-todo-v2/ 下、且 ../../public/css/style.css 存在。';
+  document.body.appendChild(bar);
+}, 400);
+</script>
+</body>
+</html>
