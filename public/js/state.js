@@ -148,14 +148,21 @@ export function notifyCompleted(todo) {
   dispatch(completeFns, todo);
 }
 
-/** PRD §4.2 Q2 排序：置顶在上 → 未完成在上 → 新的在上 → 完成的下沉 */
+/**
+ * 排序：**未完成在上 → 新的在上**（完成的下沉由分章承担，见 timeline.js）。
+ *
+ * ⚠️ 置顶**不参与排序**（v2.7.72 起）：置顶项由 `buildTodoLayout` 搬到页首「置顶」章节，
+ * 排序不再承担置顶语义。为什么把这一条拿掉 —— 旧实现是 `pinned` 第一优先级，但分章会给
+ * 每个章内重排（cmpCompletedDesc，纯按完成时间），于是"置顶的已完成项排最前"这个承诺在分章
+ * 那一步被整条丢掉：实测一条置顶、但完成时间最早的项仍排在它所属章的中间（第 2/4）。
+ * 一个随时会被抹掉的优先级比没有更糟 —— 用户点了置顶、看到 Toast、位置却纹丝不动。
+ * 现在顺序语义只有一处（本函数），位置语义只有一处（buildTodoLayout）。
+ */
 export function sortTodos(list) {
   return [...list].sort((a, b) => {
-    // 第一优先级：置顶项在前
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-    // 第二优先级：未完成在前
+    // 第一优先级：未完成在前
     if (a.completed !== b.completed) return a.completed ? 1 : -1;
-    // 第三优先级：新的在前
+    // 第二优先级：新的在前
     return b.createdAt.localeCompare(a.createdAt);
   });
 }

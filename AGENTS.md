@@ -38,7 +38,7 @@
   ```bash
   node scripts/serve-test.mjs      # 测试服务器，端口 3100，连独立测试库
   node scripts/reset-test-db.mjs   # 归零测试库（清 E2E 残留 + 贴纸）
-  node scripts/run-web-e2e.mjs     # 推荐：一次跑完 4 个用例（逐个归零 + 失败重试一次 + flaky 显式标记 + 汇总表）
+  node scripts/run-web-e2e.mjs     # 推荐：一次跑完 5 个用例（逐个归零 + 失败重试一次 + flaky 显式标记 + 汇总表）
   python3 scripts/test_undo_complete.py   # 也可单跑某个：脚本自动连 3100 + 自证隔离
   ```
   测试脚本默认连 3100（测试库），**禁止指向 3000**（那是生产库）。指向生产会被 `e2e_common.py` 直接拦下、退出码 2。
@@ -52,8 +52,8 @@
   ⚠️ 但**门禁覆盖 ≠ 测试全覆盖**，这是**有意的分层**（2026-09-14 批次 C 定型）：
   - **PR 门禁要「快而稳」**：只放 Node 回归 + admin Playwright E2E + workflow 静态检查。跑得慢会拖住每次合并，
     跑得不稳会让团队开始无视红灯。
-  - **全量回归要「慢而全」**：4 个双账号 Playwright E2E（`scripts/test_blindbox.py` / `test_offline.py` /
-    `test_trash.py` / `test_undo_complete.py`）走 **`.github/workflows/e2e-web-full.yml`** ——
+  - **全量回归要「慢而全」**：5 个双账号 Playwright E2E（`scripts/test_blindbox.py` / `test_offline.py` /
+    `test_trash.py` / `test_undo_complete.py` / `test_pin.py`）走 **`.github/workflows/e2e-web-full.yml`** ——
     **每晚 02:00（北京）定时**跑（`schedule`，cron 按 UTC 写）+ 可手动 `workflow_dispatch`，
     由 `scripts/run-web-e2e.mjs` 驱动（逐文件归零 / 失败重试一次 / FLAKY 显式标记 / 汇总进 Run Summary）。
   - ⚠️ **该工作流不设 required check**（它不在 PR 上运行；设了会让 check 永远停在 "Expected" 而卡死 PR）。
@@ -425,7 +425,7 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
   `release-web.yml`（**通道 A 热更新 CD**，仅手动触发）、
   `release-apk.yml`（**通道 B APK 发布 CD**，仅手动触发；工序与 release-web.yml 同构：
   预演真构建 → 审批门 → 发布 → 回读校验）、
-  `e2e-web-full.yml`（**定时全量回归**：每晚 02:00 北京 / `schedule` + `workflow_dispatch`，跑 4 个双账号 Python E2E）、
+  `e2e-web-full.yml`（**定时全量回归**：每晚 02:00 北京 / `schedule` + `workflow_dispatch`，跑 5 个双账号 Python E2E）、
   `codeql.yml`（**静态代码扫描**：push / PR / 每周一定时；`security-events: write` 是它唯一需要的写权限）。
   main 已开**分支保护**，required checks 取 `ci.yml` 三个 job；改代码走分支 + PR（见「铁律五 → main 分支保护」）
   ⚠️ `schedule` 的 cron **按 UTC 解释**，且定时任务只在**默认分支**上运行（夜里跑的是 main 上已合并的代码）

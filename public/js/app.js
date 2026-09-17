@@ -13,7 +13,7 @@
 import { db } from './db.js';
 import { auth } from './auth.js';
 import { formatRelativeTime } from './utils.js';
-import { groupByLocalPeriod } from './timeline.js';
+import { buildTodoLayout } from './timeline.js';
 import {
   getTodos,
   setTodos,
@@ -1254,14 +1254,20 @@ function setHeartExcited(on) {
 // 避免 toggleComplete / Realtime 回声等触发的重渲染让整列重新淡入（闪烁根因）
 const renderedIds = new Set();
 
-/** 未完成区小标题的章节 key（与 timeline.js 产出的 key 不会撞：那边是 day:/month: 前缀） */
-const OPEN_CHAPTER_KEY = '__open__';
-
 /** 新建章节头 <li>：**不带 data-id**，所以上面 existing Map（只认 .todo[data-id]）天然忽略它 */
 function createChapter(key, modifier) {
   const li = document.createElement('li');
   li.className = 'tl-chap' + (modifier ? ` ${modifier}` : '');
   li.dataset.chapKey = key;
+  // 置顶章头前的图钉：**只建一次**，且必须独立成元素 —— 「置顶」这个标签文案以后若变化，
+  // updateChapter 走的是 labelEl.textContent 赋值，会把塞在 label 里的图标一起抹掉。
+  if (modifier === 'tl-chap--pinned') {
+    const icon = document.createElement('span');
+    icon.className = 'tl-chap__pin';
+    icon.setAttribute('aria-hidden', 'true'); // 装饰性：章节语义由「置顶」二字承担
+    icon.innerHTML = ICONS.pin;
+    li.appendChild(icon);
+  }
   const label = document.createElement('span');
   label.className = 'tl-chap__label';
   const sum = document.createElement('span');
@@ -1378,8 +1384,8 @@ function render() {
     usedChapters.add(key);
     const el = chapterPool.get(key) || createChapter(key, modifier);
     // 回写池子：同一个 key 在本轮被取第二次时复用同一个节点（否则会静默出现两个同名章节头）。
-    // 当前两个调用点的 key 天然唯一（'__open__' + groupByLocalPeriod 的 Map 键），
-    // 这一行是给后人加章节时的兜底。
+    // 章节 key 的唯一性由 buildTodoLayout（timeline.js）保证：三个来源前缀互不重叠
+    // （__pinned__ / __open__ / day: 与 month:），这一行是给后人加章节时的兜底。
     chapterPool.set(key, el);
     updateChapter(el, label, subtitle);
     return el;
@@ -1401,18 +1407,13 @@ function render() {
     frag.appendChild(el);
   };
 
-  // ① 未完成区：小标题「要做的 · N」。
-  //    没有它，下面「今天」章节头会紧跟在未完成卡片后面，读起来像"这些是今天的待办"。
-  const openTodos = todos.filter((t) => !t.completed);
-  if (openTodos.length > 0) {
-    frag.appendChild(takeChapter(OPEN_CHAPTER_KEY, '要做的', `· ${openTodos.length}`, 'tl-chap--open'));
-    openTodos.forEach(place);
-  }
-
-  // ② 已完成区：按完成时间分章（分组规则在 timeline.js —— 纯函数、有单测；
-  //    章节顺序与组内顺序都由它决定，这里只负责把节点按序排好）
-  groupByLocalPeriod(todos).forEach((chap) => {
-    frag.appendChild(takeChapter(chap.key, chap.label, chap.subtitle));
+  // 整页章序由 timeline.js 的 buildTodoLayout 决定（纯函数、有单测）：
+  //   置顶（页首）→ 要做的 → 时光章节。
+  //   置顶项只出现在置顶章里一次 —— 一个 id 一个节点：下面的 place() 取的是复用池里
+  //   同一个元素（按 data-id 索引），所以"两处都摆"在结构上就不可能，只能搬。
+  //   章节头小计与「（N 件在置顶）」的差额提示也都在那个纯函数里算好，这里只负责摆放。
+  buildTodoLayout(todos).forEach((chap) => {
+    frag.appendChild(takeChapter(chap.key, chap.label, chap.subtitle, chap.modifier));
     chap.todos.forEach(place);
   });
 
@@ -1482,10 +1483,13 @@ function renderImage(li, todo) {
 /** 渲染单条（用 DOM API 而非 innerHTML，天然防 XSS） */
 function renderItem(todo) {
   const li = document.createElement('li');
+  // 置顶不再往卡片上加 class（v2.7.72）：置顶的视觉信号由**章头**承担（页首「置顶」章 +
+  // 图钉）。原来那条 .todo--pinned 是半透明的 8% 渐变**覆盖**卡片背景，而 v2.7.68 起卡片
+  // 背景是不透明的纸质渐变 —— 覆盖的结果是置顶卡成了页面上唯一没有纸面的卡；且它权重 0,1,0，
+  // 会被隐藏款的 .todo.todo--rare/--epic/--legendary（0,2,0）整条吃掉（线上 7 张隐藏款全在已完成区）。
   li.className = 'todo'
     + (todo.completed ? ' todo--done' : '')
-    + (todo.pending ? ' todo--pending' : '')
-    + (todo.pinned ? ' todo--pinned' : '');
+    + (todo.pending ? ' todo--pending' : '');
   li.dataset.id = todo.id;
 
   // 自绘圆形复选框（取代原生方框，精致度核心）
@@ -1637,13 +1641,7 @@ function updateItem(li, todo) {
   } else if (!todo.completed && li.classList.contains(doneClass)) {
     li.classList.remove(doneClass);
   }
-  // 置顶态 class
-  const pinnedClass = 'todo--pinned';
-  if (todo.pinned && !li.classList.contains(pinnedClass)) {
-    li.classList.add(pinnedClass);
-  } else if (!todo.pinned && li.classList.contains(pinnedClass)) {
-    li.classList.remove(pinnedClass);
-  }
+  // 置顶图标：置顶状态变化时增删图标（图钉是卡片上唯一的置顶信号，见 renderItem 的说明）
   // 主文案：编辑待办后 text 会变，原地更新（不重建 li，避免动画/状态抖动）
   const textEl = li.querySelector('.todo__text');
   if (textEl && textEl.textContent !== todo.text) {

@@ -758,6 +758,38 @@ input {
   color: var(--rose-600);
 }
 
+/* 置顶章（页首，v2.7.72）：形态沿用「要做的」那套轻量引子 —— 页首两章读作一组
+   （我钉住的 / 我要做的），时光章保持 16.5px 重型标签，两层不互相抢。
+   标签取主色而不是 stone：它是全页唯一「由用户主动制造」的区块，值得一个暖色。
+   图钉与文案同为 11px 那行的成员，align-self:center 让它不被 flex 的 baseline 拽偏。 */
+.tl-chap--pinned {
+  margin: 2px 4px 10px;
+}
+.tl-chap--pinned .tl-chap__pin {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+.tl-chap--pinned .tl-chap__pin svg {
+  width: 13px;
+  height: 13px;
+}
+.tl-chap--pinned .tl-chap__label {
+  font-family: var(--font-en);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: var(--color-primary);
+}
+.tl-chap--pinned .tl-chap__sum {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--rose-600);
+}
+
 @keyframes tlChapIn {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: none; }
@@ -924,16 +956,11 @@ input {
   filter: saturate(0.55);
 }
 
-/* 置顶态：淡金色渐变背景 + 左边框主色，视觉上与普通待办区分 */
-.todo--pinned {
-  background: linear-gradient(135deg, rgba(255, 215, 0, 0.08), rgba(255, 182, 193, 0.08));
-  border-left: 3px solid var(--color-primary);
-}
-.todo--pinned:hover {
-  background: linear-gradient(135deg, rgba(255, 215, 0, 0.12), rgba(255, 182, 193, 0.12));
-}
-
-/* 置顶图标：位于文字左侧，14px，主色调 */
+/* 置顶图标：位于文字左侧，14px，主色调。
+   ⚠️ 卡片上唯一的置顶信号（v2.7.72）：底色那条 .todo--pinned 已删除 —— 它是半透明覆盖，
+   会吃掉 v2.7.68 建立的纸面材质，且权重 0,1,0 会被隐藏款的 0,2,0 整条盖掉。
+   置顶的位置语义由页首「置顶」章头承担，卡片只需一个"我是被钉住的"标记。
+   SVG 用 currentColor 绘制，因此与稀有度渐变天然共存（不会被任何背景规则吃掉）。 */
 .todo__pin-icon {
   display: inline-flex;
   align-items: center;

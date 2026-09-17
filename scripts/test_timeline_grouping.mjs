@@ -15,7 +15,7 @@
  * 运行：node scripts/test_timeline_grouping.mjs
  */
 
-import { groupByLocalPeriod, localDayKey, localMonthKey } from '../public/js/timeline.js';
+import { groupByLocalPeriod, buildTodoLayout, localDayKey, localMonthKey } from '../public/js/timeline.js';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -39,11 +39,12 @@ const L = (y, m, d, h = 12, min = 0) => new Date(y, m - 1, d, h, min);
 
 /** 造一条待办；completedAt 为 null 表示"只给完成标记、没给时间"（兜底用例） */
 function todo(id, opts = {}) {
-  const { completed = true, completedAt = null, createdAt = null } = opts;
+  const { completed = true, completedAt = null, createdAt = null, pinned = false } = opts;
   return {
     id,
     text: `T-${id}`,
     completed,
+    pinned,
     completedAt: completedAt ? completedAt.toISOString() : null,
     createdAt: (createdAt || completedAt || L(2026, 1, 1)).toISOString(),
   };
@@ -272,6 +273,107 @@ eq('无已完成 → 空数组', groupByLocalPeriod([], L(2026, 9, 16)), []);
 eq('全是未完成 → 空数组', groupByLocalPeriod([todo('a', { completed: false })], L(2026, 9, 16)), []);
 eq('非数组入参 → 空数组（不抛错）', groupByLocalPeriod(null, L(2026, 9, 16)), []);
 eq('数组里有 null 元素也不抛错', labels(groupByLocalPeriod([null, todo('a', { completedAt: L(2026, 9, 16) })], L(2026, 9, 16, 12, 0))), ['今天']);
+
+console.log('\n== 11. buildTodoLayout：置顶章在页首、差额提示、空章不渲染 ==');
+{
+  const now = L(2026, 9, 16, 12, 0);
+
+  // 按 **key** 取章，不按位置取：位置断言在"少了一章"的实现变坏时会抛 TypeError，
+  // 一旦抛错，本文件后面所有用例（含最要命的不变量）全部不跑 —— 实测踩过：
+  // 变异"置顶项被整个丢掉"时，第 11c 组的"一条都不丢"根本没被执行，报告只显示 5 条红。
+  // 取不到就退化成空章，断言照常失败、但不会中断整个文件。
+  const byKey = (layout, key) => layout.find((c) => c.key === key) || { key, todos: [], subtitle: '' };
+  const partIds = (layout, key) => byKey(layout, key).todos.map((t) => t.id);
+
+  // 不变量（先跑，且**每份夹具都跑**）：一条都不丢、不重复。拆分逻辑写错会让一条待办
+  // 从页面上凭空消失 —— 不报错、不告警，用户以为数据丢了，所以这条必须最先被评估。
+  const noLoss = (label, layout, input) => {
+    eq(`${label}：每条待办恰好出现一次（不丢、不重）`,
+      layout.flatMap((c) => c.todos.map((t) => t.id)).sort(), input.map((t) => t.id).sort());
+    eq(`${label}：各章条数之和 === 输入条数`,
+      layout.reduce((n, c) => n + c.todos.length, 0), input.length);
+  };
+  /** 造一份布局并立刻验证不变量（所有夹具统一走这里，避免漏掉某一组） */
+  const layoutOf = (label, input) => {
+    const layout = buildTodoLayout(input, now);
+    noLoss(label, layout, input);
+    return layout;
+  };
+
+  // ---- 11a 无置顶：布局必须与改造前逐字一致（回归保护：置顶功能停用时页面零变化）----
+  const plain = [
+    todo('o1', { completed: false, createdAt: L(2026, 9, 10) }),
+    todo('o2', { completed: false, createdAt: L(2026, 9, 12) }),
+    todo('t1', { completedAt: L(2026, 9, 16, 9, 0) }),
+    todo('y1', { completedAt: L(2026, 9, 15, 9, 0) }),
+  ];
+  const l1 = layoutOf('无置顶', plain);
+  eq('无置顶：不产出置顶章', l1.map((c) => c.key), ['__open__', 'day:2026-09-16', 'day:2026-09-15']);
+  eq('无置顶：「要做的 · N」小计不变', byKey(l1, '__open__').subtitle, '· 2');
+  eq('无置顶：任何章头都不出现差额提示', l1.some((c) => c.subtitle.includes('在置顶')), false);
+  eq('无置顶：章头形态沿用原 modifier', l1.map((c) => c.modifier), ['tl-chap--open', undefined, undefined]);
+  // 与 groupByLocalPeriod 直接产出的一致性（同一份数据，章头文案相同）
+  eq('无置顶：时光章文案与 groupByLocalPeriod 一致',
+    l1.slice(1).map((c) => c.subtitle), groupByLocalPeriod(plain, now).map((c) => c.subtitle));
+
+  // ---- 11b 有置顶：置顶章在页首，且被置顶的卡片不再出现在「要做的」与时光章 ----
+  const mixed = [
+    todo('o1', { completed: false, createdAt: L(2026, 9, 12) }),
+    todo('po', { completed: false, pinned: true, createdAt: L(2026, 9, 3) }), // 置顶的未完成
+    todo('t1', { completedAt: L(2026, 9, 16, 9, 0) }),
+    todo('pt', { completed: true, pinned: true, completedAt: L(2026, 9, 15, 9, 0) }), // 置顶的已完成
+    todo('y1', { completedAt: L(2026, 9, 15, 20, 0) }),
+  ];
+  const l2 = layoutOf('混合（含置顶）', mixed);
+  eq('置顶章在最前（页首）', l2[0].key, '__pinned__');
+  eq('置顶章文案与形态',
+    [byKey(l2, '__pinned__').label, byKey(l2, '__pinned__').subtitle, byKey(l2, '__pinned__').modifier],
+    ['置顶', '· 2', 'tl-chap--pinned']);
+  eq('置顶章内保持传入顺序（app 传的是 sortTodos 结果：未完成在前 → 创建时间倒序）',
+    partIds(l2, '__pinned__'), ['po', 'pt']);
+  eq('被置顶的不再出现在「要做的」', partIds(l2, '__open__'), ['o1']);
+  eq('「要做的」小计仍数名下全部未完成，差额点出来', byKey(l2, '__open__').subtitle, '· 2（1 件在置顶）');
+  eq('被置顶的不再出现在时光章', partIds(l2, 'day:2026-09-15'), ['y1']);
+  eq('时光章小计仍记那天的账（含被收走的那条）+ 差额提示',
+    byKey(l2, 'day:2026-09-15').subtitle, '一起完成 2 件（1 件在置顶）');
+  eq('置顶章不吞掉未被置顶的那些章', l2.map((c) => c.key),
+    ['__pinned__', '__open__', 'day:2026-09-16', 'day:2026-09-15']);
+
+  // ---- 11c 空章头不渲染（某章名下条目全被置顶 ⇒ 不留"只有标签没有卡片"的章）----
+  const onlyPinnedInDay = layoutOf('某天唯一一条被置顶', [
+    todo('pt', { completed: true, pinned: true, completedAt: L(2026, 9, 15, 9, 0) }),
+    todo('t1', { completedAt: L(2026, 9, 16, 9, 0) }),
+  ]);
+  eq('名下条目全被置顶的那天不产出章头', onlyPinnedInDay.map((c) => c.key), ['__pinned__', 'day:2026-09-16']);
+
+  // ---- 11d 未完成全被置顶 ⇒ 不留空的「要做的」章 ----
+  const allOpenPinned = layoutOf('未完成全部被置顶', [todo('po', { completed: false, pinned: true })]);
+  eq('未完成全被置顶时不产出空「要做的」章', allOpenPinned.map((c) => c.key), ['__pinned__']);
+
+  // ---- 11e 全部被置顶（极端）：只剩置顶章，且一条都不丢 ----
+  const allPinned = layoutOf('全部被置顶', [
+    todo('a', { completedAt: L(2026, 9, 16, 9, 0), pinned: true }),
+    todo('b', { completed: false, pinned: true }),
+  ]);
+  eq('全部被置顶时只剩置顶章', allPinned.map((c) => c.key), ['__pinned__']);
+
+  // ---- 11f 时光章内部顺序不受置顶影响（仍按完成时间倒序）----
+  const order = layoutOf('章内顺序', [
+    todo('a', { completedAt: L(2026, 8, 5, 9, 0), createdAt: L(2026, 8, 20) }),
+    todo('b', { completedAt: L(2026, 8, 25, 9, 0), createdAt: L(2026, 8, 1) }),
+  ]);
+  eq('章内仍按完成时间倒序', byKey(order, 'month:2026-08').todos.map((t) => t.id), ['b', 'a']);
+
+  // ---- 11g 容错 ----
+  eq('空输入 → 空布局', buildTodoLayout([], now), []);
+  eq('非数组入参 → 空布局（不抛错）', buildTodoLayout(null, now), []);
+  eq('数组里含 null 元素不抛错',
+    buildTodoLayout([null, todo('x', { completed: false })], now).flatMap((c) => c.todos.map((t) => t.id)), ['x']);
+  // 纯函数：不改入参
+  const frozen = [todo('o', { completed: false, pinned: true })];
+  buildTodoLayout(frozen, now);
+  eq('不修改入参数组', frozen.map((t) => t.id), ['o']);
+}
 
 console.log(`\n== 结果: ${pass} 通过 / ${fail} 失败 ==\n`);
 process.exit(fail > 0 ? 1 : 0);
