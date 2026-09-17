@@ -109,11 +109,18 @@
 - 🔴 密钥：是否硬编码了不该出现的东西？—— 明确边界：`anon key` 可公开（靠 RLS），但 **`service_role key` 绝不允许进前端**。
 - 🔴 **`.example` / 模板 / 文档 / 测试夹具里是否出现了真实凭据或真实账号标识？**
   真值只能放 `.env*`（已 gitignore）与 GitHub Secrets；仓库里一律占位符（`your-xxx` / `test-user@example.com`）。
-  自查：`git grep -nE "PASSWORD=[^y]|@todo\.local" -- '*.example' '*.md'` 应为空或仅注释/占位符。
+  功能性例外只有两处：客户端登录映射（`public/js/auth.js`）与测试里的 mock JWT payload —— 它们不含口令，
+  单独泄露不构成凭据；**文档 / SQL / `.example` 没有这个理由**。完整规则与豁免见 `AGENTS.md`「凭据卫生」。
+  自查命令与判据见 `AGENTS.md`「凭据卫生」——**判据不是「输出为空」**（伪域名会合法地出现在说明文字里），
+  而是「逐条都能解释」；且必须**同时扫 git 历史**（工作树干净 ≠ 没泄露过）。
   **血泪（2026-09-15 发现）**：`admin/.env.test.example` 从 2026-09-08 起在 **public 仓库**里写着
   真实账号邮箱 + 真实密码（值已轮换作废，此处不复述），躺了一周才发现 —— 而生产账号用的是**同一个邮箱**，
   只要密码复用，这就等价于把账号贴在公网。**教训**：删掉文件里的值不够，历史提交里还有 ⇒
   发现即**先改密码**（让泄露值失效），再清理文件；且这类问题本该由 push protection 在推送时拦下（批次 D）。
+  **血泪补记（2026-09-17）**：上面这条规则**自己举的例子又把真值写回了 AGENTS.md**；而且它给的自查命令
+  ① 只扫 `'*.example' '*.md'` ⇒ 扫不到 `.sql` / `.js`（`supabase/schema.sql`、`PRODUCT-SPEC.md` 里的
+  真实邮箱因此一直没被抓到）；② 命令文本含 `PASSWORD=[^y]` ⇒ **自匹配记录它的文件**，永远不可能是绿的。
+  **推论**：写进 Checklist 的命令必须自己先跑一遍，并且**必须验证它真的会变红**（否则等于没写）。
 - 🔴 SQL 注入：本项目直连 PostgREST 风险低，但手写 SQL / RPC 函数要逐一检查。
 - 🔴 **函数权限：PostgreSQL 默认把函数的 EXECUTE 授予 `PUBLIC`**（2026-09-16 实测）
   于是 public schema 里每个 `SECURITY DEFINER` 函数默认都是「拿到公开 anon key 的任何人可调用」——

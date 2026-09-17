@@ -177,8 +177,11 @@ BEGIN
   END IF;
 END $$;
 
--- ===== 4. 账号创建参考（不在此处运行，使用 scripts/init-users.mjs）=====
--- 见 scripts/init-users.mjs：用 service_role 调 auth.admin.createUser 创建
--- 底层账号邮箱 xiaobaobao@todo.local / dabaobei@todo.local（注册时 display_name 用英文），
--- 登录名/显示名后续改为中文「小宝宝」「大宝贝」（见 scripts/init-users.mjs 的 USERS 表），
--- 触发上面的 trigger 自动建 profile。
+-- ===== 4. 账号创建参考（不在此处运行）=====
+-- 两个固定账号在 Supabase Auth 侧创建；登录标识用伪域名邮箱（形状 `<拼音>@todo.local`，
+-- 真实映射见客户端登录代码 public/js/auth.js —— 按凭据卫生规则，文档与 SQL 只写形状不写真值），
+-- 显示名用中文。创建后触发上面的 trigger 自动建 profile。
+--
+-- ⚠️ 安全前提：必须保持「无公开注册入口」（Auth 设置 disable_signup = true）。
+--    本文件所有策略都是 TO authenticated USING (true)，区分不了「伴侣」与「任何一个注册账号」——
+--    一旦开放注册，拿到公开 anon key 的任何人注册后即可读写全部数据。开放注册前必须推翻重做策略。
