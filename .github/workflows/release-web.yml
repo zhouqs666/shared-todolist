@@ -6,7 +6,7 @@ name: CD · Web 热更新发布
 # 把「人在本地敲 `node scripts/release.mjs <版本> --notes "..."`」搬到 CI 里点按钮执行。
 # 也就是 CI（只读验证）→ CD（写生产）的那一步：机制上两者没有区别，区别只在工序编排。
 #
-#   CI（ci.yml / e2e-app.yml）：push/PR 触发 → 只读验证 → 失败阻断合并
+#   CI（ci.yml）：push/PR 触发 → 只读验证 → 失败阻断合并
 #   CD（本文件）：           人工点按钮 → 预演报告 → 人工审批 → 写生产（Storage + 版本表）
 #
 # ⚠️ 绝不要给它加 push 触发器（铁律三）：本工作流写入生产 Storage 和 app_versions 表，

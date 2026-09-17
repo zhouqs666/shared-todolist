@@ -5,7 +5,6 @@
 ## CI/CD
 
 [![CI](https://github.com/zhouqs666/shared-todolist/actions/workflows/ci.yml/badge.svg)](https://github.com/zhouqs666/shared-todolist/actions/workflows/ci.yml)
-[![APP E2E](https://github.com/zhouqs666/shared-todolist/actions/workflows/e2e-app.yml/badge.svg)](https://github.com/zhouqs666/shared-todolist/actions/workflows/e2e-app.yml)
 [![Web E2E Full](https://github.com/zhouqs666/shared-todolist/actions/workflows/e2e-web-full.yml/badge.svg)](https://github.com/zhouqs666/shared-todolist/actions/workflows/e2e-web-full.yml)
 [![CodeQL](https://github.com/zhouqs666/shared-todolist/actions/workflows/codeql.yml/badge.svg)](https://github.com/zhouqs666/shared-todolist/actions/workflows/codeql.yml)
 

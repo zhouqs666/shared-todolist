@@ -91,10 +91,29 @@ WebView 上 `setValue()`（accessibility SET_TEXT）不回写 DOM——JS 读到
 - `beforeEach` 造数 + `afterEach` 清数，保证用例独立性
 - `noReset:false`（fastReset）：每会话清应用数据，保证从未登录状态起步
 
-### CI 集成
+### 运行方式（2026-09-17 起：**不进 CI**）
 
-GitHub Actions（`.github/workflows/e2e-app.yml`）：
-- push/PR 自动触发
-- Mac runner：cap sync → assembleDebug → Appium → 模拟器内跑测试
-- Allure 报告归档 14 天，失败截图上传 artifact
-# 验证公开仓库 CI
+本套件**不再由 GitHub Actions 自动运行** —— 原先的 `.github/workflows/e2e-app.yml`
+已于 2026-09-17 删除。理由与替代方案见 `AGENTS.md` 的「CI 分层」一节，摘要：
+
+- 一次约 11 分钟（打 APK ~2 + 模拟器 ~9），却只覆盖「登录 + 待办增删改查」，
+  而这些已被 **web 双账号 E2E**（`ci.yml` 必需门禁）等价覆盖；
+- 它**常态掉线**（`adb` 失去响应 = 模拟器进程级死亡，仓库侧修不了），
+  把 main 变长期红灯、训练人忽略红色；
+- 本仓双人私用、单一 APK、**没有机型矩阵需求** —— 云设备的核心价值不存在。
+
+**那设备侧谁验**：发布时人工在真机走一遍冒烟（`AGENTS.md`「发布前自检」第 6 步），
+它同时覆盖本套件**从未覆盖**的通知 / 震动 / 热更新 / APK 安装器。
+
+**需要时怎么跑**（本地接模拟器或真机）：
+
+```bash
+node scripts/build-test-apk.mjs   # 产出指向测试库的 APK（脚本自带还原）
+cd app-e2e && npm test            # WebdriverIO + Appium
+bash scripts/app-e2e-report.sh    # Allure 报告
+```
+
+⚠️ 若将来要恢复 CI 自动触发：把 `push/pull_request + paths` 加回一个新工作流即可，
+`paths` 建议只留 `android/**` 与 `app-e2e/**`，**不要含 `public/**`**（那正是它当初被
+拖进每次前端改动的原因）；同时记得把路径加回 `scripts/check-e2e-env-keys.mjs` 的生成方列表。
+`app-e2e/scripts/ci-run*.sh` 两个脚本就是为 CI 写的，现在不再被调用（头部已标注），可直接复用。
