@@ -316,6 +316,34 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
   后者只在手动触发 → 它们在不匹配的 PR 上**永远不会运行**，check 会一直停在 "Expected"，把 PR 永久卡死
 - 为什么这是唯一让 CI 有牙齿的方式：required checks 生效前，CI 跑得再红也不影响合并
 
+### CI 分层：哪些改动该跑哪一层（2026-09-17 定型）
+
+这三层的划分是**刻意的**。起因是一次实测：一个只改了颜色的小改动，把整条流水线拖进
+十几分钟起步的**排队**（06:17 触发的 run，其 job 直到 06:23 才开始；06:27 那个等到 06:39）。
+
+| 层 | 何时跑 | 耗时（实测） | 角色 |
+|---|---|---|---|
+| `ci.yml`（3 个 job） | **每次 push / PR** | **约 70 秒** | **必需门禁**：Node 回归 + admin Playwright E2E + actionlint |
+| `e2e-web-full.yml` | 每晚 02:00 + 手动 | 约 4–7 分钟 | 全量业务回归（5 个双账号 E2E） |
+| `e2e-app.yml` | 改 `android/**`、`app-e2e/**`、本 workflow 时；或 `workflow_dispatch` | **约 11 分钟**（打 APK 2 + 模拟器 9） | 真机壳内的设备侧验证 |
+
+**为什么 `e2e-app.yml` 的触发面不含 `public/**`**：它一次约 11 分钟，且与夜间全量回归
+**共用并发组 `e2e-test-db`**（同一个测试库，必须串行）、`cancel-in-progress: false`
+（不能被后来的取消）—— 于是每次触发都占住队列十几分钟；而它**不是 required check**：
+挡不住合并，却把 CI 队列和夜间回归一起堵住。它挡住的收益远小于每次前端改动都排队的代价。
+
+**那"改了前端想验证真机"怎么办**（三条，都不自动挂在这一层）：
+1. `workflow_dispatch` 手动触发一次 —— 需要时再花那 11 分钟；
+2. 常规业务回归由 **web 双账号 E2E** 覆盖（`ci.yml` 必需门禁，5 个用例）——同样的流程，跑在浏览器里；
+3. 真·设备相关改动（`android/**`、`app-e2e/**`）**仍会自动触发**。
+
+**模拟器失败的分类（同一批改动）**：`ci-run.sh` 在测试失败后会探一次设备是否还在应答
+（`adb shell getprop sys.boot_completed`，连续两次）——
+- 设备仍在 ⇒ 按**代码/测试回归**处理，保留「重试一次」的意义；
+- 设备失联 ⇒ 以专用退出码 `86` 返回，`ci-run-with-retry.sh` **跳过重试**（在死掉的模拟器上重试
+  只是把 11 分钟再烧一遍；实测 2026-09-17 连续 4 次运行都这样白等了一轮），并明确打印
+  「基础设施故障、测试没跑完，不要当成已通过」。
+
 ### commit message 规范（Conventional Commits，中文描述）
 - `feat:` 新功能 / `fix:` 修复 / `refactor:` 重构 / `docs:` 文档 / `chore:` 杂项
 - **一个功能 = 一个 PR**（2026-09-14 对齐 squash merge）：分支内可以自由拆多个 commit 方便回溯，
@@ -453,7 +481,7 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
 - **测试**：Playwright（Python 双账号 E2E，连测试库）+ Node 局部回归（可 mock）
 - **CI/CD**：GitHub Actions **六个** workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** + 三个结构性检查）、
-  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，有 `paths` 过滤）、
+  `e2e-app.yml`（构建测试 APK + 模拟器 + Appium，**触发面刻意不含 `public/**`**，见「CI 分层」）、
   `release-web.yml`（**通道 A 热更新 CD**，仅手动触发）、
   `release-apk.yml`（**通道 B APK 发布 CD**，仅手动触发；工序与 release-web.yml 同构：
   预演真构建 → 审批门 → 发布 → 回读校验）、

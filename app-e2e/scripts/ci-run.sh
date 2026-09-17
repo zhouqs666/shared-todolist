@@ -115,5 +115,36 @@ if [ "$TEST_EXIT" -ne 0 ]; then
   fi
 fi
 
+# ---------------------------------------------------------------
+# 失败分类：是「代码/测试回归」还是「模拟器掉线」？
+#
+# 为什么要分类（2026-09-17）：调用方 ci-run-with-retry.sh 的第二次尝试是在**同一个
+# 模拟器会话**里重跑 wdio —— 设备已经掉线时，第二次只是把 11 分钟再烧一遍、结果一样。
+# 实测当天连续 4 次运行都死于 `Could not find a connected Android device`，
+# 每次都在死设备上白等一轮重试。
+#
+# 判据刻意**不看日志文本**（文本会漂移）：直接探设备是否还在应答。
+#   adb 能应答 ⇒ 设备活着 ⇒ 按真回归处理（保留重试的意义）
+#   adb 无应答 ⇒ 设备已失联 ⇒ 用专用退出码 86 告知调用方：不要重试
+# ---------------------------------------------------------------
+DEVICE_LOST_EXIT=86
+if [ "$TEST_EXIT" -ne 0 ]; then
+  device_alive=0
+  for _probe in 1 2; do
+    if timeout_t adb shell getprop sys.boot_completed >/dev/null 2>&1; then
+      device_alive=1
+      break
+    fi
+    sleep 2
+  done
+  if [ "$device_alive" -eq 1 ]; then
+    echo "[ci-run] 设备仍在线 ⇒ 按**代码/测试回归**处理（退出码 $TEST_EXIT）"
+  else
+    echo "[ci-run] ⚠️ 设备已失联（adb 连续两次无应答）⇒ 判为**基础设施故障**，不是代码回归"
+    echo "[ci-run]    退出码标记为 $DEVICE_LOST_EXIT（调用方将跳过重试：死设备上重试只是白烧一轮）"
+    exit $DEVICE_LOST_EXIT
+  fi
+fi
+
 echo "[ci-run] Tests finished with exit code: $TEST_EXIT"
 exit $TEST_EXIT
