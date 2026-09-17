@@ -268,7 +268,7 @@ jobs:
         # 改成「只有预演成功才期望有产物，且必须有」：预演失败时跳过（失败本身已经红在那了），
         # 预演成功而产物缺失则**报错**。
         if: steps.dryrun.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dryrun-apk-${{ inputs.version }}
           path: android/app/build/outputs/apk/release/app-release.apk
@@ -442,7 +442,7 @@ jobs:
       - name: 上传已发布的 APK（供桌面留档 / 事后复核）
         # 与预演同样不吞失败：只有发布成功才期望有产物，且必须有。
         if: steps.release.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: released-apk-${{ inputs.version }}
           path: android/app/build/outputs/apk/release/app-release.apk
