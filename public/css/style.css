@@ -1116,7 +1116,12 @@ input {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 30px;
+  /* 抬到 FAB 之上（FAB = 24px 下边距 + 56px 直径，见 .fab）+ 14px 呼吸间距，再叠加安全区。
+     为什么必须抬（2026-09-18 实测）：宽度放开后提示会啃进右下角的 FAB（412 宽下实测水平重叠
+     8~10px，粉色圆钮被削掉一角）；且原来的 bottom:30px 是全 App 唯一不带安全区的底部浮层 ——
+     FAB / 添加面板 / 图鉴 / APK 面板都带 var(--safe-bottom)，而 capacitor.config.json 是
+     insetsHandling:"css"，安卓手势条会压住它。抬到 FAB 之上一次解决这两件事。 */
+  bottom: calc(24px + 56px + 14px + var(--safe-bottom));
   transform: translateX(-50%) translateY(24px);
   /* v2.7.50 Toast 升级：墨色背景 + backdrop-filter blur(8px)（已有）+ 圆角 14→12 + 阴影暖色染色
      底色 = --stone-900 #352530 的 rgba 形式（原 rgba(47,40,32) 是 v2.7.59 的暖棕 stone-900，
@@ -1133,7 +1138,13 @@ input {
   pointer-events: none;
   transition: opacity 0.28s var(--ease), transform 0.28s var(--ease);
   z-index: 10000; /* 高于一切弹层（图鉴 1000 / lightbox 9999），弹层内反馈不被遮挡 */
-  max-width: 80vw;
+  /* ⚠️ width 必须显式给 max-content（2026-09-18 修）：本元素是 left:50% 而 right:auto 的绝对定位，
+     宽度按 shrink-to-fit 算时**可用宽 = 包含块 − left = 50vw**，于是写在这里的 max-width 从来没
+     生效过 —— 实测 360/390/412 三档视口的提示宽度恰好是 180/195/206px（即 50vw）。症状是「完成
+     待办」那条（永远带「撤销」按钮）文案被压成 3 行、传说款完成 5 行、盒子变成窄长粉砖。
+     给了 max-content 后 max-width 才真正生效（实测同一条文案 1 行 281px）。 */
+  width: max-content;
+  max-width: min(80vw, 380px);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1152,17 +1163,42 @@ input {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  /* 对齐**首行**而不是整个盒子：文案换行时（如传说款完成）居中的图标会掉到第 2 行旁边，
+     看起来像"图标丢了"。12px 上内距 + 21px 行高 ⇒ 首行文字带 12~33，图标 15~33 正好齐平。 */
+  align-self: flex-start;
+  margin-top: 3px;
 }
 .toast__icon svg { width: 18px; height: 18px; display: block; }
 
-/* 完成变体：品牌色渐变背景 + 勾图标，弹簧放大进入 */
+/* 完成变体：白玻璃卡 + 品牌色勾图标 + 弹簧放大进入
+   （2026-09-18 换掉原来的「品牌色渐变粉底 + 白字」，原因全部是实测出来的：
+     · 白字压在 #e884a8 上对比度只有 **2.53:1**（正文 WCAG AA 要求 4.5:1），渐变暗端
+       rgb(181,103,131) 也只有 4.01:1，撤销按钮里的白字更是 2.12:1 —— 在 #fffbfc 的浅粉页面上
+       一整块饱和粉本来就糊，右下角还挨着一个同色的 FAB，两个粉块互相打架；
+     · 换成白玻璃 + --color-text 深字后对比度 **14.4:1**，且材质与页面既有语言（白纸卡片 +
+       粉细边 + 轻投影）同源，粉色退到勾图标与撤销按钮上，品牌感不丢。
+   先前那句 backdrop-filter 是死代码（粉底不透明）；现在底色是 94% 半透明白，模糊才真正起作用。 */
 .toast--success {
-  background: linear-gradient(135deg, var(--color-primary), color-mix(in srgb, var(--color-primary) 78%, #000));
-  box-shadow: 0 6px 20px rgba(var(--color-primary-rgb), 0.35);
-  padding: 12px 20px;
-  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--rose-200);
+  color: var(--color-text);
+  box-shadow: 0 2px 8px rgba(184, 90, 124, 0.1), 0 12px 32px rgba(184, 90, 124, 0.16);
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
 }
-.toast--success .toast__icon { color: #fff; }
+.toast--success .toast__icon { color: var(--color-primary); }
+/* 撤销：浅粉胶囊 + 深一档粉字。rose-700 是这里唯一过线的选择 ——
+   实测 #b85a7c on #fdf0f5 = 3.96:1，而 --color-primary-dark(#d46e94) 只有 2.93:1。 */
+.toast--success .toast__action {
+  background: var(--rose-100);
+  color: var(--rose-700);
+  border: 1px solid var(--rose-200);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-weight: 600;
+}
 .toast--success.toast--show {
   animation: toast-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
