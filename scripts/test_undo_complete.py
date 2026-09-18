@@ -31,6 +31,81 @@ errors = []
 check, results = make_checker()
 
 
+# ===== 完成提示的形状不变量（2026-09-18 加）=====
+#
+# 为什么必须有它：这套不变量曾经**静默错了很久，而所有测试都是绿的**。
+#   `.toast` 是 `left:50%` + `right:auto` 的绝对定位 ⇒ 宽度按 shrink-to-fit 算时可用宽只有 50vw，
+#   于是写在样式里的 `max-width: 80vw` 从未生效：「完成待办」那条（永远带「撤销」按钮）的文案被压成
+#   3 行、传说款 5 行，盒子成了窄长砖 —— 而断言只问「撤销按钮在不在」，不问它长什么样。
+#   业主报出「很难看」才被发现。同类还会借 `bottom` 静默退化（提示啃进右下角 FAB / 压住安卓手势条）。
+# 四条都是**可机器判定的形状不变量**，不涉及像素级外观（好不好看仍归人眼）：
+#   ① 文案单行  ② 宽度 ≤ min(80vw, 380px)  ③ 不与 FAB 重叠  ④ 主文案对比度 ≥ 4.5（曾只有 2.53:1）
+TOAST_GEOMETRY_JS = r"""() => {
+  const t = document.getElementById('toast');
+  if (!t) return { exists: false };
+  const r = t.getBoundingClientRect();
+  const cs = getComputedStyle(t);
+  const fab = document.querySelector('.fab');
+  const fr = fab ? fab.getBoundingClientRect() : null;
+  const node = [...t.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
+  let lines = null;
+  if (node) { const rg = document.createRange(); rg.selectNodeContents(node); lines = rg.getClientRects().length; }
+  const nums = (s) => (s.match(/[\d.]+/g) || []).map(Number);
+  const parse = (s) => nums(s).slice(0, 3);
+  const alpha = (s) => { const p = nums(s); return p.length > 3 ? p[3] : 1; };
+  const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+  // 半透明底色要合成到**真正画在它下面的那个颜色**上（向上找第一个不透明背景）
+  let under = [255, 255, 255];
+  for (let el = t.parentElement; el; el = el.parentElement) {
+    const c = getComputedStyle(el).backgroundColor;
+    if (alpha(c) > 0.99) { under = parse(c); break; }
+  }
+  let eff = parse(cs.backgroundColor);
+  const a = alpha(cs.backgroundColor);
+  if (a < 1) eff = eff.map((v, i) => v * a + under[i] * (1 - a));
+  const [hi, lo] = [lum(parse(cs.color)), lum(eff)].sort((x, y) => y - x);
+  return {
+    exists: true, width: Math.round(r.width), lines,
+    gradient: cs.backgroundImage !== 'none',
+    maxAllowed: Math.min(innerWidth * 0.8, 380),
+    bottomGap: Math.round(innerHeight - r.bottom),
+    fabOverlap: fr ? !(fr.right <= r.left || fr.left >= r.right || fr.bottom <= r.top || fr.top >= r.bottom) : false,
+    contrast: Number(((hi + 0.05) / (lo + 0.05)).toFixed(2)),
+  };
+}"""
+
+
+def check_toast_geometry(page, label, max_lines=1):
+    """断言完成提示的形状不变量（见上方注释：这些值曾经静默错了很久而测试全绿）。
+
+    ⚠️ **必须切到手机宽度再量**（本函数第一版就是在桌面视口量的，结果对修复前的代码全绿 ——
+    变异验证当场戳穿）。原因：这个缺陷是「宽度被锁死成视口的一半」，桌面 1280 宽下 50vw=640px
+    比文案还宽，换行根本不会发生；而产品是安卓 App（360~430 CSS px），那里 50vw=180~215px，
+    文案才被压成 3 行。**在错的前提下量，等于没量** —— 所以这里显式切到手机尺寸，量完还原。
+
+    max_lines：普通款鼓励语最长 11 字 + 撤销，修好后必然单行；隐藏款完成文案自带
+    「图鉴 N/12」（最长约 24 字），在 380px 上限内**有意**占两行 —— 那里传 2。
+    """
+    prev = page.viewport_size
+    page.set_viewport_size({"width": 390, "height": 844})
+    g = page.evaluate(TOAST_GEOMETRY_JS)
+    if prev:
+        page.set_viewport_size(prev)
+    if not g.get("exists"):
+        check(f"{label} 几何自检", False, "页面上没有 #toast")
+        return
+    check(f"{label} 文案行数 ≤{max_lines}", g["lines"] <= max_lines, f"实际 {g['lines']} 行（宽度上限丢了？）")
+    check(f"{label} 宽度未超上限", g["width"] <= g["maxAllowed"] + 1, f"{g['width']}px > {round(g['maxAllowed'])}px")
+    check(f"{label} 不压住 FAB", not g["fabOverlap"], f"底边距屏底 {g['bottomGap']}px")
+    if g.get("gradient"):
+        # 渐变底色的实际色无法从 computed style 取固定值（backgroundColor 是 transparent，
+        # 颜色在 background-image 里）⇒ 显式跳过并留痕，不假装检过（隐藏款深底白字不在此列）
+        print(f"  [跳过] {label} 主文案对比度（渐变底色，须人工或截图判定）", flush=True)
+    else:
+        check(f"{label} 主文案对比度 ≥4.5", g["contrast"] >= 4.5, f"实际 {g['contrast']}:1")
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     page = browser.new_page()
@@ -84,6 +159,8 @@ with sync_playwright() as p:
         if toast_ok:
             toast_text = page.locator('.toast').inner_text()
             check(f"{label} 完成toast包含撤销按钮", '撤销' in toast_text, f"toast内容: {toast_text}")
+            # 隐藏款完成文案自带「图鉴 N/12」，在宽度上限内有意占两行；普通款必须单行
+            check_toast_geometry(page, f"{label} 完成toast", max_lines=2 if rarity != 'common' else 1)
         else:
             dump_dom_state(page, errors, tag=f"{label} 无撤销 toast")
             check(f"{label} 完成toast包含撤销按钮", False, "未出现撤销按钮（现场见上）")
@@ -185,6 +262,44 @@ with sync_playwright() as p:
     }""")
     check("H3 收起态撤销按钮不可点（pointer-events: none）", h3["hidden"] == "none", f"实际 {h3}")
     check("H3 展开态撤销按钮可点（pointer-events: auto）", h3["shown"] == "auto", f"实际 {h3}")
+
+    # ===== H4：提示形状不变量（CSS 级，确定性）=====
+    # 为什么要单开一段：H1 里的几何自检用的是**真实完成链路**，而鼓励语是随机抽的 ——
+    # 抽到「太棒了！」（4 字）时，宽到被锁成 50vw 也照样单行，断言就躲过去了
+    # （变异验证实测：修复前的 CSS 在普通分支绿、稀有度分支才红 —— 一半靠运气）。
+    # 这里改为喂**最长的一条**鼓励语 + 撤销（完成路径必然带撤销），把 CSS 不变量钉死；
+    # 走的是产品自己的 showToast（同一套 DOM/类名），不是另造一个假元素。
+    SEED = "E2E-测试-完成撤销-形状不变量"
+    print("\n== H4: 提示形状不变量（最长文案 + 撤销，手机宽度）==", flush=True)
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector("body[data-app-ready='1']", timeout=20000)  # 重载清空 toast 队列，避免排队
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.evaluate(
+        """() => import('/js/toast.js').then((m) => m.showToast('这就去掉了心头一件事。', {
+             variant: 'success',
+             icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
+             duration: 60000,
+             action: { label: '撤销', onClick: () => {} },
+           }))"""
+    )
+    if wait_until(page, lambda: page.locator(".toast--show").count() > 0, timeout_ms=5000, desc="形状不变量用的提示出现"):
+        check_toast_geometry(page, "H4 完成提示(最长文案)", max_lines=1)
+    else:
+        check("H4 完成提示(最长文案) 已显示", False, "提示没弹出来")
+
+    # 基类长文案（深灰胶囊）：同一个宽度上限缺陷曾把「图片上传失败，可长按待办补图」压成 2 行，
+    # 还断在"待办/办补图"处 —— 一并钉住（这一条与稀有度无关，是最常出现的提示形态）
+    # ⚠️ 必须再次 reload：toast 模块是单例 + 串行队列，上一条还在显示时新提示会**排队**而不是
+    #    替换（这行代码的第一版就是手动摘掉 .toast--show 类再发的 —— 类摘了、模块内的 showing
+    #    标志还在，量到的仍是上一条。reload 是唯一能把队列真正清空的动作）。
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector("body[data-app-ready='1']", timeout=20000)
+    page.evaluate("() => import('/js/toast.js').then((m) => m.showToast('图片上传失败，可长按待办补图', { duration: 60000 }))")
+    if wait_until(page, lambda: page.locator(".toast--show").count() > 0, timeout_ms=5000, desc="基类长文案提示出现"):
+        check_toast_geometry(page, "H4 基类长文案", max_lines=1)
+    else:
+        check("H4 基类长文案 已显示", False, "提示没弹出来")
+    page.set_viewport_size({"width": 1280, "height": 720})
 
     # 汇总
     print(f"\n== 结果: {results['pass']} 通过 / {results['fail']} 失败 ==", flush=True)
