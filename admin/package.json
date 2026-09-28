@@ -15,15 +15,15 @@
     "init:test-env": "node scripts/init-test-env.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.110.7",
+    "@supabase/supabase-js": "^2.117.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "allure-commandline": "^2.32.0",
-    "allure-playwright": "^3.12.1",
+    "allure-commandline": "^2.46.1",
+    "allure-playwright": "^3.12.2",
     "dotenv": "^17.4.2",
     "vite": "^5.4.11"
   }
