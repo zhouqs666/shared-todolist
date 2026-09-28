@@ -46,6 +46,24 @@ with sync_playwright() as p:
 
     test_text = 'E2E-测试-离线待办'
 
+    # 断网前必须等 SW 注册真正落地（2026-09-28 定位的夜跑 flaky 根因）：
+    # app.js 的 SW 注册在 data-app-ready **之后**（app.js:549 vs :364），中间隔着
+    # listStickers（代码注释：冷启动 3~20s）、incrementLoginCount 等一串网络调用。
+    # login() 一返回就 set_offline(True) 的话，register() 可能还没执行 —— 它会在
+    # 离线状态下才去拉 /sw.js，失败时 Chromium 向 console 打一条页面 JS 接不住的
+    # "An unknown error occurred when fetching the script."，恰好落进第 6 节
+    # 「无模块级报错」断言。playwright 1.60 的 Chromium 不打这条（夜跑 09-15/16 绿），
+    # 1.61+ 起（Dependabot #16 升到 1.62，CI 失败纪元从 09-17 开始）会打 ——
+    # 免费层冷启动快慢决定 register 是否被离线截胡，于是同代码红绿交替（CI 6/13 晚红）。
+    # 这里等 getRegistration() 非空 = 脚本已拉取成功，竞态即消失；若超时说明注册
+    # 本身失败（那是真 bug，理应红，超时截图会留证据）。
+    check("SW 注册已落地（断网前）", wait_until(
+        page,
+        lambda: page.evaluate("() => navigator.serviceWorker.getRegistration().then(r => !!r)"),
+        timeout_ms=30000,
+        desc="SW 注册完成（getRegistration 非空）",
+    ))
+
     print("== 2. 断网 ==", flush=True)
     context.set_offline(True)
     check("浏览器判定离线", wait_until(

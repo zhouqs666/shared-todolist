@@ -53,6 +53,10 @@ with sync_playwright() as p:
     check("撤销后待办恢复", wait_until(
         page,
         lambda: page.locator('.todo', has_text=test_text).count() >= 1,
+        # 25s（默认 10s 不够）：撤销要一次真实 DB 往返 + 列表重渲染，测试库免费层
+        # 冷启动时实测会挂住十几秒（见下方彻底删除的同类注释）。2026-09-26 夜跑
+        # test_trash.py 唯一一次 flaky 就是这条 10s 超时（重试通过）。
+        timeout_ms=25000,
         desc="撤销后待办回到主列表",
     ))
 
