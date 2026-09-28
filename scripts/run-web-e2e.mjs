@@ -198,6 +198,10 @@ for (const [i, file] of files.entries()) {
       note: firstSummary,
     });
     console.log(`  ✗ FAIL：两次都失败`);
+    // 硬失败也要在 Actions 页面留下「是哪个用例」的标注 —— 否则失败邮件/Annotations
+    // 只有一句 exit code 1,每次都要进完整日志里翻(2026-09-28 排查夜跑 flaky 时,
+    // 6 个失败夜的 Annotations 全是裸的 "Process completed with exit code 1",无法判读)。
+    console.log(`::error title=web E2E 失败::${file}.py 两次尝试均失败（首次判定：${firstSummary || '见上方日志'}）`);
   }
 }
 
