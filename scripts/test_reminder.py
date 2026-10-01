@@ -28,11 +28,21 @@ E2E 钩子说明：?e2e_reminder=1 → localStorage 标记 → 网页也启用 U
 """
 import json
 import os
+import ssl
 import sys
 import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+
+# 本机/CI 的 Python 都可能没有配置系统 CA(macOS python.org 发行版常见)，
+# urllib 直连 Supabase 会 SSL: CERTIFICATE_VERIFY_FAILED。certifi 是 playwright
+# 的既有依赖（requirements-e2e.txt 装它必带上），用它做 CA 源两端都成立。
+try:
+    import certifi
+    _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except ImportError:  # 极旧环境：退回系统默认（至少不比修复前差）
+    _SSL_CTX = ssl.create_default_context()
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from playwright.sync_api import sync_playwright
@@ -72,11 +82,27 @@ SUPABASE_URL = _ENV["E2E_SUPABASE_URL"]
 SERVICE_KEY = _ENV["E2E_SUPABASE_SERVICE_ROLE_KEY"]
 
 
+def parse_iso(ts):
+    """解析 PostgREST 返回的 timestamptz（可变小数秒位数），Python 3.9 兼容。"""
+    if not ts:
+        return None
+    t = ts.replace("Z", "+00:00")
+    if "." in t:
+        head, tail = t.split(".", 1)
+        digits = ""
+        i = 0
+        while i < len(tail) and tail[i].isdigit():
+            digits += tail[i]
+            i += 1
+        t = f"{head}.{digits.ljust(6, '0')}{tail[i:]}"
+    return datetime.fromisoformat(t)
+
+
 def db_get_todo(text):
     """按 text 精确查测试库 todos 行（service_role，只读）。"""
     url = f"{SUPABASE_URL}/rest/v1/todos?select=id,text,remind_at,remind_scope,remind_by,completed&text=eq.{urllib.parse.quote(text)}"
     req = urllib.request.Request(url, headers={"apikey": SERVICE_KEY, "Authorization": f"Bearer {SERVICE_KEY}"})
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    with urllib.request.urlopen(req, timeout=10, context=_SSL_CTX) as resp:
         rows = json.loads(resp.read().decode("utf-8"))
     return rows[0] if rows else None
 
@@ -96,8 +122,12 @@ def db_patch_remind_past(todo_id):
             "Prefer": "return=minimal",
         },
     )
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=10, context=_SSL_CTX) as resp:
+            resp.read()
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:300]
+        raise SystemExit(f"PATCH 测试库失败 HTTP {e.code}：{detail}") from e
 
 
 # ===== 页内探针 =====
@@ -121,6 +151,25 @@ def badge_of(page, text):
 
 def log_of(page):
     return page.evaluate(JS_REMINDER_LOG)
+
+
+def wait_db_todo(text, pred, desc, timeout_ms=15000):
+    """轮询测试库直到该待办满足谓词（返回行或 None）。为什么必须有它：
+    保存是「乐观更新 + 异步落库」，UI 徽标出现 ≠ PATCH 已被服务端受理 ——
+    在途请求被后续操作（清除覆盖 / reload 中止）打断时，库里就是旧值。
+    任何「设置后立刻做下一步」的用例都必须先等落库确认。"""
+    deadline = time.monotonic() + timeout_ms / 1000
+    last = None
+    while time.monotonic() < deadline:
+        last = db_get_todo(text)
+        try:
+            if last and pred(last):
+                return last
+        except Exception:  # noqa: BLE001 - 谓词异常视为未成立
+            pass
+        page.wait_for_timeout(300)
+    print(f"    [等待超时] {desc}（{timeout_ms}ms）；最后取值：{last}", flush=True)
+    return None
 
 
 def open_reminder_panel(page, text, label):
@@ -188,9 +237,13 @@ with sync_playwright() as p:
     ))
     check("徽标未置灰（提醒在未来）", (badge_of(page, A) or {}).get("expired") is False,
           f"实际 {badge_of(page, A)}")
-    row = wait_until(page, lambda: db_get_todo(A), desc="测试库可查到甲") and db_get_todo(A)
-    check("remind_at ≈ now+5min（±25s）", row and row["remind_at"] and abs(
-        (datetime.fromisoformat(row["remind_at"].replace("Z", "+00:00")) - (saved_at + timedelta(minutes=5))).total_seconds()
+    check("测试库可查到甲（SSL 查询通道正常）", wait_until(
+        page, lambda: db_get_todo(A) is not None, desc="测试库可查到甲",
+    ))
+    row = db_get_todo(A)
+    got_at = parse_iso(row and row["remind_at"])
+    check("remind_at ≈ now+5min（±25s）", got_at is not None and abs(
+        (got_at - (saved_at + timedelta(minutes=5))).total_seconds()
     ) <= 25, f"实际 remind_at={row and row['remind_at']}")
     check("remind_scope 默认 both", row and row["remind_scope"] == "both", f"实际 {row and row['remind_scope']}")
     check("remind_by 已记录（本人 id，非空）", row and bool(row["remind_by"]))
@@ -204,8 +257,10 @@ with sync_playwright() as p:
     set_scope(page, "self")
     page.locator(".reminder-panel__actions .note-input-panel__save").click()
     wait_until(page, lambda: page.locator(".reminder-panel-overlay").count() == 0, desc="面板关闭")
-    row = wait_until(page, lambda: (db_get_todo(A) or {}).get("remind_scope") == "self", desc="scope=self 落库") \
-        and db_get_todo(A)
+    check("scope=self 落库", wait_until(
+        page, lambda: (db_get_todo(A) or {}).get("remind_scope") == "self", desc="scope=self 落库",
+    ))
+    row = db_get_todo(A)
     check("remind_scope='self' 已落库", row and row["remind_scope"] == "self", f"实际 {row and row['remind_scope']}")
 
     print("== 5. H4 自定义时间（+2 小时）==", flush=True)
@@ -216,12 +271,13 @@ with sync_playwright() as p:
     page.locator(".reminder-panel__actions .note-input-panel__save").click()
     wait_until(page, lambda: page.locator(".reminder-panel-overlay").count() == 0, desc="面板关闭")
     expect_utc = datetime.fromisoformat(custom_local).astimezone(timezone.utc)
-    row = wait_until(
+    check("scope=partner 落库", wait_until(
         page,
         lambda: (db_get_todo(A) or {}).get("remind_scope") == "partner",
         desc="scope=partner 落库",
-    ) and db_get_todo(A)
-    got = datetime.fromisoformat(row["remind_at"].replace("Z", "+00:00")) if row and row["remind_at"] else None
+    ))
+    row = db_get_todo(A)
+    got = parse_iso(row and row["remind_at"])
     check("自定义时刻落库（UTC 换算一致，±60s）", got and abs((got - expect_utc).total_seconds()) <= 60,
           f"期望≈{expect_utc.isoformat()} 实际 {row and row['remind_at']}")
     check("remind_scope='partner' 已落库", row and row["remind_scope"] == "partner",
@@ -248,17 +304,20 @@ with sync_playwright() as p:
     page.locator(".reminder-panel__quick-btn", has_text="10分钟后").first.click()
     page.locator(".reminder-panel__actions .note-input-panel__save").click()
     check("乙的徽标出现", wait_until(page, lambda: badge_of(page, B) is not None, desc="乙徽标"))
-    row_b = db_get_todo(B)
+    # 落库确认后再动下一步:清除 PATCH 若赶在设置的 PATCH 之前/同时到达,
+    # 清除会覆盖还没落地的设置(两请求不同连接,到达序不保证)—— 先等设置真正受理
+    row_b = wait_db_todo(B, lambda r: r["remind_at"] is not None and r["remind_scope"] == "both",
+                         "乙的提醒落库")
+    check("乙的设置已落库（remind_at 非空 + scope=both）", row_b is not None,
+          f"实际 {row_b}")
     before_cancel = len((log_of(page) or {}).get("canceled") or [])
     open_reminder_panel(page, B, "修改提醒")
     page.locator(".reminder-panel__clear").click()
     wait_until(page, lambda: page.locator(".reminder-panel-overlay").count() == 0, desc="面板关闭")
     check("清除后徽标消失", wait_until(page, lambda: badge_of(page, B) is None, desc="乙徽标消失"))
-    row_b2 = wait_until(
-        page,
-        lambda: (db_get_todo(B) or {}).get("remind_at") is None,
-        desc="三件套置 NULL",
-    ) and db_get_todo(B)
+    row_b2 = wait_db_todo(B, lambda r: all(r.get(k) is None for k in ("remind_at", "remind_scope", "remind_by")),
+                          "乙的三件套置 NULL")
+    check("remind_at/scope/by 全部 NULL", row_b2 is not None, f"实际 {row_b2}")
     check("remind_at/scope/by 全部 NULL", all(
         row_b2.get(k) is None for k in ("remind_at", "remind_scope", "remind_by")
     ), f"实际 {row_b2}")
@@ -272,6 +331,10 @@ with sync_playwright() as p:
     page.locator(".reminder-panel__quick-btn", has_text="15分钟后").first.click()
     page.locator(".reminder-panel__actions .note-input-panel__save").click()
     check("丙的徽标出现", wait_until(page, lambda: badge_of(page, C) is not None, desc="丙徽标"))
+    # reload 会中止在途的 PATCH(导航取消请求)—— 必须等设置真正落库再冷启动
+    row_c0 = wait_db_todo(C, lambda r: r["remind_at"] is not None and r["remind_scope"] == "both",
+                          "丙的提醒落库")
+    check("丙的设置已落库（再冷启动）", row_c0 is not None, f"实际 {row_c0}")
     page.reload(wait_until="domcontentloaded")
     page.wait_for_selector("body[data-app-ready='1']", timeout=30000)
     check("冷启动后丙的徽标仍在（数据持久化）", wait_until(

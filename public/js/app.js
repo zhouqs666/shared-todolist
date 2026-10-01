@@ -1178,7 +1178,8 @@ function renderReminderBadge(li, todo) {
   const headline = li.querySelector('.todo__headline');
   if (!headline) return;
   const existing = li.querySelector('.todo__reminder-badge');
-  const shouldShow = reminderUiEnabled() && !!todo.reminderAt;
+  // 完成的待办不显示提醒徽标：完成时对账已取消调度，铃铛挂着会误导（与图片徽标不同——图不会失效）
+  const shouldShow = reminderUiEnabled() && !!todo.reminderAt && !todo.completed;
   if (!shouldShow) {
     if (existing) existing.remove();
     return;
