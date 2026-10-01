@@ -37,6 +37,7 @@ const SYNC_DEBOUNCE_MS = 300;
 
 // ===== E2E stub（内存 pending 集合，形状与原生 getPending 一致）=====
 const E2E_KEY = 'youai_e2e_reminder';
+let e2eMode = false; // initReminder 读 localStorage 置位（声明必须在顶层：init/对账/UI 判断都引用它）
 const stubPending = new Map(); // 通知 id → 触发时刻(ms)
 const testLog = { scheduled: [], canceled: [], syncCount: 0 };
 
