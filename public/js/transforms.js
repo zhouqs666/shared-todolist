@@ -33,6 +33,11 @@ export function toExternal(row) {
     rarity: row.rarity || 'common', // 稀有度：common(普通)/rare/epic/legendary（隐藏款盲盒）
     raritySeen: row.rarity_seen !== false, // 隐藏款是否已被对方看过（false=对方端需播惊喜提示）
     deletedAt: row.deleted_at || null, // 软删除时间（null=正常，非null=已在回收站）
+    // 到点提醒三件套（migration-reminders.sql；三者 DB CHECK 保证同空/同非空）
+    // ⚠️ 必须在 toExternal 映射：Realtime 回推走这里，漏了会丢字段 → 徽标/对账静默失效
+    reminderAt: row.remind_at || null, // 提醒时间（UTC ISO；null=未设）
+    reminderScope: row.remind_scope || null, // both|self|partner（相对 reminderBy 设置者）
+    reminderBy: row.remind_by || null, // 提醒设置者 userId
   };
 }
 

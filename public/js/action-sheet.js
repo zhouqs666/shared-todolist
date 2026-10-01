@@ -23,6 +23,7 @@ import {
   getReactionSvg,
   toggleReaction,
 } from './reactions.js';
+import { reminderUiEnabled } from './reminder.js';
 
 // ===== 菜单按钮用的 SVG 图标集 =====
 // 导出供 app.js 的 renderImage 复用（badge.innerHTML = ICONS.image）
@@ -40,6 +41,8 @@ export const ICONS = {
   pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 11l-4 4h14l-4-4"/><path d="M15 3.5a2 2 0 0 1 2 2V9l-5 5-5-5V5.5a2 2 0 0 1 2-2h6z"/></svg>',
   // 取消置顶：图钉+斜线
   unpin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 11l-4 4h14l-4-4"/><path d="M15 3.5a2 2 0 0 1 2 2V9l-5 5-5-5V5.5a2 2 0 0 1 2-2h6z"/><line x1="3" y1="3" x2="21" y2="21" stroke-width="2.5"/></svg>',
+  // 提醒：铃铛（到点提醒入口，长按菜单）
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
 };
 
 /** 构造一个图标按钮（纯图标，无文案） */
@@ -63,6 +66,7 @@ let currentActionSheet = null;
  * @param {()=>Array} handlers.getTodos 拿最新 todo 列表（菜单打开时取最新版本）
  * @param {(todo)=>void} [handlers.onEdit] 编辑文案
  * @param {(todo)=>void} [handlers.onNote] 编辑备注
+ * @param {(todo)=>void} [handlers.onSetReminder] 设置/修改到点提醒（仅 App/E2E 钩子时入口可见）
  * @param {(todo)=>void} [handlers.onTogglePin] 置顶/取消置顶
  * @param {(todoId:string, prevPaths:string[])=>void} [handlers.onAddImage] 配图/加图
  * @param {(todoId:string)=>void} [handlers.onDelete] 删除
@@ -133,6 +137,19 @@ export function showTodoMenu(todo, handlers = {}) {
       if (handlers.onNote) handlers.onNote(todo);
     });
     actions.appendChild(noteBtn);
+  }
+
+  // 提醒（到点本地通知）：仅 App 环境（或 E2E 钩子）显示 —— 网页没有常驻进程做不了到点弹。
+  // 已设提醒时按钮 --active，与置顶/备注同款状态语义。
+  if (reminderUiEnabled()) {
+    const hasReminder = !!todo.reminderAt;
+    const bellBtn = mkIconBtn(ICONS.bell, hasReminder ? '修改提醒' : '设提醒', hasReminder ? 'action-sheet__icon-btn--active' : '');
+    bellBtn.addEventListener('click', () => {
+      if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+      closeTodoMenu();
+      if (handlers.onSetReminder) handlers.onSetReminder(todo);
+    });
+    actions.appendChild(bellBtn);
   }
 
   // 撤销完成（仅已完成：将待办恢复为未完成状态）

@@ -162,6 +162,17 @@ function bindVisibilityFallback() {
 }
 
 /**
+ * 供 reminder.js（到点提醒）复用同一份插件实例与 vendor 加载链，
+ * 避免二次注入 capacitor 脚本（脚本注入有顺序强约束，重复注入是竞态源）。
+ * APP 环境：返回 LocalNotifications 插件（vendor 加载失败时 null）；
+ * 网页环境：返回 null（调用方据此降级为 no-op）。
+ */
+export async function getLocalNotifications() {
+  await loadCapacitorScripts();
+  return isNative ? LocalNotifications : null;
+}
+
+/**
  * 初始化：加载 Capacitor 脚本，监听 APP 前后台切换。
  * 网页环境自动降级（isNative=false，所有通知方法变 no-op）。
  *
