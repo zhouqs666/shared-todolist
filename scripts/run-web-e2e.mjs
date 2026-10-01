@@ -36,8 +36,8 @@ const SCRIPTS = join(ROOT, 'scripts');
 const BASE = process.env.E2E_BASE || 'http://localhost:3100';
 const PYTHON = process.env.PYTHON || 'python3';
 
-/** 全量清单（顺序刻意稳定：先不写库的完成撤销，再回收站，再离线，再置顶章节，最后盲盒） */
-const ALL_FILES = ['test_undo_complete', 'test_trash', 'test_offline', 'test_pin', 'test_blindbox'];
+/** 全量清单（顺序刻意稳定：先不写库的完成撤销，再回收站，再离线，再置顶章节，再盲盒，最后提醒） */
+const ALL_FILES = ['test_undo_complete', 'test_trash', 'test_offline', 'test_pin', 'test_blindbox', 'test_reminder'];
 
 const argv = process.argv.slice(2);
 const hasFlag = (f) => argv.includes(f);

@@ -34,6 +34,9 @@ import {
 import { initRealtime, initPresence } from './realtime.js';
 import { initTheme } from './theme.js';
 import { initNotify, requestPermission, isNative } from './notify.js';
+// 到点提醒：调度核心 ./reminder.js（渠道/调度/取消/对账），纯逻辑在 ./reminder-logic.js（有单测）
+import { initReminder, syncReminders, reminderUiEnabled } from './reminder.js';
+import { QUICK_OPTIONS, quickOptionAt, formatReminderTime, isReminderExpired } from './reminder-logic.js';
 import { initMessages, refreshNotes, onNoteAdded, onNoteRemoved, onNoteUpdated } from './messages.js';
 import { initReactions, refreshReactions, renderReactions, onReactionAdded, onReactionRemoved, REACTION_EMOJIS, isMyReaction, toggleReaction, getReactionSvg, getReactionLabel } from './reactions.js';
 import { pickImage, pickImages, uploadTodoImage } from './image-utils.js';
@@ -149,6 +152,9 @@ function applyServerTodoList(serverTodos) {
   const serverIds = new Set(serverTodos.map((t) => t.id));
   const stillPending = getTodos().filter((t) => t.id.startsWith('offline-') && !serverIds.has(t.id));
   setTodos(sortTodos([...serverTodos, ...stillPending]));
+  // 到点提醒对账：这里是「整份拉取落地」的唯一出口（首次加载 / 回前台重拉 / 断线对账），
+  // 每次落地后把本机已调度通知与最新数据对齐（多退少补，幂等）。realtime 事件路径另有挂点。
+  syncReminders(getTodos(), currentUser && currentUser.id);
 }
 
 /**
@@ -373,6 +379,11 @@ async function reconcileRemoteState() {
   // 必须 await：initNotify 内部加载 Capacitor 脚本并确定 isNative，
   // 后续 SW 注册判断、requestPermission 都依赖它完成
   await initNotify();
+
+  // 到点提醒初始化（复用 initNotify 已建立的 vendor 加载链）：
+  // 检测 E2E 钩子 + 原生环境预热插件/渠道。首次数据落地后的调度由
+  // applyServerTodoList 里的 syncReminders 触发，这里不拉数据。
+  await initReminder();
 
   // 隐藏热更新 reload 期间显示的原生 SplashScreen（initNotify 已加载完 vendor 脚本）
   if (isNative && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SplashScreen) {
@@ -868,6 +879,9 @@ async function toggleComplete(id, nextCompleted) {
     completedAt: nextCompleted ? new Date().toISOString() : null,
   });
   setTodos(sortTodos(getTodos()));
+  // 完成态变化 → 到点提醒立即对账（完成=取消已调度的通知；撤销完成=符合条件的重新调度）。
+  // 不等 realtime 回声：断线时完成的待办，到点不该响。
+  syncReminders(getTodos(), currentUser && currentUser.id);
   // 本端完成 → 庆祝动画（彩带/震动，特效开关默认常开），附撤销按钮
   if (nextCompleted) {
     celebrateCompletion(current, false, () => {
@@ -948,6 +962,240 @@ async function removeImageFromTodo(id, urlToRemove, prevPaths) {
   } finally {
     hideLoading();
   }
+}
+
+// ===== 到点提醒：底部滑出设置面板（复用 note-input-panel 滑出风格）=====
+// 入口：长按待办 → 提醒（action-sheet 的 onSetReminder）。仅 App 环境（或 E2E 钩子）可见。
+// 语义：提醒时间/范围/设置者三件套一起落库（remind_at/remind_scope/remind_by），
+//       两台设备各自同步到这行数据、各自调度本机通知（见 ./reminder.js 的对账说明）。
+
+/** Date → datetime-local 的值格式（本地时区 YYYY-MM-DDTHH:mm；原生选择器要求） */
+function toLocalInputValue(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** 范围文案（面板按钮 + 状态行共用，改文案两处一起变） */
+const REMINDER_SCOPE_LABELS = { both: '我们俩都响', self: '只提醒我', partner: '只提醒 ta' };
+
+/**
+ * 保存提醒设置（乐观更新 + 失败回滚，与 saveEditText 同模式）。
+ * 成功后立即对账（不等 realtime 回声 —— 本端设置的提醒本端马上调度）。
+ */
+async function saveReminderSetting(id, remindAtDate, scope) {
+  if (!remindAtDate || Number.isNaN(remindAtDate.getTime()) || remindAtDate.getTime() <= Date.now()) {
+    showToast('提醒时间要选在以后哦', { urgent: true });
+    return;
+  }
+  const iso = remindAtDate.toISOString();
+  const snapshot = getTodos().find((t) => t.id === id);
+  const prev = snapshot ? { ...snapshot } : null;
+  if (snapshot) {
+    Object.assign(snapshot, { reminderAt: iso, reminderScope: scope, reminderBy: currentUser.id });
+    setTodos(sortTodos(getTodos()));
+  }
+  closeReminderPanel();
+  try {
+    const saved = await db.setReminder(id, iso, scope, currentUser.id);
+    setTodos(sortTodos(getTodos().map((t) => (t.id === id ? saved : t))));
+    syncReminders(getTodos(), currentUser && currentUser.id);
+    showToast('提醒已设置');
+  } catch (err) {
+    const target = getTodos().find((t) => t.id === id);
+    if (target && prev) Object.assign(target, prev);
+    setTodos(sortTodos(getTodos()));
+    handleError(toAppError(err), '设置提醒失败');
+  }
+}
+
+/** 清除提醒（三件套一起置 NULL；乐观更新 + 失败回滚） */
+async function clearReminderSetting(id) {
+  const snapshot = getTodos().find((t) => t.id === id);
+  const prev = snapshot ? { ...snapshot } : null;
+  if (snapshot) {
+    Object.assign(snapshot, { reminderAt: null, reminderScope: null, reminderBy: null });
+    setTodos(sortTodos(getTodos()));
+  }
+  closeReminderPanel();
+  try {
+    const saved = await db.clearReminder(id);
+    setTodos(sortTodos(getTodos().map((t) => (t.id === id ? saved : t))));
+    syncReminders(getTodos(), currentUser && currentUser.id);
+    showToast('已清除提醒');
+  } catch (err) {
+    const target = getTodos().find((t) => t.id === id);
+    if (target && prev) Object.assign(target, prev);
+    setTodos(sortTodos(getTodos()));
+    handleError(toAppError(err), '清除提醒失败');
+  }
+}
+
+/** 打开提醒设置面板（快捷档 4 档 + 自定义时间 + 范围三选 + 清除/保存） */
+function openReminderPanel(todo) {
+  if (document.querySelector('.reminder-panel-overlay')) return;
+  // 已打开则不重复；从 state 取最新 todo（防闭包陈旧，与 openEditPanel 同款）
+  const latest = getTodos().find((t) => t.id === todo.id) || todo;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'note-input-overlay reminder-panel-overlay';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeReminderPanel(); });
+
+  const panel = document.createElement('div');
+  panel.className = 'note-input-panel reminder-panel';
+
+  const handle = document.createElement('div');
+  handle.className = 'note-input-panel__handle';
+  panel.appendChild(handle);
+
+  const label = document.createElement('div');
+  label.className = 'note-input-panel__label';
+  label.textContent = '提醒';
+  panel.appendChild(label);
+
+  const preview = document.createElement('div');
+  preview.className = 'reminder-panel__preview';
+  preview.textContent = latest.text;
+  panel.appendChild(preview);
+
+  // 已有提醒 → 状态行（改提醒时能看到当前值）
+  if (latest.reminderAt) {
+    const current = document.createElement('div');
+    current.className = 'reminder-panel__current';
+    const scopeText = REMINDER_SCOPE_LABELS[latest.reminderScope] || '';
+    const expiredSuffix = isReminderExpired(latest) ? '（已过期）' : '';
+    current.textContent = `当前：${formatReminderTime(latest.reminderAt)} · ${scopeText}${expiredSuffix}`;
+    panel.appendChild(current);
+  }
+
+  // 快捷档（点选后回填自定义输入框，两者共享一个 selectedAt）
+  let selectedAt = latest.reminderAt && !isReminderExpired(latest)
+    ? new Date(latest.reminderAt)
+    : null;
+  const quickWrap = document.createElement('div');
+  quickWrap.className = 'reminder-panel__quick';
+  const quickBtns = [];
+  QUICK_OPTIONS.forEach((min) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'reminder-panel__quick-btn';
+    btn.textContent = `${min}分钟后`;
+    btn.addEventListener('click', () => {
+      selectedAt = quickOptionAt(min);
+      customInput.value = toLocalInputValue(selectedAt);
+      quickBtns.forEach((b) => b.classList.remove('reminder-panel__quick-btn--on'));
+      btn.classList.add('reminder-panel__quick-btn--on');
+    });
+    quickBtns.push(btn);
+    quickWrap.appendChild(btn);
+  });
+  panel.appendChild(quickWrap);
+
+  // 自定义时间（原生 datetime-local：Android WebView 弹系统日期时间选择器）
+  const customInput = document.createElement('input');
+  customInput.type = 'datetime-local';
+  customInput.className = 'reminder-panel__custom';
+  customInput.min = toLocalInputValue(new Date());
+  customInput.setAttribute('aria-label', '自定义提醒时间');
+  if (selectedAt) customInput.value = toLocalInputValue(selectedAt);
+  customInput.addEventListener('change', () => {
+    quickBtns.forEach((b) => b.classList.remove('reminder-panel__quick-btn--on'));
+    selectedAt = customInput.value ? new Date(customInput.value) : null;
+  });
+  panel.appendChild(customInput);
+
+  // 范围三选（相对设置者：both / self / partner，默认回填已有值）
+  const scopeWrap = document.createElement('div');
+  scopeWrap.className = 'reminder-panel__scopes';
+  let selectedScope = latest.reminderScope || 'both';
+  const scopeBtns = [];
+  Object.entries(REMINDER_SCOPE_LABELS).forEach(([key, text]) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'reminder-panel__scope-btn'
+      + (selectedScope === key ? ' reminder-panel__scope-btn--on' : '');
+    btn.textContent = text;
+    btn.addEventListener('click', () => {
+      selectedScope = key;
+      scopeBtns.forEach((b) => b.classList.remove('reminder-panel__scope-btn--on'));
+      btn.classList.add('reminder-panel__scope-btn--on');
+    });
+    scopeBtns.push(btn);
+    scopeWrap.appendChild(btn);
+  });
+  panel.appendChild(scopeWrap);
+
+  // 按钮行：清除（仅已有提醒时）+ 保存
+  const btnRow = document.createElement('div');
+  btnRow.className = 'reminder-panel__actions';
+  if (latest.reminderAt) {
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'reminder-panel__clear';
+    clearBtn.textContent = '清除提醒';
+    clearBtn.addEventListener('click', () => clearReminderSetting(latest.id));
+    btnRow.appendChild(clearBtn);
+  }
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'note-input-panel__save';
+  saveBtn.textContent = '保存';
+  saveBtn.addEventListener('click', () => saveReminderSetting(latest.id, selectedAt, selectedScope));
+  btnRow.appendChild(saveBtn);
+  panel.appendChild(btnRow);
+
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+  // 锁滚动 + 下一帧触发滑入动画（与 openNotePanel 同款节奏）
+  document.body.style.overflow = 'hidden';
+  requestAnimationFrame(() => overlay.classList.add('note-input-overlay--show'));
+
+  // ESC 关闭（监听器自清理：触发后自行 remove，与 onNoteEsc 同款）
+  document.addEventListener('keydown', onReminderEsc);
+  function onReminderEsc(e) {
+    if (e.key === 'Escape') {
+      closeReminderPanel();
+      document.removeEventListener('keydown', onReminderEsc);
+    }
+  }
+}
+
+/** 关闭提醒面板（点遮罩 / ESC / 保存成功后共用） */
+function closeReminderPanel() {
+  const overlay = document.querySelector('.reminder-panel-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('note-input-overlay--show');
+  document.body.style.overflow = '';
+  setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 280);
+}
+
+/**
+ * 渲染/更新「有提醒」徽标（原地增删，绝不重建 li）。
+ * 由 renderItem（新建）和 updateItem（更新）统一调用，与 renderImage 同模式。
+ * 显示铃铛 + 时间（今天 HH:mm / 跨天 M/D HH:mm）；已过期的置灰（到点时没开 App 错过的）。
+ * 时间文本变化才重写 innerHTML（增量渲染每次都跑，避免无谓 DOM 抖动）。
+ */
+function renderReminderBadge(li, todo) {
+  const headline = li.querySelector('.todo__headline');
+  if (!headline) return;
+  const existing = li.querySelector('.todo__reminder-badge');
+  // 完成的待办不显示提醒徽标：完成时对账已取消调度，铃铛挂着会误导（与图片徽标不同——图不会失效）
+  const shouldShow = reminderUiEnabled() && !!todo.reminderAt && !todo.completed;
+  if (!shouldShow) {
+    if (existing) existing.remove();
+    return;
+  }
+  const badge = existing || document.createElement('span');
+  if (!existing) {
+    badge.className = 'todo__reminder-badge';
+    headline.appendChild(badge);
+  }
+  badge.classList.toggle('todo__reminder-badge--expired', isReminderExpired(todo));
+  const text = formatReminderTime(todo.reminderAt);
+  const timeEl = badge.querySelector('.todo__reminder-badge-time');
+  if (!timeEl || timeEl.textContent !== text) {
+    badge.innerHTML = ICONS.bell + `<span class="todo__reminder-badge-time">${text}</span>`;
+  }
+  badge.title = `提醒 ${text}`;
 }
 
 /* ===== 完成备注：底部滑出输入面板（一次性模态，复用 add-panel 滑出风格）=====
@@ -1162,6 +1410,8 @@ async function deleteTodo(id) {
   setTodos(getTodos().filter((t) => t.id !== id));
   // 留墓碑：删除前那条 INSERT/UPDATE 的回声可能几秒后才到，没有墓碑就会被"复活"回列表
   markTodoRemoved(id);
+  // 软删除 → 已调度的到点提醒立即取消（不等 realtime 回声：断线删除的到点也不该响）
+  syncReminders(getTodos(), currentUser && currentUser.id);
   try {
     await db.deleteTodo(id);
     // 删除撤销：5 秒内可一键撤回软删除
@@ -1778,6 +2028,9 @@ function renderItem(todo) {
   // 图片缩略图（有就显示，由 renderImage 统一管理）
   renderImage(li, todo);
 
+  // 到点提醒徽标（有就显示，由 renderReminderBadge 统一管理）
+  renderReminderBadge(li, todo);
+
   // 表情反应区（仅已完成时显示，由 reactions 模块管理）
   renderReactions(li, todo);
 
@@ -1798,6 +2051,7 @@ function renderItem(todo) {
         getTodos,
         onEdit: openEditPanel,
         onNote: openNotePanel,
+        onSetReminder: openReminderPanel,
         onTogglePin: togglePin,
         onAddImage: attachImageToTodo,
         onDelete: deleteTodo,
@@ -1821,6 +2075,7 @@ function renderItem(todo) {
       getTodos,
       onEdit: openEditPanel,
       onNote: openNotePanel,
+      onSetReminder: openReminderPanel,
       onTogglePin: togglePin,
       onAddImage: attachImageToTodo,
       onDelete: deleteTodo,
@@ -1874,6 +2129,8 @@ function updateItem(li, todo) {
   }
   // 图片缩略图：配图/换图/删图时增删，绝不重建 li
   renderImage(li, todo);
+  // 到点提醒徽标：设置/清除/改时间/过期时增删或刷新（与 renderImage 同款双入口）
+  renderReminderBadge(li, todo);
   // 表情反应区：完成态变化时需要显隐，表情数量变化时需要刷新
   renderReactions(li, todo);
   // 隐藏款稀有度样式：Realtime 推来 rarity 时同步背景/角标（原地更新，绝不重建 li）

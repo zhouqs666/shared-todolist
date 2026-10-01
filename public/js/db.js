@@ -226,6 +226,44 @@ export const db = {
   },
 
   /**
+   * 设置/更换一条待办的到点提醒（本地通知；App 端由 reminder.js 调度）。
+   * 三件套一起写：remind_at / remind_scope / remind_by，
+   * DB CHECK（remind_consistent）要求同非空，半空写入会被 23514 拒绝。
+   * @param {string} id todo id
+   * @param {string} remindAtISO 提醒时间（UTC ISO 串）
+   * @param {'both'|'self'|'partner'} scope 提醒范围（相对设置者：both=双方 / self=仅自己 / partner=仅对方）
+   * @param {string} by 设置者 userId（scope 语义的参照点）
+   * @returns {Promise<Object>} 更新后的 todo 对象
+   */
+  async setReminder(id, remindAtISO, scope, by) {
+    const { data, error } = await supabase
+      .from('todos')
+      .update({ remind_at: remindAtISO, remind_scope: scope, remind_by: by })
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+    if (error) throw wrapError(error);
+    if (!data) throw wrapError({ message: 'NOT_FOUND', code: 'NOT_FOUND' });
+    return toExternal(data);
+  },
+
+  /**
+   * 清除一条待办的提醒（三列一起置 NULL，满足 remind_consistent CHECK）。
+   * @returns {Promise<Object>} 更新后的 todo 对象
+   */
+  async clearReminder(id) {
+    const { data, error } = await supabase
+      .from('todos')
+      .update({ remind_at: null, remind_scope: null, remind_by: null })
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+    if (error) throw wrapError(error);
+    if (!data) throw wrapError({ message: 'NOT_FOUND', code: 'NOT_FOUND' });
+    return toExternal(data);
+  },
+
+  /**
    * 切换待办置顶状态。
    * @param {string} id todo id
    * @param {boolean} pinned 是否置顶

@@ -44,4 +44,10 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- 完成庆祝 / 表情点击的 navigator.vibrate（缺此权限真机静默失效） -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- 待办到点提醒（AlarmManager 精确闹钟，App 不打开也由系统触发）：
+         SCHEDULE_EXACT_ALARM 在 Android 12 默认授予（14+ 默认拒绝，由下一行补位）；
+         USE_EXACT_ALARM 在 Android 13+ 安装即自动授予，免去引导用户去系统设置开
+         「闹钟和提醒」（本项目 sideload 分发，不受 Play 闹钟类目政策约束）。 -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 </manifest>

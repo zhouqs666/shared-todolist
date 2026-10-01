@@ -16,6 +16,7 @@
 import { supabase } from './supabase.js';
 import { sortTodos, isTodoRemoved, markTodoRemoved } from './state.js';
 import { notify } from './notify.js';
+import { syncReminders } from './reminder.js';
 import { toExternal, toNote, toReaction, toSticker } from './transforms.js';
 
 // 字段转换（toExternal/toNote/toReaction/toSticker）已抽到 ./transforms.js
@@ -124,6 +125,8 @@ export function initRealtime({ getTodos, setTodos, notifyCompleted, setOnline, g
     ) {
       onRarityReveal(todo);
     }
+    // 到点提醒对账：列表变了（对方新增/回声），本机调度多退少补（幂等）
+    syncReminders(getTodos(), typeof getCurrentUserId === 'function' ? getCurrentUserId() : null);
   };
 
   /** todos UPDATE：完成/取消、备注、配图、置顶、软删除、隐藏款回标 */
@@ -135,6 +138,8 @@ export function initRealtime({ getTodos, setTodos, notifyCompleted, setOnline, g
     if (payload.new.deleted_at) {
       markTodoRemoved(todo.id);
       setTodos(todos.filter((t) => t.id !== todo.id));
+      // 软删除 → 已调度的到点提醒取消（对账会把不存在的条目退掉）
+      syncReminders(getTodos(), typeof getCurrentUserId === 'function' ? getCurrentUserId() : null);
       return;
     }
     const prev = todos.find((t) => t.id === todo.id);
@@ -171,6 +176,8 @@ export function initRealtime({ getTodos, setTodos, notifyCompleted, setOnline, g
     ) {
       onRarityReveal(todo);
     }
+    // 到点提醒对账：完成/改提醒时间/改范围 → 本机调度多退少补（幂等）
+    syncReminders(getTodos(), typeof getCurrentUserId === 'function' ? getCurrentUserId() : null);
   };
 
   /**
@@ -185,6 +192,8 @@ export function initRealtime({ getTodos, setTodos, notifyCompleted, setOnline, g
     if (!id) return;
     markTodoRemoved(id);
     setTodos(getTodos().filter((t) => t.id !== id));
+    // 物理删除 → 已调度的到点提醒取消
+    syncReminders(getTodos(), typeof getCurrentUserId === 'function' ? getCurrentUserId() : null);
   };
 
   const channel = supabase

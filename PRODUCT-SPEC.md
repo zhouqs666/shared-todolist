@@ -594,6 +594,24 @@ spinner `#e11d48`、自适应图标底色 `#be123c` 仍是 Tailwind rose 系；�
 **同类顺带修好**：基类深灰提示的长文案此前同样被压成 2 行，且断点难看
 （"图片上传失败，可长按待办/办补图"）—— 修复后单行（239px）。
 
+### 5.20 到点提醒 `F-20` ✅
+
+与 F-14（同步类即时提醒）不同：这是**用户主动设置**的定时提醒，走系统级调度（AlarmManager），**App 被杀、从未打开也由操作系统到点弹出，前台也弹**。
+
+| 项 | 规格 |
+|----|------|
+| 入口 | **长按待办** → 操作菜单「提醒」（创建/编辑面板无入口；网页端不显示入口、不调度） |
+| 快捷档 | 5 分钟后 / 10 分钟后 / 15 分钟后 / 30 分钟后（写死代码，改档位走热更新） |
+| 自定义时间 | 原生 `datetime-local`（Android WebView 弹系统选择器），必须晚于当前时刻 |
+| 提醒范围 | 相对设置者三选：**双方都响**（默认）/ 只提醒我 / 只提醒 ta —— 依据 `remind_by` 判断 |
+| 到点通知 | 独立渠道 `todo-due`（importance HIGH、震动、锁屏可见），标题「待办提醒」+ 待办文本 |
+| 精确性 | `SCHEDULE_EXACT_ALARM`（Android 12 默认授予）+ `USE_EXACT_ALARM`（13+ 安装即授）→ 到点即响，不漂移 |
+| 对账 | 数据变化（完成/删除/改时间/改范围/Realtime 同步/回前台）后全量对账，多退少补；幂等 |
+| 过期语义 | 到点时 App 没开 → 系统照常弹（OS 调度不依赖 App）；打开 App 看到的是置灰徽标，**不补弹** |
+| 测试 | UI 链路走 Playwright（E2E 钩子 `?e2e_reminder=1` + 内存 stub）；「系统真的弹出」只能真机冒烟 |
+
+**边界说明**：网页端不做（浏览器一关没有常驻进程）；断线期间本端完成/删除待办 → 乐观更新后立即对账取消，不等回声；设备重启后由插件的 BOOT receiver 自动恢复调度。
+
 ---
 
 ## 6. 数据模型
@@ -629,8 +647,12 @@ spinner `#e11d48`、自适应图标底色 `#be123c` 仍是 Tailwind rose 系；�
 | `deleted_at` | TIMESTAMPTZ | 软删除标记 |
 | `rarity` | TEXT | 稀有度：common / rare / epic / legendary |
 | `rarity_seen` | BOOLEAN | 隐藏款是否已被对方看过 |
+| `remind_at` | TIMESTAMPTZ | 到点提醒时间（UTC；NULL=未设提醒，见 F-20） |
+| `remind_scope` | TEXT | 提醒范围（相对 `remind_by`）：both / self / partner |
+| `remind_by` | UUID | 提醒设置者（范围语义的参照点） |
 
 **完整性约束**：`completed_consistent` CHECK——未完成则 `completed_by`/`completed_at` 必须为 NULL；已完成则二者必须非空。
+`remind_consistent` CHECK——提醒三件套（`remind_at`/`remind_scope`/`remind_by`）要么全空要么全非空；`remind_scope_allowed` CHECK 限定 scope 值域。迁移见 `supabase/migration-reminders.sql`。
 
 ### 6.3 发布通道相关表字段
 
