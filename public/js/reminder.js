@@ -21,7 +21,7 @@
  *     与对账行为；真实弹出只能真机验证（浏览器环境不存在系统通知）。
  */
 
-import { isNative, getLocalNotifications } from './notify.js';
+import { isNative, ensureCapacitorLoaded, getLocalNotifications } from './notify.js';
 import {
   notificationIdFor,
   planReminderSync,
@@ -78,7 +78,10 @@ export async function initReminder() {
     };
     return;
   }
-  pluginInstance = await getLocalNotifications();
+  // 先等 vendor 链就绪,再同步取插件实例 —— getLocalNotifications 是同步函数,
+  // 插件对象(thenable)绝不进 Promise 链(见 notify.js 的 2026-10-02 事故注释)
+  await ensureCapacitorLoaded();
+  pluginInstance = getLocalNotifications();
   if (!pluginInstance) return; // 网页：全 no-op
   await ensureChannel();
 }
