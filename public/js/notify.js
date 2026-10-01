@@ -162,13 +162,27 @@ function bindVisibilityFallback() {
 }
 
 /**
- * 供 reminder.js（到点提醒）复用同一份插件实例与 vendor 加载链，
- * 避免二次注入 capacitor 脚本（脚本注入有顺序强约束，重复注入是竞态源）。
- * APP 环境：返回 LocalNotifications 插件（vendor 加载失败时 null）；
- * 网页环境：返回 null（调用方据此降级为 no-op）。
+ * 等待 Capacitor vendor 脚本加载完成（内部自带 catch，不会 reject）。
+ * 供 reminder.js 在取插件实例之前保证时序（app.js 的 initNotify 已先行，此处幂等）。
  */
-export async function getLocalNotifications() {
-  await loadCapacitorScripts();
+export function ensureCapacitorLoaded() {
+  return loadCapacitorScripts();
+}
+
+/**
+ * 同步取 LocalNotifications 插件实例 —— 必须在 ensureCapacitorLoaded() 之后调用。
+ * APP 环境：返回插件；vendor 加载失败或网页环境：返回 null（调用方据此降级为 no-op）。
+ *
+ * ⚠️ 2026-10-02 生产事故（装壳后待办完全不加载）：本函数曾是 async 且直接 return
+ * 插件对象 —— Capacitor 的插件代理对象是 thenable，async 返回它会被 Promise 机制
+ * 二次展开（调用其 .then），native 下变成一次不存在的桥接调用并抛
+ * "LocalNotifications.then() is not implemented on android"，且发生在启动关键路径上，
+ * 中断了整个初始化（开屏不撤、待办拉取永不执行）。浏览器 isNative=false 返回 null
+ * 走不到该分支，因此 Playwright E2E 全绿也没拦住。
+ * 铁律：插件代理对象**永远不能被 await / 放进 Promise 链**，只能 await 其方法调用的
+ * 返回值（bridge promise）。老代码 notify() 正是这么用的，故从未踩中。
+ */
+export function getLocalNotifications() {
   return isNative ? LocalNotifications : null;
 }
 

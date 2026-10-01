@@ -365,6 +365,26 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 `android/**` 与 `app-e2e/**`（**不要含 `public/**`**），并把 `app-e2e/README.md` 里记的
 `check-e2e-env-keys.mjs` 生成方列表一并加回。
 
+**本机模拟器启动备忘（2026-10-02 实测踩坑，黑屏 ≠ 卡死）：**
+本机（macOS x64）API 36.1 镜像 + 宿主 GPU 直通不兼容，且 AVD 有残留 quickboot 快照，
+曾连续两次启动失败（进程活着、窗口黑屏、`adb` 永远 `offline`）。结论与正确姿势：
+
+```bash
+# ✅ 唯一验证可用的启动命令（软渲染 + 彻底跳过快照）
+emulator -avd Medium_Phone_API_36.1 -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect
+```
+
+- ❌ `-gpu host`（默认 auto 也会走到 host）→ 黑屏挂死，日志见 `Selecting Vulkan device` 前无输出；
+  ✅ `-gpu swiftshader_indirect`（软件渲染）→ 一次成功（成功日志里
+  `library_mode swiftshader_indirect gpu mode swiftshader_indirect`）。
+- ❌ `-no-snapshot-save` **不是**"跳过快照"——它只禁止*保存*，仍会**加载** `default_boot`
+  残留快照（`~/.android/avd/<名>.avd/snapshots/`），旧快照本身就会挂加载期；
+  ✅ 要完整冷启动必须用 `-no-snapshot`。
+- **判别"真卡死"还是"正常冷启动"**：黑屏 + 通知栏出现「Emulator is performing a full
+  startup. This may take up to 5 minutes」= 正常（2-5 分钟）；就绪的唯一标准是
+  `adb shell getprop sys.boot_completed` 返回 `1`。失败实例的特征是持续 5 分钟以上
+  `getprop` 仍 offline —— 此时先杀掉换上面这条命令，不要原地等。
+
 ### commit message 规范（Conventional Commits，中文描述）
 - `feat:` 新功能 / `fix:` 修复 / `refactor:` 重构 / `docs:` 文档 / `chore:` 杂项
 - **一个功能 = 一个 PR**（2026-09-14 对齐 squash merge）：分支内可以自由拆多个 commit 方便回溯，
