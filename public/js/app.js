@@ -39,7 +39,7 @@ import { initReminder, syncReminders, reminderUiEnabled } from './reminder.js';
 import { QUICK_OPTIONS, quickOptionAt, formatReminderTime, isReminderExpired } from './reminder-logic.js';
 import { initMessages, refreshNotes, onNoteAdded, onNoteRemoved, onNoteUpdated } from './messages.js';
 import { initReactions, refreshReactions, renderReactions, onReactionAdded, onReactionRemoved, REACTION_EMOJIS, isMyReaction, toggleReaction, getReactionSvg, getReactionLabel } from './reactions.js';
-import { pickImage, pickImages, uploadTodoImage } from './image-utils.js';
+import { pickImage, pickImageFromCamera, pickImages, uploadTodoImage } from './image-utils.js';
 import { checkForUpdate, setUpdateSupabase, notifyAppReady, getCurrentBundleInfo, getTotalUpdateCount } from './update.js';
 // App 内 APK 更新（原生壳更新）：先查壳更新，无壳更新才回落 bundle 热更新
 import { checkNativeUpdate, showNativeUpdatePanel, setApkUpdateSupabase, bindForegroundCheck } from './apk-update.js';
@@ -56,6 +56,7 @@ import { renderAnniversary, toggleAnniversaryPanel } from './anniversary.js';
 // 业务回调（onEdit/onNote/onAddImage/onDelete/onConfirm/onLongPress）通过参数注入
 import {
   showTodoMenu,
+  showImageSourceChooser,
   showLogoutConfirm,
   showAccountMenu,
   bindLongPressLogout,
@@ -626,14 +627,24 @@ function bindEvents() {
   // 时（例如两条「买牛奶」），内容恰好相等会被误判为"没改过"，于是刚敲的那半句被静默清掉。
   todoInput.addEventListener('input', () => { addInputDirty = true; });
   addBtn.addEventListener('click', addTodo);
-  // 预挂图按钮：选图存入 pendingImage，面板上方浮现缩略图预览（可 × 取消）
+  // 预挂图按钮：先弹图源二级选择（拍照/从相册选），选到的图存入 pendingImage，
+  // 面板上方浮现缩略图预览（可 × 取消）。
+  // 注意 onCamera/onGallery 必须在选择 sheet 的按钮 click 处理器里被**同步**调用
+  // （showImageSourceChooser 的 mkItem 就是同步调 onClick），pickImageFromCamera/pickImage
+  // 里的 input.click() 才落在同一次用户手势任务内 —— 与旧实现（点按钮直接 input.click()）
+  // 的激活条件完全一致，不引入"异步后弹文件选择器被浏览器拦"的新风险。
   if (attachBtn) {
-    attachBtn.addEventListener('click', async () => {
-      const file = await pickImage();
-      if (!file) return;
-      pendingImage = file;
-      attachBtn.classList.add('add-panel__attach--has');
-      renderAttachPreview(file);
+    attachBtn.addEventListener('click', () => {
+      showImageSourceChooser({
+        onCamera: async () => {
+          const file = await pickImageFromCamera();
+          if (file) setPendingImage(file);
+        },
+        onGallery: async () => {
+          const file = await pickImage();
+          if (file) setPendingImage(file);
+        },
+      });
     });
   }
 }
@@ -654,6 +665,13 @@ let realtimeCh = null;
  * 决定提交成功后要不要清空输入框 + 收面板 —— 见 addTodo 里的用法。
  */
 let addInputDirty = false;
+
+/** 选到图后的统一入口：pendingImage + 已选角标 + 预览（拍照/相册两个来源共用） */
+function setPendingImage(file) {
+  pendingImage = file;
+  if (attachBtn) attachBtn.classList.add('add-panel__attach--has');
+  renderAttachPreview(file);
+}
 
 /** 渲染预挂图预览：缩略图 + × 取消（悬浮在添加面板上方） */
 function renderAttachPreview(file) {
@@ -911,15 +929,40 @@ async function toggleComplete(id, nextCompleted) {
 }
 
 /**
- * 给已存在的待办配图/换图（长按菜单入口）。
- * 选图 → 压缩上传 → 写入 image_path（含旧图清理）→ 乐观更新本地。
+ * 给已存在的待办配图/换图（长按菜单 / lightbox 入口）。
+ * 先弹图源二级选择（拍照/从相册选），选完来源再走取图 → 压缩上传 → 挂图。
+ * 已持有文件时可直接把 files 传入，跳过选择（供未来编程式调用）。
+ * @param {string} id todo id
+ * @param {string[]|null} prevPaths 旧图 URL 数组（追加时基于此扩展）
+ * @param {File[]} [files] 已选好的文件（不传则先弹图源选择 sheet）
+ */
+async function attachImageToTodo(id, prevPaths, files) {
+  if (!files) {
+    showImageSourceChooser({
+      // 与添加面板同理：onCamera/onGallery 被 sheet 的按钮 click 处理器同步调用，
+      // 保证 input.click() 落在同一次用户手势任务内。
+      onCamera: async () => {
+        const f = await pickImageFromCamera();
+        if (f) await uploadAndAttachTodoImages(id, prevPaths, [f]);
+      },
+      onGallery: async () => {
+        const fs = await pickImages();
+        if (fs && fs.length) await uploadAndAttachTodoImages(id, prevPaths, fs);
+      },
+    });
+    return;
+  }
+  await uploadAndAttachTodoImages(id, prevPaths, files);
+}
+
+/**
+ * 配图的上传主体：压缩上传 → 写入 image_paths（含旧图追加）→ 乐观更新本地。
  * 任一步失败：Toast 提示，不影响待办本身。
  * @param {string} id todo id
  * @param {string[]|null} prevPaths 旧图 URL 数组（追加时基于此扩展）
+ * @param {File[]} files 要上传的文件（拍照 1 张 / 相册 1-N 张）
  */
-async function attachImageToTodo(id, prevPaths) {
-  const files = await pickImages();
-  if (!files || files.length === 0) return; // 用户取消
+async function uploadAndAttachTodoImages(id, prevPaths, files) {
   showLoading();
   try {
     // 串行上传（避免并发触发 Supabase 免费层限流；多图通常 2-3 张，可接受）

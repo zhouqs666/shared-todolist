@@ -7,6 +7,10 @@
  *     存储（1GB）和流量（2GB/月）。PNG（截图/表情包/透明图）保留 PNG 不二次损失。
  *   - 选图用原生 <input type=file accept=image/*>：PWA 和 APK 通用，
  *     安卓 13+ 走系统 Photo Picker 免权限。
+ *   - 拍照用同一套 <input> 加 capture=environment 拉起系统相机（2026-10-02）：
+ *     Capacitor WebView 的 onShowFileChooser 原生支持 capture（accept=image/* + capture
+ *     → 直接发 ACTION_IMAGE_CAPTURE，无相机 App 时回落文件选择器）；Manifest 未声明
+ *     CAMERA 权限时无需任何运行时权限。不引入 @capacitor/camera（那要动原生层 → 发 APK）。
  */
 
 import { supabase } from './supabase.js';
@@ -120,6 +124,32 @@ export function pickImages() {
     input.onchange = () => {
       if (!input.files || input.files.length === 0) { resolve(null); return; }
       resolve(Array.from(input.files));
+    };
+    input.click();
+  });
+}
+
+/**
+ * 拉起系统相机拍一张，返回拍到的文件（用户取消返回 null）。
+ * 与 pickImage() 同构，仅多 capture=environment（后置摄像头）：
+ *   - Android WebView / Chrome Android：直接开系统相机拍照，拍完回传文件；
+ *   - 桌面浏览器：capture 被忽略 → 退化为普通选图（无害回落，不报错）。
+ * 取消监听与 pickImage 相同：部分浏览器取消不触发 change，调用方按 null 处理。
+ * @returns {Promise<File|null>}
+ */
+export function pickImageFromCamera() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    // ⚠️ 必须用 setAttribute 写 content attribute：IDL 属性赋值（input.capture=...）
+    // 在 Chromium 里不反映到 content attribute，而 Capacitor WebView 判定是否拉起相机
+    // 读的是 content attribute（FileChooserParams.isCaptureEnabled）—— 用属性赋值时
+    // 真机会静默退化成普通选图（E2E 断言 content attribute 抓到的，2026-10-02）。
+    input.setAttribute('capture', 'environment');
+    input.onchange = () => {
+      const f = input.files && input.files[0];
+      resolve(f || null);
     };
     input.click();
   });
