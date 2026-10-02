@@ -85,11 +85,19 @@ const others = allTodos.filter((t) => !isWebE2E(t) && !isAppE2E(t));
 const { data: allStickers, error: e2 } = await sb.from('stickers').select('id, sticker_key, unlocked_at');
 if (e2) abort(`读取 stickers 失败：${e2.message}`);
 
+// daily_notes（心里话）全清：阅后即焚数据在测试库纯属残留，且**残留会改变被测行为**——
+// 2026-10-02 实证：库里多一条未读，「长按珍藏」就变成「下一条」翻页，珍藏仪式根本测不到。
+const { data: allNotes, error: e3 } = await sb.from('daily_notes').select('id, content, deleted_at');
+if (e3) abort(`读取 daily_notes 失败：${e3.message}`);
+
 console.log(`待删待办：${targets.length} 条（web 通道，${E2E_PREFIX} 前缀且非 ${APP_PREFIX}）`);
 targets.forEach((t) => console.log(`   ${t.deleted_at ? '[回收站]' : '[活跃  ]'} "${t.text}"  ${t.id}`));
 
 console.log(`\n待删贴纸：${allStickers.length} 张（图鉴归零，让「首次解锁」路径重新可测）`);
 allStickers.forEach((s) => console.log(`   ${s.sticker_key}  ${s.id}`));
+
+console.log(`\n待删心里话：${allNotes.length} 条（daily_notes 全清，阅后即焚残留无保留价值）`);
+allNotes.forEach((n) => console.log(`   ${n.deleted_at ? '[已焚]' : '[活跃]'} "${String(n.content).slice(0, 18)}"  ${n.id}`));
 
 if (appData.length) {
   console.log(`\nℹ️ APP 通道待办 ${appData.length} 条（${APP_PREFIX}）—— 不属于本通道，刻意不删：`);
@@ -101,7 +109,7 @@ if (others.length) {
   others.forEach((t) => console.log(`   "${t.text}"  ${t.id}`));
 }
 
-if (!targets.length && !allStickers.length) {
+if (!targets.length && !allStickers.length && !allNotes.length) {
   console.log('\n✅ 测试库已是干净初态，无需清理。\n');
   process.exit(0);
 }
@@ -114,11 +122,18 @@ if (DRY_RUN) {
 // ===== 2. 按显式 id 删除 =====
 const todoIds = targets.map((t) => t.id);
 const stickerIds = allStickers.map((s) => s.id);
+const noteIds = allNotes.map((n) => n.id);
 
 if (stickerIds.length) {
   const { error } = await sb.from('stickers').delete().in('id', stickerIds);
   if (error) abort(`删除贴纸失败：${error.message}`);
   console.log(`\n✓ 已删除贴纸 ${stickerIds.length} 张`);
+}
+
+if (noteIds.length) {
+  const { error } = await sb.from('daily_notes').delete().in('id', noteIds);
+  if (error) abort(`删除心里话失败：${error.message}`);
+  console.log(`✓ 已删除心里话 ${noteIds.length} 条`);
 }
 
 if (todoIds.length) {
@@ -131,16 +146,18 @@ if (todoIds.length) {
 // ===== 3. 验证 =====
 const { data: leftTodos } = await sb.from('todos').select('id, text');
 const { data: leftStickers } = await sb.from('stickers').select('id');
+const { data: leftNotes } = await sb.from('daily_notes').select('id');
 const leftE2E = leftTodos.filter(isWebE2E);
 const leftApp = leftTodos.filter(isAppE2E);
 
 console.log('\n--- 验证 ---');
 console.log(`  剩余 web 通道待办：${leftE2E.length} 条`);
 console.log(`  剩余贴纸：${leftStickers.length} 张`);
+console.log(`  剩余心里话：${leftNotes.length} 条`);
 console.log(`  剩余 APP 通道待办：${leftApp.length} 条（不属于本通道，未动）`);
 console.log(`  剩余其它待办：${leftTodos.length - leftE2E.length - leftApp.length} 条（非测试数据，未动）`);
 
-if (leftE2E.length === 0 && leftStickers.length === 0) {
+if (leftE2E.length === 0 && leftStickers.length === 0 && leftNotes.length === 0) {
   console.log('\n✅ 测试库已归零\n');
 } else {
   console.log('\n⚠️ 仍有残留，请检查\n');

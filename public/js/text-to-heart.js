@@ -1,15 +1,26 @@
 /**
- * 文字化心飞向桃心 —— 珍藏仪式的顶级视觉重构
+ * 文字化心飞向桃心 —— 珍藏仪式 v2（2026-10 动画重设计）
  *
- * 与廉价粒子动画的区别：
- *   1. 加法混合（lighter）：光点重叠自然增亮，像真实的光而非贴纸
- *   2. 运动余晖：不完全清屏，粒子拖着彗尾般的轨迹，流动感的核心
- *   3. curl noise 流场：粒子沿有机湍流路径汇聚，绝不走直线
- *   4. 预渲染柔光 sprite：径向渐变光斑，数百粒子 60fps
- *   5. 心跳节拍：成型后按 App 的心跳曲线（咚-咚…呼吸）跳两下
- *   6. 整体飞行：心作为整体沿弧线飞向桃心，带星尘尾迹
+ * 与 v1 的区别（v1 的实测缺陷：加法混合过曝成白块、三层心形剪影发毛、
+ * 文字融化成黏块、终点在弹窗遮挡处「凭空消散」）：
+ *   1. 治过曝：粒子 3-4.5px 细尘、alpha ≤ 0.55、常规粒子锁玫瑰色，白只留 15% 高光
+ *   2. 单层心形剪影：55% 均匀弧长轮廓 + 45% 边缘偏置内部填充（边缘实、内部有肉）
+ *   3. 逐字溶解：字符按 x 位置左→右扫描熄灭（DOM），粒子同步出生（canvas），无黏块无叠影
+ *   4. 两段飞行 + 可见收点：
+ *      心 → 阅读卡内印章桃心（stageEl）被吸收 + 「咚-咚」接收（弹窗仍可见）→
+ *      弹窗淡出 → 玫瑰光种二段短飞顶栏桃心（heartEl）→ 接收跳动（弹窗已隐，全程可见）
+ *   5. 心跳两下可见：柔光晕 + 两圈波纹
  *
- * 阶段：文字松动升腾(0.35s) → 湍流汇聚成心(1.2s) → 心跳两下(0.65s) → 整体飞向桃心(0.75s)
+ * 阶段（1×，ms）：
+ *   0      仪式开始（长按充能完成后由 messages 触发）：暗场渐入 / 元素让位 / 文字透亮
+ *   450    逐字溶解（左→右扫过 480ms）：字符熄灭 = 粒子出生
+ *   ~500   粒子升腾 + 湍流汇聚（每粒 950-1300ms）
+ *   2280   心成形：心跳两下（柔光晕 + 波纹）
+ *   3040   心被 stageEl 吸收（第一收点）+ stageEl 接收跳动
+ *   4150   通知弹窗淡出（onModalFade）；玫瑰光种留在舞台位置
+ *   4330   光种二段飞行飞向 heartEl（第二收点）
+ *   4790   onArrive（顶栏接收跳动）+ 波纹 + 迷你心飘散
+ *   5300   done（焚毁收尾由 messages 执行）
  *
  * @module text-to-heart
  */
@@ -25,32 +36,8 @@ function easeOutCubic(t) {
 function clamp01(v) {
   return Math.max(0, Math.min(1, v));
 }
-function parseRGB(str) {
-  const m = String(str).match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
-  return m ? [+m[1], +m[2], +m[3]] : [76, 5, 49];
-}
 
-/** 有机湍流场：位置+时间 → 流向角度（伪 curl noise，平滑且无重复感） */
-function flowAngle(x, y, t) {
-  return (
-    Math.sin(x * 0.012 + t * 1.1) +
-    Math.cos(y * 0.014 - t * 0.8) +
-    Math.sin((x + y) * 0.006 + t * 0.6) +
-    Math.cos((x - y) * 0.009 - t * 0.4)
-  ) * 1.2;
-}
-
-/** 心跳曲线（与 App 心跳 CSS 同构：咚-咚…呼吸），t∈[0,1] → scale */
-function beatCurve(t) {
-  // 第一跳更大，第二跳轻，之后呼吸
-  if (t < 0.14) return 1 + easeOutCubic(t / 0.14) * 0.10;
-  if (t < 0.30) return 1.10 - easeInOutCubic((t - 0.14) / 0.16) * 0.10;
-  if (t < 0.46) return 1 + easeOutCubic((t - 0.30) / 0.16) * 0.055;
-  if (t < 0.62) return 1.055 - easeInOutCubic((t - 0.46) / 0.16) * 0.055;
-  return 1;
-}
-
-/** 预渲染柔光 sprite：中心热核 + 边缘透明 */
+/** 预渲染柔光 sprite：中心热核 + 边缘透明（尺寸小也有色彩层次） */
 function makeSprite(inner, mid) {
   const S = 48;
   const c = document.createElement('canvas');
@@ -58,364 +45,442 @@ function makeSprite(inner, mid) {
   const g = c.getContext('2d');
   const grad = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
   grad.addColorStop(0, inner);
-  grad.addColorStop(0.3, mid);
+  grad.addColorStop(0.35, mid);
   grad.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = grad;
   g.fillRect(0, 0, S, S);
   return c;
 }
 
-/* ===== 文字采样 ===== */
+/* ===== 文字像素采样（粒子出生点与 DOM 文字重合） ===== */
 
-/**
- * 把留言文字渲染到隐藏 canvas 并采样像素点。
- * 用真实的字号/行高/可用宽度排版，保证粒子初始位置和 DOM 文字基本重合。
- */
-function sampleTextPoints(text, fontSize, lineHeight, maxW, dpr) {
+function sampleText(text, font, lineHeight, maxW) {
   const c = document.createElement('canvas');
-  const ctx = c.getContext('2d');
-  const font = `${fontSize}px -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif`;
-  ctx.font = font;
-  // 手动按宽度换行（与 DOM white-space:pre-wrap 近似）
+  const g = c.getContext('2d');
+  g.font = font;
   const lines = [];
   let line = '';
   for (const ch of text) {
     if (ch === '\n') { lines.push(line); line = ''; continue; }
-    const test = line + ch;
-    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = ch; }
-    else line = test;
+    if (g.measureText(line + ch).width > maxW && line) { lines.push(line); line = ch; }
+    else line += ch;
   }
   if (line) lines.push(line);
-
-  c.width = Math.ceil(maxW * dpr);
-  c.height = Math.ceil(lines.length * lineHeight * dpr + fontSize * dpr);
-  ctx.scale(dpr, dpr);
-  ctx.font = font;
-  ctx.fillStyle = '#000';
-  ctx.textBaseline = 'top';
-  lines.forEach((ln, i) => ctx.fillText(ln, 0, i * lineHeight));
-
-  const img = ctx.getImageData(0, 0, c.width, c.height).data;
-  const step = 3; // 采样步长（CSS px）
+  const w = Math.ceil(maxW) + 4;
+  const h = Math.ceil(lines.length * lineHeight) + 8;
+  c.width = w;
+  c.height = h;
+  g.font = font;
+  g.fillStyle = '#000';
+  g.textBaseline = 'top';
+  lines.forEach((ln, i) => g.fillText(ln, 0, i * lineHeight));
+  const img = g.getImageData(0, 0, w, h).data;
   const pts = [];
-  for (let y = 0; y < c.height; y += step * dpr) {
-    for (let x = 0; x < c.width; x += step * dpr) {
-      const alpha = img[(Math.round(y) * c.width + Math.round(x)) * 4 + 3];
-      if (alpha > 120) pts.push([x / dpr, y / dpr]);
+  for (let y = 0; y < h; y += 2) {
+    for (let x = 0; x < w; x += 2) {
+      if (img[(y * w + x) * 4 + 3] > 110) pts.push([x, y]);
     }
   }
-  return { pts, w: c.width / dpr, h: c.height / dpr };
+  return pts;
 }
 
-/* ===== 心形点生成 ===== */
+/* ===== 心形目标点：单层轮廓 + 边缘偏置填充 ===== */
 
-/** 心形参数方程（t∈[0,2π)） */
-function heartPoint(t) {
+function heartXY(t) {
   return [
     16 * Math.pow(Math.sin(t), 3),
     -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)),
   ];
 }
-/** 点是否在心形内（隐式方程） */
-function insideHeart(x, y) {
-  const xs = x / 16, ys = -y / 14;
-  return Math.pow(xs * xs + ys * ys - 1, 3) - xs * xs * ys * ys * ys <= 0;
-}
 
-/** 生成心形目标点：三层轮廓（强化边缘清晰度）+ 内部填充 */
-function generateHeartPoints(count, scale) {
+/** 均匀弧长采样单层轮廓（剪影清晰的关键） */
+function uniformHeartRing(count) {
+  const N = 2000;
+  const cum = [];
+  let prev = heartXY(0);
+  let total = 0;
+  for (let i = 1; i <= N; i++) {
+    const p = heartXY((i / N) * Math.PI * 2);
+    total += Math.hypot(p[0] - prev[0], p[1] - prev[1]);
+    cum.push(total);
+    prev = p;
+  }
   const pts = [];
-  const ringScales = [1, 0.86, 0.7];
-  const ringCount = Math.min(count, Math.floor(count * 0.42));
-  for (let i = 0; i < ringCount; i++) {
-    const t = (i / ringCount) * Math.PI * 2;
-    const [x, y] = heartPoint(t);
-    pts.push([x * scale * ringScales[i % 3], y * scale * ringScales[i % 3]]);
-  }
-  let added = 0, tries = 0;
-  while (pts.length < count && tries < count * 30) {
-    tries++;
-    const x = (Math.random() * 2 - 1) * 16;
-    const y = (Math.random() * 2 - 1) * 15;
-    if (insideHeart(x, y)) { pts.push([x * scale, y * scale]); added++; }
-  }
-  while (pts.length < count) {
-    const t = Math.random() * Math.PI * 2;
-    const [x, y] = heartPoint(t);
-    pts.push([x * scale * 0.5, y * scale * 0.5]);
+  let j = 0;
+  for (let i = 0; i < count; i++) {
+    const target = (total * i) / count;
+    while (cum[j] < target) j++;
+    pts.push(heartXY((j / N) * Math.PI * 2));
   }
   return pts;
+}
+
+function generateHeartTargets(count, scale) {
+  const ringN = Math.floor(count * 0.55);
+  const ring = uniformHeartRing(ringN);
+  const pts = ring.map(([x, y]) => [x * scale, y * scale]);
+  const innerN = count - ringN;
+  for (let k = 0; k < innerN; k++) {
+    const [rx, ry] = ring[Math.floor(Math.random() * ringN)];
+    const u = Math.pow(Math.random(), 0.65) * 0.72; // 边缘偏置：靠外概率更高
+    pts.push([rx * scale * (1 - u), ry * scale * (1 - u)]);
+  }
+  return pts.slice(0, count);
 }
 
 /* ===== 主入口 ===== */
 
 /**
- * 文字化心飞向桃心。
+ * 文字化心飞向桃心（珍藏仪式 v2）。
  * @param {Object} opts
- * @param {HTMLElement} opts.textEl 留言文字元素
- * @param {HTMLElement} opts.heartEl 顶栏桃心（终点）
- * @param {Function} [opts.onArrive] 心到达桃心时回调（触发桃心接收跳动）
+ * @param {HTMLElement} opts.textEl 留言文字容器（含 .note-read__char 字符 span）
+ * @param {HTMLElement} opts.stageEl 阅读卡印章桃心（第一收点）
+ * @param {HTMLElement} opts.heartEl 顶栏桃心（第二收点）
+ * @param {Function} [opts.onStageArrive] 心被印章桃心吸收时回调
+ * @param {Function} [opts.onModalFade] 该关弹窗了（光种即将二段飞行）
+ * @param {Function} [opts.onArrive] 光种到达顶栏时回调（触发桃心接收跳动）
  * @param {Function} opts.done 全部结束回调
  */
-export function textToHeart({ textEl, heartEl, onArrive, done }) {
-  const finish = () => { done && done(); };
-  if (!textEl) { finish(); return; }
+export function textToHeart({ textEl, stageEl, heartEl, onStageArrive, onModalFade, onArrive, done }) {
+  const finish = () => { if (done) done(); };
 
   const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduceMotion) { onArrive && onArrive(); finish(); return; }
+  if (reduceMotion || !textEl) {
+    if (onStageArrive) onStageArrive();
+    if (onArrive) onArrive();
+    finish();
+    return;
+  }
 
   const text = (textEl.textContent || '').trim();
-  if (!text) { onArrive && onArrive(); finish(); return; }
+  if (!text) {
+    if (onStageArrive) onStageArrive();
+    if (onArrive) onArrive();
+    finish();
+    return;
+  }
 
-  /* --- 几何：起点（文字）/ 心形中心 / 终点（顶栏桃心） --- */
+  /* --- 几何：文字块 / 舞台桃心 / 顶栏桃心（均转视口坐标，canvas 是 fixed 全屏） --- */
   const rect = textEl.getBoundingClientRect();
   const cs = getComputedStyle(textEl);
   const fontSize = parseFloat(cs.fontSize) || 18;
   const lineHeight = parseFloat(cs.lineHeight) || fontSize * 1.8;
-  const [tr, tg, tb] = parseRGB(cs.color);
 
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
 
-  let endX = cx, endY = 30;
+  let stageX = cx;
+  let stageY = Math.max(60, rect.top - 90);
+  if (stageEl) {
+    const sr = stageEl.getBoundingClientRect();
+    stageX = sr.left + sr.width / 2;
+    stageY = sr.top + sr.height / 2;
+  }
+  let endX = cx;
+  let endY = 30;
   if (heartEl) {
     const hr = heartEl.getBoundingClientRect();
     endX = hr.left + hr.width / 2;
     endY = hr.top + hr.height / 2;
   }
 
-  /* --- 采样文字 → 粒子起点 --- */
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const maxW = Math.max(60, rect.width - 40); // 减去内边距
-  const { pts: sampled, w: tw, h: th } = sampleTextPoints(text, fontSize, lineHeight, maxW, dpr);
-  if (sampled.length === 0) { onArrive && onArrive(); finish(); return; }
-
-  // 控制粒子总量（性能与密度平衡）
-  const MAX_PTS = 620;
-  let textPts = sampled;
-  if (sampled.length > MAX_PTS) {
-    const stride = sampled.length / MAX_PTS;
-    textPts = Array.from({ length: MAX_PTS }, (_, i) => sampled[Math.floor(i * stride)]);
-  } else if (sampled.length > 0 && sampled.length < 300) {
-    // 短消息补足粒子（"晚安"三两个字采样点太少，心形会稀疏）：
-    // 在原文字点附近抖动复制，密度够心形才饱满
-    const extra = [];
-    for (let i = 0; i < 300 - sampled.length; i++) {
-      const src = sampled[i % sampled.length];
-      extra.push([src[0] + (Math.random() - 0.5) * 6, src[1] + (Math.random() - 0.5) * 6]);
+  /* --- 字符 span（messages 已拆好；兜底自拆） --- */
+  let chars = Array.from(textEl.querySelectorAll('.note-read__char'));
+  if (!chars.length) {
+    textEl.textContent = '';
+    for (const ch of text) {
+      const s = document.createElement('span');
+      s.className = 'note-read__char';
+      s.textContent = ch;
+      textEl.appendChild(s);
     }
-    textPts = sampled.concat(extra);
+    chars = Array.from(textEl.querySelectorAll('.note-read__char'));
   }
-
-  /* --- 心形目标 --- */
-  const heartW = Math.max(96, Math.min(150, rect.width * 0.52)); // 屏幕像素宽
-  const scale = heartW / 32;
-  const heartPts = generateHeartPoints(textPts.length, scale);
-
-  const textOffX = cx - tw / 2;
-  const textOffY = cy - th / 2;
-
-  /* --- 光斑 sprites（真实文字色 → 玫瑰 → 亮白） --- */
-  const spriteText = makeSprite(
-    `rgba(${tr},${tg},${tb},0.95)`,
-    `rgba(${tr},${tg},${tb},0.45)`,
-  );
-  const spriteRose = makeSprite(
-    'rgba(255,183,200,0.95)',
-    'rgba(244,63,94,0.50)',
-  );
-  const spriteGlow = makeSprite(
-    'rgba(255,255,255,0.95)',
-    'rgba(255,170,195,0.45)',
-  );
-
-  /* --- 粒子 --- */
-  const particles = textPts.map((tp, i) => {
-    const hp = heartPts[i];
-    return {
-      x: textOffX + tp[0],        // 起点（文字像素）
-      y: textOffY + tp[1],
-      tx: cx + hp[0],             // 心形目标
-      ty: cy + hp[1],
-      delay: Math.random() * 300,               // 错峰出发（ms）
-      dur: 900 + Math.random() * 300,           // 汇聚时长（ms）
-      size: 0.75 + Math.random() * 0.85,        // 尺寸差异（景深）
-      flow: 0.6 + Math.random() * 0.8,          // 湍流敏感度差异
-      phase: Math.random() * Math.PI * 2,       // 随机相位
-      tw: 1.6 + Math.random() * 1.4,            // 微光闪烁频率
-    };
+  // 每字的 x 中心（用于左→右扫描熄灭）
+  const charDelay = chars.map((c) => {
+    const r = c.getBoundingClientRect();
+    return (((r.left + r.width / 2) - rect.left) / Math.max(1, rect.width)) * 480;
   });
 
-  /* --- 时间轴 --- */
-  const T_LOOSEN = 380;    // 文字松动（起点停留，字面渐隐）
-  const T_FLOW_END = 1900; // 全部粒子汇聚完成
-  const T_BEAT = 1950;     // 心跳开始
-  const BEAT = 650;
-  const T_FLY = T_BEAT + BEAT;  // 2600 飞行开始
-  const FLY = 750;
-  const TOTAL = T_FLY + FLY + 120; // 含淡出尾巴
+  /* --- 采样文字 → 粒子起点（2px 步长细尘） --- */
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const maxW = Math.max(60, rect.width - 40);
+  const sampled = sampleText(text, `${fontSize}px ${cs.fontFamily}`, lineHeight, maxW);
+  if (!sampled.length) {
+    if (onStageArrive) onStageArrive();
+    if (onArrive) onArrive();
+    finish();
+    return;
+  }
 
-  // 飞行弧线控制点（向上拱起的贝塞尔）
-  const cpX = (cx + endX) / 2 + (Math.random() * 40 - 20);
-  const cpY = Math.min(cy, endY) - 90;
+  const offX = rect.left + 20;
+  const offY = rect.top + (lineHeight - fontSize) / 2 + 2;
 
-  /* --- 全屏画布 --- */
-  const W = window.innerWidth, H = window.innerHeight;
+  /* --- 心形目标 --- */
+  const heartW = Math.max(96, Math.min(150, rect.width * 0.52));
+  const hs = heartW / 32;
+  const heartCx = cx;
+  const heartCy = cy - 40;
+  const count = Math.min(1350, Math.max(850, sampled.length));
+  const targets = generateHeartTargets(count, hs);
+
+  /* --- 粒子：玫瑰 85% / 高光白 15%，尺寸 3-4.5px，alpha ≤ 0.55 --- */
+  const P = [];
+  const stride = sampled.length / count;
+  for (let i = 0; i < count; i++) {
+    const sp = sampled[Math.floor(i * stride)];
+    const tp = targets[i];
+    const white = Math.random() < 0.15;
+    P.push({
+      x0: offX + sp[0],
+      y0: offY + sp[1],
+      tx: heartCx + tp[0],
+      ty: heartCy + tp[1],
+      // 出生延迟 = 按 x 位置左→右扫过（与 DOM 字符熄灭同步）
+      delay: clamp01(sp[0] / maxW) * 480 + Math.random() * 90,
+      dur: 950 + Math.random() * 350,
+      rise: 10 + Math.random() * 14,
+      drift: (Math.random() - 0.5) * 10,
+      size: 0.75 + Math.random() * 0.5,
+      alpha: white ? 0.5 : 0.34 + Math.random() * 0.2,
+      white,
+      phase: Math.random() * Math.PI * 2,
+      flow: 5 + Math.random() * 6,
+    });
+  }
+
+  /* --- 时间轴（ms，从仪式开始计） --- */
+  const T_DARK = 0;
+  const T_BRIGHT = 450;
+  const T_ERODE = 500;
+  const T_ARRIVE = T_ERODE + 480 + 1300;
+  const T_BEAT = T_ARRIVE + 80;
+  const BEAT = 620;
+  const T_ABSORB = T_BEAT + BEAT + 60;
+  const ABSORB = 430;
+  const T_MODALFADE = T_ABSORB + ABSORB + 60;
+  const T_SEEDFLY = T_MODALFADE + 180;
+  const SEEDFLY = 460;
+  const TOTAL = T_SEEDFLY + SEEDFLY + 510;
+
+  /* --- 全屏 canvas（fixed，挂 body：跨弹窗生命周期） --- */
+  const W = window.innerWidth;
+  const H = window.innerHeight;
   const canvas = document.createElement('canvas');
-  canvas.style.cssText = `position:fixed;inset:0;width:${W}px;height:${H}px;pointer-events:none;z-index:400;`;
+  canvas.style.cssText = `position:fixed;inset:0;width:${W}px;height:${H}px;pointer-events:none;z-index:300;`;
   canvas.width = W * dpr;
   canvas.height = H * dpr;
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
   document.body.appendChild(canvas);
 
-  // 文字本体平滑让位（粒子接管）
-  textEl.style.transition = 'opacity 0.55s ease-out';
-  textEl.style.opacity = '0';
+  const spriteRose = makeSprite('rgba(255,205,222,0.95)', 'rgba(244,63,110,0.55)');
+  const spriteRoseDim = makeSprite('rgba(255,183,200,0.8)', 'rgba(224,81,127,0.4)');
+  const spriteWhite = makeSprite('rgba(255,255,255,0.95)', 'rgba(255,214,228,0.5)');
 
-  // 星尘尾迹
   const sparkles = [];
-  let arrivedFired = false;
-  let stopped = false;
+  const ripples = [];
+  let rippleFired = [false, false];
+  let stageFired = false;
+  let fadeFired = false;
+  let seedFired = false;
+  let arriveFired = false;
+  let aborted = false;
 
-  function bez(p0, p1, p2, t) {
+  const bez = (p0, p1, p2, t) => {
     const u = 1 - t;
     return u * u * p0 + 2 * u * t * p1 + t * t * p2;
-  }
+  };
+  // 吸收弧线控制点（向上拱）
+  const absCx = (heartCx + stageX) / 2;
+  const absCy = Math.min(heartCy, stageY) - 46;
+  // 光种二段飞行控制点
+  const cpX = (stageX + endX) / 2 + 26;
+  const cpY = Math.min(stageY, endY) - 60;
+
+  /* --- DOM 状态机 --- */
+  textEl.classList.add('note-read__content--erode'); // 透亮（CSS 两段式：先亮后散）
+  if (textEl.parentElement) textEl.parentElement.classList.add('note-read--ceremony');
 
   const start = performance.now();
 
   function frame(now) {
-    if (stopped) return;
-    const elapsed = now - start;
+    if (aborted) return;
+    try {
+      frameInner(now);
+    } catch (err) {
+      // 渲染异常也必须走完收尾：done 不达会让 ceremonyRunning 卡死（弹窗永久不可关）+ 留言不焚毁
+      console.error('[text-to-heart] 仪式渲染异常，强制收尾:', err);
+      cleanup();
+      if (!arriveFired) { arriveFired = true; if (onArrive) onArrive(); }
+      finish();
+    }
+  }
 
-    if (elapsed >= TOTAL) {
-      stopped = true;
-      canvas.remove();
-      textEl.style.opacity = '';
-      textEl.style.transition = '';
-      if (!arrivedFired) { arrivedFired = true; onArrive && onArrive(); }
+  function frameInner(now) {
+    const t = now - start;
+
+    if (t >= TOTAL) {
+      cleanup();
+      if (!arriveFired) { arriveFired = true; if (onArrive) onArrive(); }
       finish();
       return;
     }
 
-    // 心恰好在视觉上抵达顶栏桃心的瞬间触发接收跳动（不等尾巴淡完）
-    if (!arrivedFired && elapsed >= T_FLY + FLY) {
-      arrivedFired = true;
-      onArrive && onArrive();
+    ctx.clearRect(0, 0, W, H);
+
+    /* 逐字熄灭（左→右，与粒子出生同步） */
+    if (t >= T_ERODE) {
+      const e = t - T_ERODE;
+      for (let i = 0; i < chars.length; i++) {
+        if (e >= charDelay[i] && chars[i].style.opacity !== '0') chars[i].style.opacity = '0';
+      }
     }
 
-    /* 余晖：不完全清屏，旧帧渐隐 → 粒子自带彗尾 */
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = 'rgba(0,0,0,0.26)';
-    ctx.fillRect(0, 0, W, H);
-
-    /* 加法混合：光叠加光 */
-    ctx.globalCompositeOperation = 'lighter';
-
-    /* 心跳 */
-    let beatS = 1, beatGlow = 0;
-    if (elapsed >= T_BEAT) {
-      const bt = clamp01((elapsed - T_BEAT) / BEAT);
-      beatS = beatCurve(bt);
-      beatGlow = Math.max(0, beatS - 1) * 3.2;
+    /* 心跳（成形后两下） */
+    let beatS = 1;
+    if (t >= T_BEAT && t < T_ABSORB) {
+      const bt = clamp01((t - T_BEAT) / BEAT);
+      beatS = bt < 0.16 ? 1 + easeOutCubic(bt / 0.16) * 0.11
+        : bt < 0.34 ? 1.11 - easeInOutCubic((bt - 0.16) / 0.18) * 0.11
+        : bt < 0.5 ? 1 + easeOutCubic((bt - 0.34) / 0.16) * 0.055
+        : bt < 0.68 ? 1.055 - easeInOutCubic((bt - 0.5) / 0.18) * 0.055 : 1;
+      const glow = Math.max(0, beatS - 1);
+      if (glow > 0.001) {
+        const gs = heartW * (1.5 + glow * 1.6);
+        ctx.globalAlpha = Math.min(0.3, glow * 1.9);
+        ctx.drawImage(spriteRose, heartCx - gs / 2, heartCy - gs / 2, gs, gs);
+      }
+      if (!rippleFired[0] && bt >= 0.14) {
+        rippleFired[0] = true;
+        ripples.push({ t0: t, x: heartCx, y: heartCy, max: 110 });
+      }
+      if (!rippleFired[1] && bt >= 0.48) {
+        rippleFired[1] = true;
+        ripples.push({ t0: t, x: heartCx, y: heartCy, max: 96 });
+      }
+    }
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const rp = ripples[i];
+      const p = clamp01((t - rp.t0) / 650);
+      if (p >= 1) { ripples.splice(i, 1); continue; }
+      ctx.globalAlpha = 0.3 * (1 - p);
+      ctx.strokeStyle = 'rgba(244,114,160,0.9)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(rp.x, rp.y, 40 + p * rp.max, 0, Math.PI * 2);
+      ctx.stroke();
     }
 
-    /* 飞行 */
-    let flyT = 0;
-    if (elapsed >= T_FLY) flyT = clamp01((elapsed - T_FLY) / FLY);
-    const flyE = easeInOutCubic(flyT);
-    const gx = flyT > 0 ? bez(cx, cpX, endX, flyE) : cx;
-    const gy = flyT > 0 ? bez(cy, cpY, endY, flyE) : cy;
-    const gScale = flyT > 0 ? 1 - 0.82 * easeOutCubic(flyT) : 1; // 1 → 0.18
+    /* 吸收阶段：心整体飞向舞台桃心 */
+    const absorbT = clamp01((t - T_ABSORB) / ABSORB);
+    const absE = easeInOutCubic(absorbT);
+    const gx = absorbT > 0 ? bez(heartCx, absCx, stageX, absE) : heartCx;
+    const gy = absorbT > 0 ? bez(heartCy, absCy, stageY, absE) : heartCy;
+    const gScale = absorbT > 0 ? 1 - 0.8 * easeOutCubic(absorbT) : 1;
 
-    /* 心跳时的柔光晕（先画，垫底） */
-    if (beatGlow > 0 && flyT === 0) {
-      const hs = heartW * 1.5;
-      ctx.globalAlpha = Math.min(0.4, 0.16 * beatGlow);
-      ctx.drawImage(spriteRose, cx - hs / 2, cy - hs / 2, hs, hs);
+    if (absorbT >= 1 && !stageFired) {
+      stageFired = true;
+      if (onStageArrive) onStageArrive();
     }
 
     /* 粒子 */
-    const tSec = elapsed / 1000;
-    for (let i = 0; i < particles.length; i++) {
-      const p = particles[i];
-      const t = elapsed - T_LOOSEN - p.delay;
-      const e = t <= 0 ? 0 : clamp01(t / p.dur);
-      const ease = easeInOutCubic(e);
-
-      let bx, by;
-      if (flyT === 0) {
-        bx = p.x + (p.tx - p.x) * ease;
-        by = p.y + (p.ty - p.y) * ease;
+    for (const p of P) {
+      const born = T_ERODE + p.delay;
+      if (t < born) continue;
+      const e = clamp01((t - born) / p.dur);
+      let px;
+      let py;
+      if (absorbT === 0) {
+        const travel = easeInOutCubic(clamp01((e - 0.18) / 0.82));
+        px = p.x0 + p.drift + (p.tx - (p.x0 + p.drift)) * travel;
+        py = p.y0 - p.rise + (p.ty - (p.y0 - p.rise)) * travel;
+        const env = Math.sin(Math.PI * e);
+        const ang = Math.sin(px * 0.02 + t * 0.002 + p.phase) + Math.cos(py * 0.017 - t * 0.0016);
+        px += Math.cos(ang) * p.flow * env;
+        py += Math.sin(ang) * p.flow * env - 4 * env;
+        if (e >= 1) {
+          px += Math.sin(t * 0.003 + p.phase) * 0.6;
+          py += Math.cos(t * 0.0026 + p.phase) * 0.6;
+        }
+        px = heartCx + (px - heartCx) * beatS;
+        py = heartCy + (py - heartCy) * beatS;
       } else {
-        bx = gx + (p.tx - cx) * gScale;
-        by = gy + (p.ty - cy) * gScale;
+        px = gx + (p.tx - heartCx) * gScale;
+        py = gy + (p.ty - heartCy) * gScale;
       }
-
-      // 湍流偏移：起点为 0（字面完整），途中最大，抵达归零
-      const env = Math.sin(Math.PI * e);
-      const ang = flowAngle(bx, by, tSec + p.phase * 0.3);
-      const amp = p.flow * 26 * env * (flyT > 0 ? 0 : 1);
-      const ox = Math.cos(ang) * amp;
-      const oy = Math.sin(ang) * amp - 5 * env;
-
-      // 抵达后的微光闪烁（心是活的）
-      let shim = 0;
-      if (e >= 1 && flyT === 0) shim = Math.sin(tSec * p.tw * Math.PI + p.phase) * 0.8;
-
-      const px = bx + ox + shim * Math.cos(p.phase);
-      const py = by + oy + shim * Math.sin(p.phase);
-
-      // 透明度：入场渐显 → 飞行渐隐
-      let a = clamp01(elapsed / 220);
-      if (flyT > 0) a *= 1 - flyT * 0.92;
-
-      // 颜色进程：文字色 → 玫瑰（途中）→ 亮白（心跳/飞行）
-      const mix = clamp01(e * 1.1 + beatGlow * 0.25);
-
-      // 尺寸：途中胀大（气流感），飞行收缩
-      const s = p.size * (2.3 + 1.5 * env) * (1 - 0.45 * flyT);
-      const d = s * 6; // sprite 直径
-
-      if (mix < 0.5) {
-        ctx.globalAlpha = a * (1 - mix * 2);
-        ctx.drawImage(spriteText, px - d / 2, py - d / 2, d, d);
-        ctx.globalAlpha = a * (mix * 2);
-        ctx.drawImage(spriteRose, px - d / 2, py - d / 2, d, d);
-      } else {
-        ctx.globalAlpha = a * (1 - (mix - 0.5) * 2) * 0.92;
-        ctx.drawImage(spriteRose, px - d / 2, py - d / 2, d, d);
-        ctx.globalAlpha = a * ((mix - 0.5) * 2);
-        ctx.drawImage(spriteGlow, px - d / 2, py - d / 2, d, d);
-      }
+      let a = p.alpha * clamp01((t - born) / 160);
+      if (absorbT > 0) a *= 1 - absorbT * 0.9;
+      const d = p.size * 4.4 * (absorbT > 0 ? 1 - absorbT * 0.55 : 1);
+      ctx.globalAlpha = a;
+      ctx.drawImage(
+        p.white ? spriteWhite : (e > 0.6 || absorbT > 0 ? spriteRose : spriteRoseDim),
+        px - d / 2, py - d / 2, d, d,
+      );
     }
 
-    /* 飞行星尘尾迹 */
-    if (flyT > 0 && flyT < 1) {
-      if (sparkles.length < 36 && Math.random() < 0.7) {
-        sparkles.push({
-          x: gx + (Math.random() - 0.5) * heartW * gScale,
-          y: gy + (Math.random() - 0.5) * heartW * gScale * 0.9,
-          vx: (Math.random() - 0.5) * 10,
-          vy: (Math.random() - 0.5) * 10 - 6,
-          life: 1,
-        });
+    /* 通知弹窗淡出（光种即将起飞） */
+    if (t >= T_MODALFADE && !fadeFired) {
+      fadeFired = true;
+      if (onModalFade) onModalFade();
+    }
+
+    /* 光种二段飞行（玫瑰色：深浅底上都可见） */
+    if (t >= T_SEEDFLY) {
+      if (!seedFired) seedFired = true;
+      const st = clamp01((t - T_SEEDFLY) / SEEDFLY);
+      const se = easeInOutCubic(st);
+      const sx = bez(stageX, cpX, endX, se);
+      const sy = bez(stageY, cpY, endY, se);
+      const sd = 13 * (1 - st * 0.4);
+      ctx.globalAlpha = 0.95;
+      ctx.drawImage(spriteRose, sx - sd / 2, sy - sd / 2, sd, sd);
+      if (sparkles.length < 24 && Math.random() < 0.55) {
+        sparkles.push({ x: sx, y: sy, vx: (Math.random() - 0.5) * 14, vy: (Math.random() - 0.5) * 10 + 6, life: 1 });
       }
-      for (let i = sparkles.length - 1; i >= 0; i--) {
-        const sp = sparkles[i];
-        sp.life -= 0.032;
-        if (sp.life <= 0) { sparkles.splice(i, 1); continue; }
-        sp.x += sp.vx * 0.016;
-        sp.y += sp.vy * 0.016;
-        const sd = 5 * sp.life + 2;
-        ctx.globalAlpha = sp.life * 0.55;
-        ctx.drawImage(spriteGlow, sp.x - sd / 2, sp.y - sd / 2, sd, sd);
+      if (st >= 1 && !arriveFired) {
+        arriveFired = true;
+        if (onArrive) onArrive();
+        ripples.push({ t0: t, x: endX, y: endY, max: 120 });
+        spawnMiniHearts(endX, endY);
       }
+    }
+    for (let i = sparkles.length - 1; i >= 0; i--) {
+      const s = sparkles[i];
+      s.life -= 0.032;
+      if (s.life <= 0) { sparkles.splice(i, 1); continue; }
+      s.x += s.vx * 0.016;
+      s.y += s.vy * 0.016;
+      const d = 4.5 * s.life + 1.5;
+      ctx.globalAlpha = s.life * 0.6;
+      ctx.drawImage(spriteWhite, s.x - d / 2, s.y - d / 2, d, d);
     }
 
     ctx.globalAlpha = 1;
     requestAnimationFrame(frame);
   }
+
+  /* 迷你心飘散（结尾收束，DOM 浮层挂 body 不随弹窗消失） */
+  function spawnMiniHearts(x, y) {
+    for (let i = 0; i < 3; i++) {
+      const m = document.createElement('div');
+      m.className = 'mini-heart';
+      m.style.left = `${x - 9 + (i - 1) * 13}px`;
+      m.style.top = `${y - 10}px`;
+      m.style.setProperty('--mx', `${(i - 1) * 30}px`);
+      m.style.animationDelay = `${i * 0.12}s`;
+      m.innerHTML = '<svg viewBox="0 0 32 32" width="18" height="18"><path d="M16 28s-11-6.6-11-14.2C5 9.2 7.9 6.5 11.3 6.5c2 0 3.8 1 4.7 2.6.9-1.6 2.7-2.6 4.7-2.6C24.1 6.5 27 9.2 27 13.8 27 21.4 16 28 16 28z" fill="#f472a0"/></svg>';
+      document.body.appendChild(m);
+      setTimeout(() => m.remove(), 1300);
+    }
+  }
+
+  function cleanup() {
+    canvas.remove();
+    textEl.classList.remove('note-read__content--erode');
+    if (textEl.parentElement) textEl.parentElement.classList.remove('note-read--ceremony');
+    chars.forEach((c) => { c.style.opacity = ''; });
+  }
+
   requestAnimationFrame(frame);
 }

@@ -1827,6 +1827,15 @@ input {
   0%, 100% { opacity: 0.4; transform: scale(0.9); }
   50%      { opacity: 0.8; transform: scale(1.15); }
 }
+/* 首亮入场（P1-10）：铃铛从 hidden 现身时播一次缩放+强光晕，之后只留呼吸灯 */
+.note-bell--arrive {
+  animation: note-bell-arrive 0.45s var(--ease);
+}
+@keyframes note-bell-arrive {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
 .note-bell:hover { background: rgba(232, 132, 168, 0.1); }
 .note-bell:focus-visible {
   outline: 2px solid var(--rose-500);
@@ -2084,7 +2093,8 @@ input {
   align-items: center;
   justify-content: center;
   margin-bottom: 20px;
-  animation: note-seal-pulse 2s ease-in-out infinite;
+  /* 脉动只播 3 次（P1-11：静置阅读时不再永动喧宾夺主），之后靠常驻微光陪伴 */
+  animation: note-seal-pulse 2s ease-in-out 3;
 }
 @keyframes note-seal-pulse {
   0%,100% { transform: scale(1); }
@@ -2116,6 +2126,7 @@ input {
   margin: 20px 0 24px;
 }
 .note-read__dismiss {
+  position: relative; /* 进度环的定位上下文 */
   padding: 12px 36px;
   border: none;
   border-radius: 14px;
@@ -2129,49 +2140,95 @@ input {
 .note-read__dismiss:hover { filter: brightness(1.06); }
 .note-read__dismiss:active { transform: scale(0.98); }
 
-/* ===== 长按珍藏：克制版（仅留言文字慢慢通透发亮，余皆不动）===== */
-/* 按住时：按钮自身轻微压暗（安静的确认），留言文字柔柔发亮（像被珍视） */
+/* ===== 长按珍藏：充能感（逐字点亮 + 按钮进度环），满阈值进入仪式 ===== */
 .note-read__dismiss--pressing {
   background: var(--rose-600);
 }
-.note-read__content {
-  transition: text-shadow 0.6s ease-out;
+/* 进度环：按住时沿按钮外圈填满（circle pathLength=100，dashoffset 由 JS 按进度驱动） */
+.note-read__dismiss-ring {
+  position: absolute;
+  inset: -5px;
+  width: auto;
+  height: auto;
+  pointer-events: none;
 }
-.note-read--pressing .note-read__content {
-  text-shadow: 0 0 10px rgba(var(--color-primary-rgb), 0.45);
+.note-read__dismiss-ring circle {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.6));
 }
-/* 松手时：发光快速收回（利落放弃），覆盖上面的慢过渡 */
-.note-read:not(.note-read--pressing) .note-read__content {
-  transition: text-shadow 0.2s ease-out;
+/* 逐字点亮：长按进度由 JS 给前缀字符加 lit（墨色→玫瑰发光，像被逐字珍视） */
+.note-read__char {
+  transition: color 0.25s ease-out, text-shadow 0.25s ease-out, opacity 0.16s linear;
 }
-/* 星空氛围：文字本就浅色，发亮用暖白 */
-.note-read--night.note-read--pressing .note-read__content {
-  text-shadow: 0 0 12px rgba(243, 185, 205, 0.5);
+.note-read__char--lit {
+  color: var(--rose-600);
+  text-shadow: 0 0 12px rgba(244, 114, 160, 0.75), 0 0 3px rgba(255, 220, 232, 0.9);
+}
+.note-read--night .note-read__char--lit {
+  color: #ffe3ee;
+}
+/* 仪式透亮：溶解前整块文字先转玫瑰亮（两段式：先亮后散，消除「融化成黏块」） */
+.note-read__content--erode .note-read__char {
+  color: var(--rose-500) !important;
+  text-shadow: 0 0 14px rgba(244, 114, 160, 0.9);
 }
 @media (prefers-reduced-motion: reduce) {
-  .note-read--pressing .note-read__content { text-shadow: none; }
+  .note-read__char--lit,
+  .note-read__content--erode .note-read__char { text-shadow: none; }
 }
 
-/* ===== 珍藏仪式中：其余元素淡出让位，整卡成为文字化心的舞台 ===== */
-.note-read--cherishing { pointer-events: none; }
-.note-read--cherishing .note-read__seal,
-.note-read--cherishing .note-read__from,
-.note-read--cherishing .note-read__hint,
-.note-read--cherishing .note-read__dismiss {
+/* ===== 珍藏仪式中：暗场渐入 + 元素让位，整卡成为文字化心的舞台 ===== */
+.note-read--ceremony { pointer-events: none; }
+.note-read--ceremony .note-read__from,
+.note-read--ceremony .note-read__hint,
+.note-read--ceremony .note-read__dismiss {
   opacity: 0;
-  transition: opacity 0.6s var(--ease);
+  transition: opacity 0.5s var(--ease);
 }
-/* 灯光渐暗：仪式开始时卡片沉入暮色，让化心的光成为唯一主角
-   （浅色白天/晨光背景下，亮粒子会被洗掉——深色舞台保证任何时段都出彩） */
-.note-read--cherishing::before {
+/* 内容盒退场（只留被点亮的字，舞台归粒子） */
+.note-read--ceremony .note-read__content {
+  background: transparent;
+  box-shadow: none;
+  transition: background 0.55s var(--ease), box-shadow 0.55s var(--ease);
+}
+/* 印章桃心：仪式中先淡出让位；被心吸收时重新现身「咚-咚」接收（第一收点，弹窗内可见） */
+.note-read--ceremony .note-read__seal {
+  opacity: 0;
+  transition: opacity 0.5s var(--ease);
+}
+.note-read--ceremony .note-read__seal--receive {
+  opacity: 1;
+  transition: opacity 0.3s var(--ease);
+  animation: stage-receive 0.85s var(--ease);
+}
+@keyframes stage-receive {
+  0% { transform: scale(1); box-shadow: 0 0 0 6px rgba(236, 95, 146, 0.1); }
+  25% { transform: scale(1.28); box-shadow: 0 0 34px 12px rgba(244, 114, 160, 0.55), 0 0 0 6px rgba(236, 95, 146, 0.2); }
+  45% { transform: scale(1.04); }
+  62% { transform: scale(1.18); box-shadow: 0 0 26px 8px rgba(244, 114, 160, 0.45); }
+  100% { transform: scale(1); }
+}
+/* 灯光渐暗（渐入，不再一帧闪黑）：卡片沉入暮色，让化心的光成为唯一主角。
+   半透明径向深场：中心压暗保证亮粒子出彩，边缘留出口透出当前时段的氛围色 */
+.note-read::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: radial-gradient(ellipse at 50% 45%, rgba(30, 27, 75, 0.42) 0%, rgba(24, 20, 60, 0.62) 100%);
-  opacity: 1;
-  transition: opacity 0.8s var(--ease);
+  background: radial-gradient(ellipse at 50% 45%, rgba(30, 27, 75, 0.52) 0%, rgba(24, 20, 60, 0.38) 100%);
+  opacity: 0;
+  transition: opacity 0.45s var(--ease);
   pointer-events: none;
+}
+.note-read--ceremony::before {
+  opacity: 1;
 }
 
 /* ===== 阅读态时段氛围（按留言写下时的时段切换）===== */
@@ -2225,13 +2282,13 @@ input {
 
 /* ===== 留言飞向桃心：爱意送达/珍藏的视觉隐喻 ===== */
 
-/* 阅读卡片 / 写信卡片 收缩淡出（光点飞离的同时） */
+/* 阅读卡片 / 写信卡片 收缩淡出（光点飞离的同时）
+   P1-12：去 blur（毛玻璃是旧过渡语言），收拢幅度减半与新入场（scale 0.96→1）呼应 */
 .note-read--leaving,
 .note-write--leaving {
   opacity: 0 !important;
-  transform: scale(0.94) !important;
-  filter: blur(2px);
-  transition: opacity 0.5s var(--ease), transform 0.5s var(--ease), filter 0.5s var(--ease) !important;
+  transform: scale(0.975) !important;
+  transition: opacity 0.5s var(--ease), transform 0.5s var(--ease) !important;
 }
 
 /* 飞行光点（rose 柔光小球，绝不硬边） */
@@ -2248,9 +2305,10 @@ input {
   z-index: 300;
   margin: 0;
 }
-/* 飞行中：从起点沿弧线飞向桃心（贝塞尔感：先上扬再收拢） */
+/* 飞行中：从起点沿弧线飞向桃心（贝塞尔感：先上扬再收拢）。
+   0.95s 与 messages.js 的两段收点时序对齐（620ms 关弹窗、950ms 到达接收） */
 .fly-dot--flying {
-  animation: fly-to-heart 0.7s var(--ease) forwards;
+  animation: fly-to-heart 0.95s var(--ease) forwards;
 }
 @keyframes fly-to-heart {
   0% {
@@ -2283,10 +2341,25 @@ input {
   100% { transform: scale(1); }
 }
 
+/* 迷你心飘散（珍藏仪式结尾收束，挂 body 不随弹窗消失） */
+.mini-heart {
+  position: fixed;
+  z-index: 310;
+  pointer-events: none;
+  animation: mini-heart-float 1s ease-out forwards;
+}
+@keyframes mini-heart-float {
+  0%   { transform: translate(0, 0) scale(0.5); opacity: 0; }
+  16%  { opacity: 1; }
+  100% { transform: translate(var(--mx, 0px), -92px) scale(1.1); opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .note-read--leaving, .note-write--leaving { transform: none !important; filter: none; }
+  .note-read--leaving, .note-write--leaving { transform: none !important; }
   .fly-dot--flying { animation: none; opacity: 0; }
   .topbar__heart--receive { animation: none; }
+  .note-bell--arrive, .mini-heart, .note-read--ceremony .note-read__seal--receive { animation: none; }
+  .note-read::before { transition: none; }
 }
 
 /* ===== 纪念日面板里的写入口（不违和的小图标） ===== */
