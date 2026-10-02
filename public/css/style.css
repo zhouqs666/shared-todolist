@@ -1137,7 +1137,7 @@ input {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.28s var(--ease), transform 0.28s var(--ease);
-  z-index: 10000; /* 高于一切弹层（图鉴 1000 / lightbox 9999），弹层内反馈不被遮挡 */
+  z-index: 11000; /* 高于一切弹层（含 2026-10-02 起 10000 的 action sheet），弹层内反馈不被遮挡 */
   /* ⚠️ width 必须显式给 max-content（2026-09-18 修）：本元素是 left:50% 而 right:auto 的绝对定位，
      宽度按 shrink-to-fit 算时**可用宽 = 包含块 − left = 50vw**，于是写在这里的 max-width 从来没
      生效过 —— 实测 360/390/412 三档视口的提示宽度恰好是 180/195/206px（即 50vw）。症状是「完成
@@ -1439,7 +1439,11 @@ input {
 .action-sheet__overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  /* 10000（2026-10-02）：sheet 曾是 200，那时弹的只有"从卡片/头像发起"的菜单，没遮挡问题；
+     图源二级选择（拍照/从相册选）上线后，lightbox（9999）里的「配图」也会弹本 sheet ——
+     DOM 弹层必须盖过 lightbox 才可见（旧实现弹系统选图器，是原生 UI，不受 z-index 约束）。
+     toast 在 11000，仍保证"弹层内反馈不被遮挡"。 */
+  z-index: 10000;
   background: rgba(0, 0, 0, 0);
   display: flex;
   align-items: flex-end;
@@ -4023,7 +4027,10 @@ input {
 .toast__action:active { background: rgba(255, 255, 255, 0.32); }
 
 /* ===== 账号菜单（头像长按：回收站 + 退出登录） ===== */
-.account-menu {
+/* 图源选择菜单（添加图片二级选择：拍照/从相册选）与账号菜单共用同一组行样式 ——
+   视觉保持一致，规则写一份。.img-src-menu 由 action-sheet.js 的 showImageSourceChooser 使用。 */
+.account-menu,
+.img-src-menu {
   background: var(--color-surface);
   padding: 8px 12px;
   border-top: 1px solid rgba(243, 185, 205, 0.18);
@@ -4031,7 +4038,8 @@ input {
   flex-direction: column;
   gap: 4px;
 }
-.account-menu__item {
+.account-menu__item,
+.img-src-menu__item {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -4047,14 +4055,18 @@ input {
   transition: background 0.15s var(--ease);
 }
 .account-menu__item:hover,
-.account-menu__item:active { background: rgba(255, 241, 242, 0.9); }
-.account-menu__icon {
+.account-menu__item:active,
+.img-src-menu__item:hover,
+.img-src-menu__item:active { background: rgba(255, 241, 242, 0.9); }
+.account-menu__icon,
+.img-src-menu__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--color-text-muted);
 }
-.account-menu__icon svg { width: 22px; height: 22px; }
+.account-menu__icon svg,
+.img-src-menu__icon svg { width: 22px; height: 22px; }
 .account-menu__item--danger { color: var(--rose-500); }
 .account-menu__item--danger .account-menu__icon { color: var(--rose-500); }
 

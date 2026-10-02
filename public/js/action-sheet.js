@@ -1,11 +1,13 @@
 /**
- * 通用底部 action sheet（待办操作菜单 + 退出确认）
+ * 通用底部 action sheet（待办操作菜单 + 图源选择 + 退出/账号菜单）
  *
  * 从 app.js 拆出（技术清单第8条：app.js 过长）。本模块负责：
  *   - ICONS：菜单按钮用的 SVG 图标集
  *   - mkIconBtn：构造纯图标按钮的工具
  *   - showTodoMenu / closeTodoMenu：待办操作菜单（编辑/备注/表情/配图/删除）
+ *   - showImageSourceChooser / closeImageSourceChooser：添加图片的二级选择（拍照/从相册选）
  *   - showLogoutConfirm / closeLogoutConfirm：退出登录确认条
+ *   - showAccountMenu / closeAccountMenu：账号菜单（回收站 + 退出登录）
  *   - bindLongPressLogout：头像长按 800ms 触发退出确认（移动端长按 / 桌面端右键兜底）
  *
  * 依赖注入：
@@ -43,6 +45,8 @@ export const ICONS = {
   unpin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 11l-4 4h14l-4-4"/><path d="M15 3.5a2 2 0 0 1 2 2V9l-5 5-5-5V5.5a2 2 0 0 1 2-2h6z"/><line x1="3" y1="3" x2="21" y2="21" stroke-width="2.5"/></svg>',
   // 提醒：铃铛（到点提醒入口，长按菜单）
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+  // 拍照：相机（图源二级选择的"拍照"项）
+  camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7.4 6.5a1 1 0 0 1-.83.44H4a2 2 0 0 0-2 2V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8.94a2 2 0 0 0-2-2h-2.57a1 1 0 0 1-.83-.44L14.5 4z"/><circle cx="12" cy="13" r="3.2"/></svg>',
 };
 
 /** 构造一个图标按钮（纯图标，无文案） */
@@ -359,6 +363,78 @@ export function closeAccountMenu() {
   if (!currentAccountSheet) return;
   const el = currentAccountSheet;
   currentAccountSheet = null;
+  el.classList.remove('action-sheet__overlay--show');
+  setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 250);
+}
+
+// ===== 图源选择（添加图片的二级选择：拍照 / 从相册选）=====
+// 入口（2026-10-02）：添加面板的图片按钮 + 长按菜单/lightbox 的「配图」。
+// 两处共用：先在本 sheet 选来源，再由调用方拉起系统相机（pickImageFromCamera）
+// 或系统选图器（pickImage / pickImages）——取图与上传逻辑不进本模块。
+let currentImgSrcSheet = null;
+
+/**
+ * 显示图源选择 action sheet（列表行样式与账号菜单共用 .img-src-menu 规则组）。
+ * @param {Object} handlers 回调：{ onCamera, onGallery }
+ * @param {()=>void} [handlers.onCamera] 选「拍照」
+ * @param {()=>void} [handlers.onGallery] 选「从相册选」
+ */
+export function showImageSourceChooser(handlers = {}) {
+  closeImageSourceChooser();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'action-sheet__overlay';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeImageSourceChooser(); });
+
+  const sheet = document.createElement('div');
+  sheet.className = 'action-sheet';
+  sheet.setAttribute('role', 'menu');
+  sheet.setAttribute('aria-label', '选择图片来源');
+
+  const preview = document.createElement('div');
+  preview.className = 'action-sheet__preview';
+  preview.textContent = '添加图片';
+  sheet.appendChild(preview);
+
+  const list = document.createElement('div');
+  list.className = 'img-src-menu';
+
+  const mkItem = (icon, label, onClick) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'img-src-menu__item';
+    btn.innerHTML = '<span class="img-src-menu__icon">' + icon + '</span><span class="img-src-menu__label">' + label + '</span>';
+    btn.addEventListener('click', () => {
+      if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+      closeImageSourceChooser();
+      onClick();
+    });
+    list.appendChild(btn);
+  };
+
+  mkItem(ICONS.camera, '拍照', () => { if (handlers.onCamera) handlers.onCamera(); });
+  mkItem(ICONS.image, '从相册选', () => { if (handlers.onGallery) handlers.onGallery(); });
+
+  sheet.appendChild(list);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'action-sheet__close';
+  closeBtn.textContent = '取消';
+  closeBtn.addEventListener('click', closeImageSourceChooser);
+  sheet.appendChild(closeBtn);
+
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('action-sheet__overlay--show'));
+  currentImgSrcSheet = overlay;
+}
+
+/** 关闭图源选择 sheet */
+export function closeImageSourceChooser() {
+  if (!currentImgSrcSheet) return;
+  const el = currentImgSrcSheet;
+  currentImgSrcSheet = null;
   el.classList.remove('action-sheet__overlay--show');
   setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 250);
 }

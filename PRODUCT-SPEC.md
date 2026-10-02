@@ -324,9 +324,11 @@
 | 项 | 规格 |
 |----|------|
 | 数量 | 单条待办支持**多图**（`image_paths` JSONB 数组） |
+| 来源 | **图源二级选择**（2026-10-02）：点添加面板的图片按钮或长按菜单「配图」，先弹「拍照 / 从相册选」再取图，两个来源走同一条压缩/上传链路 |
+| 拍照 | `<input type=file accept=image/* capture=environment>` 拉起**系统相机**（PWA 与 APK 通用，无需相机权限）；桌面浏览器忽略 capture 退化为普通选图。capture 必须用 `setAttribute` 写 content attribute（IDL 属性赋值在 Chromium 不反映，WebView 判定失败会静默变成选图） |
 | 上传压缩 | 短边 ≤ 1280 直传原图；> 1280 等比缩至短边 1280；PNG 无损，其余转 JPEG（质量 0.92）；webp/gif 原样上传 |
 | 存储 | Supabase Storage 公开 bucket `todo-attachments` |
-| 预览 | 缩略图列表 → 点击全屏 lightbox |
+| 预览 | 添加面板选图后浮现缩略图预览（可 × 取消）；已配待办显示相纸徽标 → 点击全屏 lightbox |
 | 全屏能力 | 横滑切图、双指缩放（≤4×）、双击放大、放大态拖拽、长图纵向拖动、单击关闭 |
 | 删除 | **两段式确认**（首次点击提示"再点一次确认删除"，3 秒内二次点击生效） |
 
