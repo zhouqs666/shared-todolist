@@ -47,9 +47,10 @@ let dismissTextEl = null; // "阅/下一条" 文案节点
 
 // ===== 长按珍藏状态 =====
 const PRESS_DURATION = 600; // 长按阈值（ms），超过即珍藏
-let pressTimer = null;
+let pressTimer = null;      // 充能循环 rAF 句柄
 let isPressing = false;
 let pressDismissed = false; // 防止 click 在长按成功后又触发
+let pressStart = 0;         // 本次按下的起点（充能进度用）
 
 // ===== 草稿（按天 localStorage，关闭保留、发送清除）=====
 let draftTimer = null;
@@ -122,13 +123,14 @@ export async function initMessages({ currentUser: user, userMap: map }) {
   // "阅/下一条"：最后一条长按珍藏，多条时点按翻页（长按手势在下方单独绑定）
   document.getElementById('noteDismiss').addEventListener('click', onDismiss);
 
-  // 点遮罩关闭
+  // 点遮罩关闭（仪式进行中禁止：readPane pointer-events:none 时长按抬起的 click 会穿透到遮罩，
+  // 误关弹窗会把第一收点（印章桃心在弹窗里）吞掉 —— 2026-10-03 实测踩过）
   modalEl.addEventListener('click', (e) => {
-    if (e.target === modalEl) closeModal();
+    if (e.target === modalEl && !ceremonyRunning) closeModal();
   });
-  // ESC 关闭
+  // ESC 关闭（同上，仪式中不响应）
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !modalEl.hidden) closeModal();
+    if (e.key === 'Escape' && !modalEl.hidden && !ceremonyRunning) closeModal();
   });
 
   // 拉取留言（逐条保留，按时间正序）
@@ -184,12 +186,18 @@ function refreshBell() {
   if (!bellEl) return;
   const incoming = getIncomingNotes();
   if (incoming.length > 0) {
+    const wasHidden = bellEl.hidden; // 首亮才播入场（重复刷新不重播）
     bellEl.hidden = false;
     bellEl.classList.add('note-bell--glow');
+    if (wasHidden) {
+      bellEl.classList.remove('note-bell--arrive');
+      void bellEl.offsetWidth; // 强制 reflow 重启动画
+      bellEl.classList.add('note-bell--arrive');
+    }
     bellEl.setAttribute('aria-label', `ta 给你留了 ${incoming.length} 条话`);
   } else {
     bellEl.hidden = true;
-    bellEl.classList.remove('note-bell--glow');
+    bellEl.classList.remove('note-bell--glow', 'note-bell--arrive');
   }
 }
 
@@ -252,7 +260,16 @@ async function submitNote() {
   // 送达回响：按钮原位淡入一句温柔的话
   showEcho();
   writePane.classList.add('note-write--leaving');
-  flyToHeart(sendBtn); // 光点飞向桃心（爱意送达），无需 done 回调
+  flyToHeart(sendBtn); // 光点 950ms 后入顶栏跳动（接收可见）
+  // 两段收点编排（P1-8）**与网络解耦**：620ms 关弹窗（300ms 淡出）→ 950ms 光点入顶栏接收。
+  // 曾经这两步排在 await db.sendNote 之后 —— 网络一慢，接收跳动就又落回弹窗未关的时段
+  // （2026-10-03 E2E 实测：heartAdd 2242ms 早于 modalHidden 2783ms，语义被破坏）
+  const animClose = setTimeout(() => { hideEcho(); closeModal(); }, 620);
+  const animReset = setTimeout(() => {
+    writePane.hidden = true;
+    writePane.classList.remove('note-write--leaving');
+    sendBtn.classList.remove('note-write__send--gone');
+  }, 1050);
 
   try {
     const note = await db.sendNote(content, currentUser.id);
@@ -261,15 +278,10 @@ async function submitNote() {
     notes.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     refreshBell(); // 自己发的不会亮铃铛
     clearDraft(); // 发送成功：清当天草稿
-    // 发送成功：等光点飞完（约700ms）再关闭，保证动画完整
-    await new Promise((r) => setTimeout(r, 700));
-    writePane.hidden = true;
-    writePane.classList.remove('note-write--leaving');
-    sendBtn.classList.remove('note-write__send--gone');
-    hideEcho();
-    closeModal();
   } catch (err) {
-    // 失败：恢复按钮和卡片
+    // 失败：撤销动画收尾（弹窗别关），恢复按钮和卡片
+    clearTimeout(animClose);
+    clearTimeout(animReset);
     sendBtn.classList.remove('note-write__send--gone');
     writePane.classList.remove('note-write--leaving');
     hideEcho();
@@ -295,6 +307,8 @@ function hideEcho() {
 
 /** 当前正在阅读的那条留言（阅后即焚时用它定位删除） */
 let readingNote = null;
+/** 珍藏仪式进行中 —— 此间禁止遮罩/ESC 关弹窗（否则收点被弹窗淡出吞掉，2026-10-03 实测） */
+let ceremonyRunning = false;
 
 // ===== 阅读态（阅后即焚，逐条）=====
 
@@ -317,7 +331,17 @@ function openReadMode(note) {
       ? `${author.displayName} 悄悄对你说 · 还有 ${remaining} 条`
       : `${author.displayName} 悄悄对你说`;
   }
-  if (contentEl) contentEl.textContent = note.content; // textContent 防注入
+  if (contentEl) {
+    // 逐字 span：长按充能逐字点亮 + 仪式逐字溶解都按字粒度驱动（textContent 整块做不到）。
+    // 防注入不变：每个 span 只吃 textContent，不拼 HTML。
+    contentEl.textContent = '';
+    for (const ch of note.content) {
+      const s = document.createElement('span');
+      s.className = 'note-read__char';
+      s.textContent = ch;
+      contentEl.appendChild(s);
+    }
+  }
   // 按钮文案：还有下一条时显示「下一条」（点按翻页），最后一条显示「阅」（长按珍藏）
   // 只更新文案子节点，避免抹掉进度环结构
   const isLast = remaining === 0;
@@ -347,7 +371,8 @@ function moodForNote(note) {
 
 /**
  * 绑定"阅/下一条"手势：
- *   - 最后一条（isLast）：pointerdown 长按 600ms 才珍藏，进度环填满；松开取消回退
+ *   - 最后一条（isLast）：pointerdown 长按 600ms 才珍藏；按住期间逐字点亮 + 进度环填满，
+ *     松手取消回退（字暗回、环归零）
  *   - 多条：click 即翻页
  * 每次打开重绑（先移除旧监听），避免上一条的 handler 残留。
  */
@@ -361,27 +386,33 @@ function bindDismissGesture(isLast) {
   dismissBtn.onpointercancel = null;
 
   if (isLast) {
-    // 长按珍藏（克制版：按住时留言文字柔柔发亮，按钮压暗；满阈值直接化光飞向桃心）
+    // 长按珍藏：充能感 = 文字随进度逐字点亮 + 按钮进度环；满阈值进入仪式
     dismissBtn.onpointerdown = () => {
       isPressing = true;
       pressDismissed = false;
-      readPane.classList.add('note-read--pressing');
+      pressStart = performance.now();
       dismissBtn.classList.add('note-read__dismiss--pressing');
-      clearTimeout(pressTimer);
-      pressTimer = setTimeout(() => {
-        if (isPressing) {
-          pressDismissed = true; // 长按成功，抑制后续 click
-          readPane.classList.remove('note-read--pressing');
-          dismissBtn.classList.remove('note-read__dismiss--pressing');
-          onCherish(); // 化光飞向桃心 + 即焚
+      cancelAnimationFrame(pressTimer);
+      const step = () => {
+        if (!isPressing) return;
+        const p = Math.min(1, (performance.now() - pressStart) / PRESS_DURATION);
+        updateCharge(p);
+        if (p < 1) {
+          pressTimer = requestAnimationFrame(step);
+          return;
         }
-      }, PRESS_DURATION);
+        pressDismissed = true; // 长按成功，抑制后续 click
+        dismissBtn.classList.remove('note-read__dismiss--pressing');
+        onCherish(); // 仪式开始：文字透亮 → 逐字溶解 → 化心 → 两段飞行
+      };
+      pressTimer = requestAnimationFrame(step);
     };
     const release = () => {
+      if (!isPressing) return;
       isPressing = false;
-      clearTimeout(pressTimer);
-      readPane.classList.remove('note-read--pressing');
+      cancelAnimationFrame(pressTimer);
       dismissBtn.classList.remove('note-read__dismiss--pressing');
+      resetCharge(); // 松手回退：字暗回去、环归零（利落放弃）
     };
     dismissBtn.onpointerup = release;
     dismissBtn.onpointerleave = release;
@@ -391,11 +422,25 @@ function bindDismissGesture(isLast) {
   // 最后一条时若长按已成功（pressDismissed），onDismiss 里会跳过。
 }
 
+/** 充能可视化：逐字点亮（左→右）+ 按钮进度环（progress 0-1） */
+function updateCharge(progress) {
+  if (contentEl) {
+    const chars = contentEl.querySelectorAll('.note-read__char');
+    const lit = progress * chars.length;
+    chars.forEach((c, i) => c.classList.toggle('note-read__char--lit', i < lit));
+  }
+  const circle = dismissBtn && dismissBtn.querySelector('.note-read__dismiss-ring circle');
+  if (circle) circle.style.strokeDashoffset = String(100 - progress * 100);
+}
+function resetCharge() {
+  updateCharge(0);
+}
+
 function clearPress() {
-  clearTimeout(pressTimer);
+  cancelAnimationFrame(pressTimer);
   isPressing = false;
-  if (readPane) readPane.classList.remove('note-read--pressing');
   if (dismissBtn) dismissBtn.classList.remove('note-read__dismiss--pressing');
+  if (contentEl && dismissBtn) resetCharge();
 }
 
 /** 「阅/下一条」点击：多条翻页；最后一条由长按珍藏触发，长按成功后跳过此次 click */
@@ -434,19 +479,30 @@ function flipToNext() {
   }
 }
 
-/** 长按珍藏（最后一条）：留言文字化作心形飞向桃心，结束后即焚 */
+/**
+ * 长按珍藏（最后一条）：珍藏仪式 v2 —— 逐字溶解化心 → 心被卡内印章桃心吸收（第一收点，
+ * 弹窗仍可见）→ 弹窗淡出 → 光种二段飞顶栏桃心（第二收点）→ 即焚。
+ * 两段收点全程可见（v1 的终点在弹窗遮挡处、接收跳动没人看得见，是实测最大缺陷）。
+ */
 function onCherish() {
   if (!readingNote) { closeModal(); return; }
   const current = readingNote;
   readingNote = null;
 
-  // 珍藏仪式：卡片其余元素淡出让位，整张卡片成为文字化心的舞台
-  readPane.classList.add('note-read--cherishing');
+  const stageEl = readPane ? readPane.querySelector('.note-read__seal') : null;
+  ceremonyRunning = true;
   textToHeart({
     textEl: contentEl,
+    stageEl,
     heartEl: document.getElementById('anniHeart'),
-    onArrive: pulseHeart, // 心到达顶栏桃心时触发接收跳动
+    onStageArrive: () => {
+      // 第一收点：印章桃心现身「咚-咚」接收（其余元素已在仪式中淡出让位）
+      if (stageEl) stageEl.classList.add('note-read__seal--receive');
+    },
+    onModalFade: closeModal, // 光种即将起飞：弹窗淡出，露出顶栏 = 第二收点可见
+    onArrive: pulseHeart,    // 第二收点：顶栏桃心接收跳动
     done: () => {
+      ceremonyRunning = false;
       // 仪式结束：本地移除 + 后台删库（即焚）
       notes = notes.filter((n) => n.id !== current.id);
       refreshBell();
@@ -454,9 +510,9 @@ function onCherish() {
         .then(() => db.deleteNote(current.id))
         .catch((err) => console.error('[messages] 阅后即焚失败:', err));
 
-      readPane.classList.remove('note-read--cherishing');
-      readPane.hidden = true;
-      closeModal();
+      if (stageEl) stageEl.classList.remove('note-read__seal--receive');
+      if (readPane) readPane.hidden = true;
+      closeModal(); // 幂等兜底（onModalFade 已关时无副作用）
     },
   });
 }
@@ -518,14 +574,13 @@ function flyToHeart(fromEl, done) {
     dot.style.setProperty('--end-y', (endY - startY) + 'px');
   });
 
-  // 飞行途中（中段）让桃心准备接收；飞行结束触发接收跳动 + 清理
-  setTimeout(() => {
-    pulseHeart();
-  }, 450);
+  // 到达时刻（950ms）才触发接收跳动：此时弹窗已淡出（620ms 起关 + 300ms 过渡），
+  // 跳动不再被弹窗遮住 —— P1-8 修的就是「接收动作没人看见」
   setTimeout(() => {
     if (dot.parentNode) dot.remove();
+    pulseHeart();
     if (done) done();
-  }, 700);
+  }, 950);
 }
 
 /** 桃心接收跳动（爱意送达/珍藏，轻跳一下即停） */
