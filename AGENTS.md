@@ -594,6 +594,12 @@ render、撤开屏全部不执行。**浏览器里 `isNative=false` 返回 null�
   ⚠️ 取 SHA：`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`（`type=tag` 时再解一层 `git/tags/<sha>`）
 - **本地服务**：`node scripts/serve.mjs`（端口 3000，**生产库**，仅手动自测）／`node scripts/serve-test.mjs`（端口 3100，**测试库**，跑 E2E 必须用这个）
 - **测试库维护**：`node scripts/reset-test-db.mjs`（归零，硬删 web 通道 E2E 残留 + 贴纸）／`node scripts/check-test-env.mjs`（隔离自检）／`node app-e2e/scripts/check-test-schema.mjs`（schema 契约）／`node app-e2e/scripts/check-rls.mjs`（RLS 生效自检）
+- **SQL 自动应用（2026-10-02 起，告别 Dashboard 手工粘贴）**：`node scripts/apply-sql.mjs supabase/xxx.sql --project test --apply` ——
+  走 Management API（`/v1/projects/{ref}/database/query`）把 supabase/*.sql 幂等迁移打到指定项目；
+  默认 dry-run、写生产需 `--confirm <文件名>`、应用后自动**再跑第二遍做幂等自证**、`--query` 提供 read_only 只读探针。
+  凭据是**作用域受限 PAT**（`.env` 的 `SUPABASE_ACCESS_TOKEN`，sbp_fc_ 开头，只勾两项目 Database 读写）；
+  setup 与安全设计见脚本头部注释。⚠️ 端点官方标注 experimental/Beta（CLI `db query --linked` 底层同源）；
+  ⚠️ PAT 是账号级资产：绝不入库/入日志，怀疑泄露即 Dashboard 撤销重发（换 .env 一行）
 - **Web E2E 跑批**：`node scripts/run-web-e2e.mjs`（逐个归零 + 失败重试一次 + flaky 显式标记 + Run Summary；`--files` / `--keep-data` / `--no-retry` / `--fail-on-flaky`）；
   依赖钉在 `scripts/requirements-e2e.txt`（Python playwright，CI 与本地同版本）
 - **结构性检查（CI required job 里跑，都是纯静态、秒级失败）**：`check-test-guards.mjs`（只读守卫）／
