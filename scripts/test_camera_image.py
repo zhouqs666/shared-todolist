@@ -13,13 +13,12 @@
   3. 长按菜单「配图」→ 拍照：大图（短边>1280）走 canvas 压缩 → 已配图 → 卡片带图徽标
   4. 长按菜单「配图」→ 从相册选：多选 2 张 → 「已配 2 张图」→ 多图回归
 
-⚠️ Storage 上传为什么 mock（2026-10-02 定性，不是偷懒）：
-  本用例钉的是 **App 代码契约**（chooser → capture → 压缩 → 上传请求 → 落库 → 徽标）。
-  测试项目 Storage 至今没配 todo-attachments 策略（图片功能当年没有 web E2E，测试库
-  只建过表没建过 Storage），策略是 DDL，只能 Dashboard 人工执行（bucket 已由脚本用
-  service key 补上）。在补齐之前，真实上传在这套环境必然 403 —— 那是环境缺口不是
-  代码回归，mock 掉 HTTP 响应后，请求本身（URL/方法/压缩后的 blob）仍是真实的。
-  待测试库策略补齐后可去掉 mock 换真实上传。
+⚠️ Storage 上传（2026-10-02 起为**真实上传**，mock 已拆）：
+  用例初期曾对 storage 上传响应做 mock——当时测试项目缺 todo-attachments bucket/策略
+  （历史环境缺口）。缺口已用 scripts/apply-sql.mjs 应用迁移补齐（幂等自证 + read_only
+  探针回读 + 真实上传验收三重确认），本用例现在走**真实压缩 → 真实上传 → 真实落库**。
+  若测试库 Storage 再漂移，本用例会以「徽标不出现」真实红 —— 这是期望行为：环境缺口
+  应该被看见，而不是被 mock 洗绿。
 
 ⚠️ 硬限制（Playwright 无法覆盖，发布后真机冒烟验证）：
   真机拉起系统相机、拍照内容回传、前后置切换等系统行为。
@@ -28,7 +27,6 @@
     node scripts/serve-test.mjs          # :3100 独立测试库
     python3 scripts/test_camera_image.py # 本文件自动连 3100 + 自证隔离
 """
-import json
 import os
 import struct
 import sys
@@ -94,16 +92,15 @@ with sync_playwright() as p:
     page.on("console", lambda m: errors.append(f"[{m.type}] {m.text}") if m.type == "error" else None)
     page.on("pageerror", lambda e: errors.append(f"[pageerror] {e}"))
 
-    # Storage 上传 mock（原因见文件头 docstring）：拦 todo-attachments 的上传/删除请求，
-    # 回 200 让 supabase-js 正常解析。请求本身（URL、方法、压缩后的 blob）是真实发出的。
+    # Storage 上传走真实链路（见文件头 docstring）：测试项目的 todo-attachments
+    # bucket/策略已配齐；本计数器只作旁证统计，不做 mock。
     upload_hits = []
 
-    def _mock_storage(route):
+    def _count_storage(route):
         upload_hits.append(route.request.method)
-        route.fulfill(status=200, content_type="application/json",
-                      body=json.dumps({"Key": "todo-attachments/e2e-mock"}))
+        route.continue_()
 
-    page.route("**/storage/v1/object/todo-attachments/**", _mock_storage)
+    page.route("**/storage/v1/object/todo-attachments/**", _count_storage)
 
     # 测试图：/tmp 落盘（filechooser.set_files 只收路径）
     img_small = "/tmp/e2e-cam-small.png"
@@ -201,7 +198,7 @@ with sync_playwright() as p:
     ))
 
     print("== 6. 上传请求统计 + 页面报错检查 ==", flush=True)
-    # 预挂图 2 次 + 菜单拍照 1 次 + 菜单单选 2 次 = 5 个上传请求（全部走真实 fetch，仅响应被 mock）
+    # 预挂图 2 次 + 菜单拍照 1 次 + 菜单单选 2 次 = 5 个真实上传请求（旁证计数）
     check("storage 上传请求已发出 5 次", len(upload_hits) == 5, f"实际 {upload_hits}")
     real = [e for e in errors if "Failed to fetch" not in e and "net::" not in e and "favicon" not in e]
     check("无模块级报错", len(real) == 0, f"错误数 {len(real)}")
