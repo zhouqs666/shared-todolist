@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>珍藏仪式动画 · 重设计原型（新版 vs 旧版）</title>
+<!--
+  「有爱」心里话 · 长按珍藏仪式 动画重设计原型
+  ================================================
+  用途：编码前先看效果。纯静态自包含页面，双击即可打开（无需服务器）。
+
+  怎么玩：
+    1. 在手机框里的「长按珍藏」按钮上【真实长按 600ms】→ 播放新版动画
+    2. 右侧控制台「▶ 旧版动画」→ 原样移植的现有线上动画（诚实对比）
+    3. 「▶ 新版动画」→ 免长按直接播放新版
+    4. 可切换留言文本 / 时段氛围 / 0.5× 慢速逐帧审视
+
+  新版对应升级清单：#1 两段飞行（落点全程可见）#2 治过曝 #3 心形剪影
+                    #4 逐字溶解 #5 长按充能（进度环+逐字点亮）#6 结尾收束
+                    #7 统一暮色深场 + 时段氛围边光
+-->
+<style>
+  :root {
+    --rose-50: #fff1f4; --rose-100: #ffe4eb; --rose-400: #f472a0; --rose-500: #ec5f92;
+    --rose-600: #e0517f; --rose-700: #c2426c;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #17141f;
+    background-image: radial-gradient(ellipse at 50% -10%, #2a2438 0%, #17141f 55%);
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    gap: 28px; padding: 24px;
+    font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    overflow: auto;
+  }
+
+  /* ===== 手机框 ===== */
+  .phone-wrap { flex-shrink: 0; }
+  .phone {
+    width: 390px; height: 844px;
+    border-radius: 44px;
+    border: 10px solid #0c0a12;
+    outline: 1px solid rgba(255,255,255,0.09);
+    overflow: hidden;
+    position: relative;
+    background: #fff;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.55);
+    transform-origin: center;
+  }
+  .phone * { -webkit-tap-highlight-color: transparent; }
+
+  /* ===== 顶栏（还原 App 结构：桃心在左上角）===== */
+  .topbar {
+    height: 76px; padding: 24px 16px 0;
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; position: relative; z-index: 10;
+  }
+  .topbar__heart {
+    width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; border-radius: 50%; transform-origin: center;
+  }
+  .topbar__heart.receive-bounce { animation: topbar-receive 0.75s var(--ease); }
+  @keyframes topbar-receive {
+    0% { transform: scale(1); } 22% { transform: scale(1.35); }
+    40% { transform: scale(0.94); } 58% { transform: scale(1.16); }
+    76% { transform: scale(0.98); } 100% { transform: scale(1); }
+  }
+  .topbar__anni { display: flex; align-items: baseline; gap: 3px; color: #9d8fa4; font-size: 13px; }
+  .topbar__anni b { color: var(--rose-600); font-size: 19px; font-weight: 700; }
+  .topbar__spacer { flex: 1; }
+  .topbar__right {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(150deg, var(--rose-400), var(--rose-600));
+    display: flex; align-items: center; justify-content: center; color: #fff;
+  }
+
+  /* 主区域（示意） */
+  .main {
+    position: absolute; top: 76px; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(170deg, #fff7f9 0%, #ffffff 45%, var(--rose-50) 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px; color: #b9a8c0;
+  }
+  .main .big { font-size: 19px; color: #6d5d78; font-weight: 600; letter-spacing: 0.5px; }
+  .main .sub { font-size: 13px; }
+
+  /* ===== 阅读态弹窗（还原 App 结构）===== */
+  .note-modal {
+    position: absolute; inset: 0; z-index: 100;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 40px 32px; text-align: center;
+    transition: opacity 0.4s var(--ease), transform 0.4s var(--ease);
+  }
+  .note-modal.fade-out { opacity: 0; transform: scale(0.985); pointer-events: none; }
+  .note-modal.mood-night   { background: linear-gradient(165deg, #1e1b4b 0%, #312e81 50%, #3730a3 100%); }
+  .note-modal.mood-dawn    { background: linear-gradient(165deg, #fff7ed 0%, #fef2f2 50%, #fffbeb 100%); }
+  .note-modal.mood-noon    { background: linear-gradient(165deg, #fef9f0 0%, #fffaf3 50%, #fef6e8 100%); }
+  .note-modal.mood-dusk    { background: linear-gradient(165deg, #fff9f2 0%, #fef0e0 50%, #fce8d2 100%); }
+  .note-modal.mood-night   { background-image:
+      radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,0.6), transparent),
+      radial-gradient(1px 1px at 70% 20%, rgba(255,255,255,0.5), transparent),
+      radial-gradient(1.5px 1.5px at 40% 75%, rgba(255,255,255,0.4), transparent),
+      radial-gradient(1px 1px at 85% 65%, rgba(255,255,255,0.5), transparent),
+      linear-gradient(165deg, #1e1b4b 0%, #312e81 50%, #3730a3 100%); }
+
+  .note-read__seal {
+    width: 64px; height: 64px; border-radius: 50%;
+    background: rgba(255,255,255,0.6); color: var(--rose-500);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 18px;
+    box-shadow: 0 0 0 6px rgba(236, 95, 146, 0.08);
+    transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease), opacity 0.45s var(--ease);
+  }
+  .note-modal.mood-night .note-read__seal { background: rgba(255,255,255,0.08); color: #f3b9cd; box-shadow: 0 0 0 6px rgba(243,185,205,0.1); }
+  /* 仪式阶段二：成为「舞台收点」的心 —— 被粒子注入时点亮 */
+  .note-read__seal.stage-receive { animation: stage-receive 0.85s var(--ease); }
+  @keyframes stage-receive {
+    0% { transform: scale(1); box-shadow: 0 0 0 6px rgba(236,95,146,0.08); }
+    25% { transform: scale(1.28); box-shadow: 0 0 34px 12px rgba(244,114,160,0.55), 0 0 0 6px rgba(236,95,146,0.18); }
+    45% { transform: scale(1.04); }
+    62% { transform: scale(1.18); box-shadow: 0 0 26px 8px rgba(244,114,160,0.45); }
+    100% { transform: scale(1); }
+  }
+  .note-read__from { font-size: 14px; color: var(--rose-700); opacity: 0.75; margin-bottom: 16px; transition: opacity 0.45s var(--ease); }
+  .note-modal.mood-night .note-read__from { color: rgba(255,255,255,0.75); }
+  .note-read__content {
+    font-size: 18px; line-height: 1.8; color: #3d2b3a;
+    background: rgba(255,255,255,0.7); border-radius: 18px;
+    padding: 22px 20px; width: 100%; max-width: 340px;
+    white-space: pre-wrap; word-break: break-word;
+    box-shadow: 0 4px 20px rgba(184, 90, 124, 0.08);
+  }
+  .note-modal.mood-night .note-read__content { color: #f8fafc; background: rgba(255,255,255,0.1); box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
+  /* 长按充能：逐字点亮（JS 按进度给 span 加 .lit）*/
+  .note-read__content .ch { transition: color 0.25s ease-out, text-shadow 0.25s ease-out, opacity 0.16s linear; }
+  .note-read__content .ch.lit { text-shadow: 0 0 12px rgba(244,114,160,0.85), 0 0 3px rgba(255,220,232,0.9); }
+  .note-modal.mood-night .note-read__content .ch.lit { color: #ffe3ee; }
+  .note-modal.mood-dawn .note-read__content .ch.lit,
+  .note-modal.mood-noon .note-read__content .ch.lit,
+  .note-modal.mood-dusk .note-read__content .ch.lit { color: var(--rose-600); }
+  /* 溶解前「透亮」：整块文字先转玫瑰亮色 */
+  .note-read__content.brighten .ch { color: var(--rose-500) !important; text-shadow: 0 0 14px rgba(244,114,160,0.9); }
+  .note-read__hint { font-size: 12px; color: var(--rose-700); opacity: 0.55; margin: 18px 0 22px; transition: opacity 0.45s var(--ease); }
+  .note-modal.mood-night .note-read__hint { color: rgba(255,255,255,0.7); }
+  .note-read__dismiss {
+    position: relative; padding: 13px 40px; border: none; border-radius: 14px;
+    background: linear-gradient(160deg, var(--rose-400), var(--rose-600));
+    color: #fff; font-size: 15px; font-weight: 500; letter-spacing: 2px;
+    box-shadow: 0 4px 16px rgba(184, 90, 124, 0.32);
+    cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none;
+    transition: filter 0.15s var(--ease), opacity 0.45s var(--ease), transform 0.15s var(--ease);
+  }
+  .note-read__dismiss .ring {
+    position: absolute; inset: -5px; width: auto; height: auto; pointer-events: none;
+  }
+  .note-read__dismiss .ring circle {
+    fill: none; stroke: rgba(255,255,255,0.85); stroke-width: 2; stroke-linecap: round;
+    filter: drop-shadow(0 0 4px rgba(255,255,255,0.6));
+  }
+
+  /* ===== 仪式暗场（新版：0.45s 渐入，非旧版一帧闪黑）===== */
+  .stage-veil {
+    position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 45%, rgba(30, 27, 60, 0.5) 0%, rgba(22, 18, 48, 0.72) 100%);
+    opacity: 0; transition: opacity 0.45s var(--ease);
+  }
+  .note-modal.ceremony .stage-veil { opacity: 1; }
+  /* 时段氛围边光：深场四周透一圈当前时段的颜色 */
+  .stage-veil::after {
+    content: ""; position: absolute; inset: 0;
+    background: var(--mood-rim, transparent);
+    -webkit-mask: radial-gradient(ellipse at 50% 45%, transparent 42%, #000 78%);
+            mask: radial-gradient(ellipse at 50% 45%, transparent 42%, #000 78%);
+    opacity: 0.5; transition: opacity 0.45s var(--ease);
+  }
+  .note-modal.mood-dawn .stage-veil { --mood-rim: radial-gradient(ellipse at 50% 100%, rgba(251,191,36,0.4), transparent 60%); }
+  .note-modal.mood-noon .stage-veil { --mood-rim: radial-gradient(ellipse at 50% 100%, rgba(253,230,168,0.42), transparent 60%); }
+  .note-modal.mood-dusk .stage-veil { --mood-rim: radial-gradient(ellipse at 50% 100%, rgba(253,164,140,0.4), transparent 60%); }
+  .note-modal.mood-night .stage-veil { --mood-rim: radial-gradient(ellipse at 50% 100%, rgba(129,140,248,0.28), transparent 60%); }
+  .ceremony-hide { opacity: 0 !important; }
+  /* 仪式中留言卡盒子退场（只留被点亮的字，舞台归粒子） */
+  .note-read__content.box-out {
+    background: transparent !important;
+    box-shadow: none !important;
+    transition: background 0.55s var(--ease), box-shadow 0.55s var(--ease);
+  }
+
+  /* 迷你心飘散（结尾收束） */
+  .mini-heart {
+    position: absolute; z-index: 300; pointer-events: none;
+    animation: mini-heart-float 1s ease-out forwards;
+  }
+  @keyframes mini-heart-float {
+    0% { transform: translate(0, 0) scale(0.5); opacity: 0; }
+    18% { opacity: 1; }
+    100% { transform: translate(var(--mx, 0px), -64px) scale(1.05); opacity: 0; }
+  }
+
+  /* ===== 控制台 ===== */
+  .console {
+    width: 330px; color: #cfc6da; font-size: 13px; line-height: 1.55;
+    background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 16px; padding: 18px 18px 14px; flex-shrink: 0;
+  }
+  .console h1 { font-size: 15px; color: #fff; margin-bottom: 4px; }
+  .console .tip { color: #948aa2; font-size: 12px; margin-bottom: 12px; }
+  .console label { display: block; margin: 10px 0 4px; color: #a79db8; font-size: 12px; }
+  .console textarea {
+    width: 100%; height: 56px; resize: none; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(255,255,255,0.06); color: #f0eaf6; padding: 8px 10px; font-size: 13px; font-family: inherit;
+  }
+  .seg { display: flex; gap: 6px; }
+  .seg button {
+    flex: 1; padding: 7px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(255,255,255,0.05); color: #cfc6da; font-size: 12px; cursor: pointer;
+  }
+  .seg button.on { background: var(--rose-600); border-color: var(--rose-600); color: #fff; }
+  .console .actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+  .console .actions button {
+    padding: 11px; border-radius: 10px; border: none; cursor: pointer;
+    font-size: 14px; font-weight: 600;
+  }
+  .btn-new { background: linear-gradient(160deg, var(--rose-400), var(--rose-600)); color: #fff; }
+  .btn-old { background: rgba(255,255,255,0.09); color: #d8d0e2; }
+  .btn-reset { background: transparent; color: #8f86a0; font-weight: 400 !important; font-size: 12px !important; }
+  .legend { margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.12); color: #948aa2; font-size: 12px; }
+  .legend b { color: #d8d0e2; }
+  .speed-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .speed-row .seg { flex: 1; }
+</style>
+</head>
+<body>
+
+  <div class="phone-wrap">
+    <div class="phone" id="phone">
+      <!-- 顶栏：桃心在左上角（还原 App） -->
+      <header class="topbar">
+        <span class="topbar__heart" id="topHeart">
+          <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+            <defs><linearGradient id="hg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#a04a68"/><stop offset="100%" stop-color="#7e2f4e"/>
+            </linearGradient></defs>
+            <path d="M16 28s-11-6.6-11-14.2C5 9.2 7.9 6.5 11.3 6.5c2 0 3.8 1 4.7 2.6.9-1.6 2.7-2.6 4.7-2.6C24.1 6.5 27 9.2 27 13.8 27 21.4 16 28 16 28z" fill="url(#hg)"/>
+          </svg>
+        </span>
+        <span class="topbar__anni">在一起 <b>2486</b> 天</span>
+        <span class="topbar__spacer"></span>
+        <span class="topbar__right">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 21s-7.5-4.7-7.5-10.2C4.5 7.6 7 5.5 9.8 5.5c1.4 0 2.7.7 3.2 1.8.5-1.1 1.8-1.8 3.2-1.8 2.8 0 5.3 2.1 5.3 5.3C21.5 16.3 12 21 12 21z" fill="currentColor"/></svg>
+        </span>
+      </header>
+      <div class="main">
+        <svg viewBox="0 0 32 32" width="44" height="44" style="color:#f3b9cd"><path d="M16 28s-11-6.6-11-14.2C5 9.2 7.9 6.5 11.3 6.5c2 0 3.8 1 4.7 2.6.9-1.6 2.7-2.6 4.7-2.6C24.1 6.5 27 9.2 27 13.8 27 21.4 16 28 16 28z" fill="currentColor"/></svg>
+        <div class="big">这里空空的，像在等你</div>
+        <div class="sub">（动画结束后回到这里）</div>
+      </div>
+
+      <!-- 阅读态弹窗 -->
+      <div class="note-modal mood-night" id="modal">
+        <div class="stage-veil"></div>
+        <div class="note-read__seal" id="stageHeart">
+          <svg viewBox="0 0 32 32" width="30" height="30"><path d="M16 28s-11-6.6-11-14.2C5 9.2 7.9 6.5 11.3 6.5c2 0 3.8 1 4.7 2.6.9-1.6 2.7-2.6 4.7-2.6C24.1 6.5 27 9.2 27 13.8 27 21.4 16 28 16 28z" fill="currentColor"/></svg>
+        </div>
+        <div class="note-read__from" id="fromLine">ta 悄悄对你说</div>
+        <div class="note-read__content" id="content"></div>
+        <div class="note-read__hint">轻轻阅过，珍藏于心</div>
+        <button class="note-read__dismiss" id="dismissBtn">
+          <svg class="ring" id="pressRing"></svg>
+          <span id="dismissText">长按珍藏</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 控制台 -->
+  <div class="console">
+    <h1>珍藏仪式 · 动画重设计</h1>
+    <div class="tip">编码前预览：在按钮上真实长按 600ms 触发新版；或用下面按钮直接播放对比。</div>
+    <label>留言文本</label>
+    <textarea id="textInput">今天辛苦了，其实我一直想当面告诉你，有你真好</textarea>
+    <label>写下留言的时段（阅读态氛围 + 仪式边光）</label>
+    <div class="seg" id="moodSeg">
+      <button data-mood="dawn">晨 5-10</button>
+      <button data-mood="noon" class="on">午 10-14</button>
+      <button data-mood="dusk">昏 18-22</button>
+      <button data-mood="night">夜 22-5</button>
+    </div>
+    <div class="speed-row">
+      <label style="margin:0">速度</label>
+      <div class="seg" id="speedSeg">
+        <button data-speed="1" class="on">1×</button>
+        <button data-speed="0.5">0.5× 慢审</button>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn-new" id="playNew">▶ 新版动画（重设计）</button>
+      <button class="btn-old" id="playOld">▶ 旧版动画（线上现状，诚实对比）</button>
+      <button class="btn-reset" id="resetBtn">↺ 复位场景</button>
+    </div>
+    <div class="legend">
+      <b>看点对照</b>：长按逐字点亮+进度环 → 暗场渐入（不再闪黑）→ 逐字左→右溶解成细玫瑰光尘（不再白黏块）→ 汇成单层轮廓的清晰心 → 心跳两下可见 → 心飞入<b>舞台上可见的桃心</b>（第一收点）→ 弹窗淡出、光种二段短飞顶栏 → 桃心跳两下+波纹+迷你心（第二收点）。
+    </div>
+  </div>
+
+<script>
+'use strict';
+/* ============================================================
+   公共：几何 / 缓动 / sprite
+   ============================================================ */
+const $ = (s) => document.querySelector(s);
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+const easeInOutCubic = (t) => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+const easeOutCubic = (t) => 1 - Math.pow(1-t, 3);
+const lerp = (a, b, t) => a + (b-a)*t;
+
+function makeSprite(inner, mid) {
+  const S = 48, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
+  grad.addColorStop(0, inner); grad.addColorStop(0.35, mid); grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, S, S);
+  return c;
+}
+/* 新版粒子 sprite：小尺寸下也有色彩层次；白只留给高光 */
+const SPRITE_ROSE = makeSprite('rgba(255,205,222,0.95)', 'rgba(244,63,110,0.55)');
+const SPRITE_ROSE_DIM = makeSprite('rgba(255,183,200,0.8)', 'rgba(224,81,127,0.4)');
+const SPRITE_WHITE = makeSprite('rgba(255,255,255,0.95)', 'rgba(255,214,228,0.5)');
+
+/** 心形参数方程 + 均匀弧长采样（单层轮廓 → 剪影清晰） */
+function heartXY(t) {
+  return [16*Math.pow(Math.sin(t),3), -(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t))];
+}
+function insideHeart(x, y) {
+  const xs = x/16, ys = -y/14;
+  return Math.pow(xs*xs + ys*ys - 1, 3) - xs*xs*ys*ys*ys <= 0;
+}
+function uniformHeartRing(count) {
+  const N = 4000, raw = [];
+  let prev = heartXY(0), total = 0;
+  for (let i = 1; i <= N; i++) {
+    const p = heartXY(i/N*Math.PI*2);
+    total += Math.hypot(p[0]-prev[0], p[1]-prev[1]);
+    raw.push(total); prev = p;
+  }
+  const pts = []; let j = 0;
+  for (let i = 0; i < count; i++) {
+    const target = total * i / count;
+    while (raw[j] < target) j++;
+    pts.push(heartXY(j/N*Math.PI*2));
+  }
+  return pts;
+}
+/** 心形目标点：55% 均匀单层轮廓 + 45% 边缘偏置内部填充（边缘实、内部有肉） */
+function generateHeartTargets(count, scale) {
+  const ringN = Math.floor(count*0.55);
+  const ring = uniformHeartRing(ringN);
+  const pts = ring.map(([x,y]) => [x*scale, y*scale]);
+  const innerN = count - ringN;
+  for (let k = 0; k < innerN; k++) {
+    const [rx, ry] = ring[Math.floor(Math.random()*ringN)];
+    const u = Math.pow(Math.random(), 0.65) * 0.72;   // 边缘偏置：靠外概率更高
+    pts.push([rx*scale*(1-u), ry*scale*(1-u)]);
+  }
+  return pts.slice(0, count);
+}
+
+/* ============================================================
+   场景控制（时段 / 文本 / 复位）
+   ============================================================ */
+const modal = $('#modal'), contentEl = $('#content'), dismissBtn = $('#dismissBtn');
+const stageHeart = $('#stageHeart'), topHeart = $('#topHeart');
+let currentSpeed = 1;
+
+function renderContent(text) {
+  contentEl.classList.remove('brighten','box-out');
+  contentEl.innerHTML = '';
+  for (const ch of text) {
+    const s = document.createElement('span');
+    s.className = 'ch'; s.textContent = ch;
+    contentEl.appendChild(s);
+  }
+}
+function setMood(mood) {
+  modal.classList.remove('mood-dawn','mood-noon','mood-dusk','mood-night');
+  modal.classList.add('mood-'+mood);
+  document.querySelectorAll('#moodSeg button').forEach(b =>
+    b.classList.toggle('on', b.dataset.mood === mood));
+}
+function resetScene() {
+  if (scene.abort) scene.abort();
+  modal.classList.remove('ceremony','fade-out');
+  stageHeart.classList.remove('stage-receive','ceremony-hide');
+  topHeart.classList.remove('receive-bounce');
+  $('#fromLine').classList.remove('ceremony-hide');
+  $('.note-read__hint').classList.remove('ceremony-hide');
+  dismissBtn.classList.remove('ceremony-hide');
+  dismissBtn.style.opacity = '';
+  topHeart.classList.remove('receive-bounce');
+  renderContent($('#textInput').value.trim() || '晚安');
+  $('#pressRing').innerHTML = '';
+  modal.querySelectorAll('canvas').forEach((c) => c.remove());
+  $('#phone').querySelectorAll('canvas, .mini-heart').forEach((c) => c.remove());
+  $('#dismissText').textContent = '长按珍藏';
+}
+
+/* 进度环（长按充能可视化，修复线上「注释有环、实现无环」） */
+function drawRing(progress) {
+  const r = dismissBtn.getBoundingClientRect();
+  const svg = $('#pressRing');
+  svg.setAttribute('viewBox', `0 0 ${r.width+10} ${r.height+10}`);
+  const cx = r.width/2+5, cy = r.height/2+5, rad = Math.min(r.width, r.height)/2 + 2;
+  const C = 2*Math.PI*rad;
+  svg.innerHTML = progress > 0
+    ? `<circle cx="${cx}" cy="${cy}" r="${rad}" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-progress)}" transform="rotate(-90 ${cx} ${cy})"/>`
+    : '';
+}
+
+/* ============================================================
+   新版仪式动画
+   时间轴（1×）：
+     0      长按开始：逐字点亮 + 进度环（600ms，真实手势驱动）
+     600    仪式开始：暗场渐入 450ms；印章/文案/按钮淡出；文字透亮
+     1000   逐字溶解（左→右扫过 480ms）：字符熄灭 = 粒子出生
+     ~1050  粒子升腾 + 汇聚（每粒 300ms 升 + 1000ms 寻路）
+     ~2800  心成形：心跳两下（可见光晕 + 波纹）
+     3500   心被舞台桃心吸收（第一收点，可见）+ 舞台桃心跳两下
+     4200   弹窗淡出 400ms，光种留在原地
+     4450   光种二段短飞顶栏桃心（第二收点）
+     4900   顶栏桃心跳两下 + 全屏波纹 + 迷你心飘散
+   ============================================================ */
+const scene = { abort: null };
+
+function playNew(fromRealPress) {
+  if (scene.abort) scene.abort();
+  const text = $('#textInput').value.trim() || '晚安';
+  if (!fromRealPress) renderContent(text); // 真实长按路径：保留充能阶段的逐字点亮状态
+  modal.classList.remove('fade-out','ceremony');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const W = $('#phone').clientWidth, H = $('#phone').clientHeight;
+
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px;pointer-events:none;z-index:250;`;
+  canvas.width = W*dpr; canvas.height = H*dpr;
+  /* 关键：画布挂在 phone（不是将淡出的 modal）上，二段飞行/波纹/迷你心才不会被弹窗淡出吞掉 */
+  $('#phone').appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  function clearCanvas() { ctx.clearRect(0, 0, W, H); }
+
+  const chars = [...contentEl.querySelectorAll('.ch')];
+  const blockRect = contentEl.getBoundingClientRect();
+  const modalRect = modal.getBoundingClientRect();
+  // ⚠️ 必须带上 width/height：下游用 r.width/2 算中心，缺了会静默产出 NaN
+  const rel = (r) => ({ left: r.left-modalRect.left, top: r.top-modalRect.top, width: r.width, height: r.height });
+
+  /* --- 文字像素采样（2px 步长，细尘） --- */
+  const cs = getComputedStyle(contentEl);
+  const fontSize = parseFloat(cs.fontSize), lineHeight = parseFloat(cs.lineHeight);
+  const padX = 20, maxW = blockRect.width - padX*2;
+  const sample = sampleText(text, `${fontSize}px ${cs.fontFamily}`, lineHeight, maxW);
+  const blockRel = rel(blockRect);
+  const offX = blockRel.left + padX, offY = blockRel.top + 22;
+
+  /* 每个粒子的出生延迟 = 按其 x 位置左→右扫过（与 DOM 字符熄灭同步） */
+  const SWEEP = 480;
+  const charDelay = chars.map((c) => {
+    const cr = rel(c.getBoundingClientRect());
+    return ((cr.left + cr.width/2) - blockRel.left) / blockRect.width * SWEEP;
+  });
+  const chIdxForX = (x) => clamp01((x) / blockRect.width) * SWEEP;
+
+  /* --- 目标：舞台收点（印章心）→ 顶栏心 --- */
+  const stageR = rel(stageHeart.getBoundingClientRect());
+  const stageC = { x: stageR.left + stageR.width/2, y: stageR.top + stageR.height/2 };
+  const topR = rel(topHeart.getBoundingClientRect());
+  const topC = { x: topR.left + topR.width/2, y: topR.top + topR.height/2 };
+
+  const heartW = 132, hs = heartW/32;
+  const heartCx = blockRel.left + blockRect.width/2;
+  const heartCy = blockRel.top + blockRect.height/2 - 40;
+  const targets = generateHeartTargets(Math.min(1350, Math.max(850, sample.pts.length)), hs);
+
+  /* --- 粒子：玫瑰 85% / 高光白 15%，尺寸 3-5px，alpha ≤ 0.55 --- */
+  const P = [];
+  const n = targets.length;
+  const srcStride = sample.pts.length / n;
+  for (let i = 0; i < n; i++) {
+    const sp = sample.pts[Math.floor(i*srcStride)];
+    const tp = targets[i];
+    const white = Math.random() < 0.15;
+    P.push({
+      x0: offX + sp[0], y0: offY + sp[1],
+      tx: heartCx + tp[0], ty: heartCy + tp[1],
+      delay: chIdxForX(sp[0]) + Math.random()*90,
+      dur: 950 + Math.random()*350,
+      rise: 10 + Math.random()*14,
+      drift: (Math.random()-0.5)*10,
+      size: 0.75 + Math.random()*0.5,          // → 直径 3~4.5px
+      alpha: white ? 0.5 : 0.34 + Math.random()*0.2,
+      white, phase: Math.random()*Math.PI*2,
+      flow: 5 + Math.random()*6,               // 湍流幅度 5-11px（旧版 26px）
+    });
+  }
+
+  /* --- 时间轴常量（ms） --- */
+  const T_DARK = 600, T_BRIGHT = 1000, T_ERODE = 1050;
+  const T_ARRIVE = T_ERODE + SWEEP + 1300;
+  const T_BEAT = T_ARRIVE + 80, BEAT = 620;
+  const T_ABSORB = T_BEAT + BEAT + 60, ABSORB = 430;
+  const T_SEEDWAIT = T_ABSORB + ABSORB, T_FADE = T_SEEDWAIT + 60, FADE = 380;
+  const T_SEEDFLY = T_FADE + 180, SEEDFLY = 460;
+  const TOTAL = T_SEEDFLY + SEEDFLY + 800;
+
+  const sparkles = [];
+  let ripple = null, raf = 0, animT = 0, last = 0, aborted = false;
+  const D2R = Math.PI/180;
+  const bez = (p0,p1,p2,t) => { const u=1-t; return u*u*p0 + 2*u*t*p1 + t*t*p2; };
+
+  /* 吸收阶段：心整体飞向舞台桃心的贝塞尔 */
+  const absCx = (heartCx+stageC.x)/2, absCy = Math.min(heartCy, stageC.y) - 46;
+
+  /* DOM 字符状态机 */
+  let brightenOn = false, erodeStarted = false, stageReceived = false;
+
+  function frame(now) {
+    if (aborted) return;
+    if (!last) last = now;
+    animT += (now-last) * currentSpeed; last = now;
+    const t = animT;
+
+    clearCanvas();
+
+    /* 暗场 + 元素让位 */
+    if (t >= T_DARK) {
+      modal.classList.add('ceremony');
+      contentEl.classList.add('box-out');
+      stageHeart.classList.add('ceremony-hide');
+      $('#fromLine').classList.add('ceremony-hide');
+      $('.note-read__hint').classList.add('ceremony-hide');
+      dismissBtn.classList.add('ceremony-hide');
+    }
+    /* 文字透亮 */
+    if (t >= T_BRIGHT && !brightenOn) { brightenOn = true; contentEl.classList.add('brighten'); }
+    /* 逐字熄灭（与粒子出生同步的左→右侵蚀） */
+    if (t >= T_ERODE && !erodeStarted) erodeStarted = true;
+    if (erodeStarted) {
+      const e = t - T_ERODE;
+      chars.forEach((c, i) => {
+        if (e >= charDelay[i] && c.style.opacity !== '0') c.style.opacity = '0';
+      });
+    }
+
+    /* --- 心跳（成形后）--- */
+    let beatS = 1;
+    if (t >= T_BEAT && t < T_ABSORB) {
+      const bt = clamp01((t - T_BEAT)/BEAT);
+      beatS = bt < 0.16 ? 1 + easeOutCubic(bt/0.16)*0.11
+            : bt < 0.34 ? 1.11 - easeInOutCubic((bt-0.16)/0.18)*0.11
+            : bt < 0.5  ? 1 + easeOutCubic((bt-0.34)/0.16)*0.055
+            : bt < 0.68 ? 1.055 - easeInOutCubic((bt-0.5)/0.18)*0.055 : 1;
+      /* 光晕垫底（可见但克制） */
+      const glow = Math.max(0, beatS-1);
+      if (glow > 0.001) {
+        const gs = heartW*(1.5 + glow*1.6);
+        ctx.globalAlpha = Math.min(0.3, glow*1.9);
+        ctx.drawImage(SPRITE_ROSE, heartCx-gs/2, heartCy-gs/2, gs, gs);
+      }
+      /* 波纹：两次心跳峰值各一圈 */
+      if (!ripple && bt >= 0.14) ripple = { t0: t, x: heartCx, y: heartCy };
+      if (ripple && bt >= 0.48 && ripple.t0 < t - BEAT*0.3) { /* 第二圈 */ }
+    }
+    if (ripple) {
+      const rp = clamp01((t - ripple.t0)/650);
+      if (rp < 1) {
+        ctx.globalAlpha = 0.3*(1-rp);
+        ctx.strokeStyle = 'rgba(244,114,160,0.9)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(ripple.x, ripple.y, 40 + rp*110, 0, Math.PI*2);
+        ctx.stroke();
+      }
+    }
+
+    /* --- 粒子 --- */
+    const absorbT = clamp01((t - T_ABSORB)/ABSORB);
+    const absE = easeInOutCubic(absorbT);
+    const gx = absorbT > 0 ? bez(heartCx, absCx, stageC.x, absE) : heartCx;
+    const gy = absorbT > 0 ? bez(heartCy, absCy, stageC.y, absE) : heartCy;
+    const gScale = absorbT > 0 ? 1 - 0.8*easeOutCubic(absorbT) : 1;
+
+    for (const p of P) {
+      const e = clamp01((t - T_ERODE - p.delay)/p.dur);
+      if (t < T_ERODE + p.delay) continue;
+      let px, py;
+      if (absorbT === 0) {
+        const lift = easeOutCubic(clamp01(e/0.22));            // 升腾段
+        const travel = easeInOutCubic(clamp01((e-0.18)/0.82)); // 寻路段
+        px = lerp(p.x0 + p.drift, p.tx, travel);
+        py = lerp(p.y0 - p.rise, p.ty, travel);
+        const env = Math.sin(Math.PI*e);                        // 途中湍流，抵达归零
+        const ang = Math.sin(px*0.02 + t*0.002 + p.phase) + Math.cos(py*0.017 - t*0.0016);
+        px += Math.cos(ang)*p.flow*env;
+        py += Math.sin(ang)*p.flow*env - 4*env;
+        if (e >= 1) { px += Math.sin(t*0.003 + p.phase)*0.6; py += Math.cos(t*0.0026 + p.phase)*0.6; }
+        px = heartCx + (px-heartCx)*beatS; py = heartCy + (py-heartCy)*beatS;
+      } else {
+        px = gx + (p.tx-heartCx)*gScale; py = gy + (p.ty-heartCy)*gScale;
+      }
+      let a = p.alpha * clamp01((t - T_ERODE - p.delay)/160);
+      if (absorbT > 0) a *= 1 - absorbT*0.9;
+      const d = p.size * 4.4 * (absorbT > 0 ? 1-absorbT*0.55 : 1);
+      ctx.globalAlpha = a;
+      ctx.drawImage(p.white ? SPRITE_WHITE : (e > 0.6 || absorbT > 0 ? SPRITE_ROSE : SPRITE_ROSE_DIM),
+                    px-d/2, py-d/2, d, d);
+    }
+
+    /* --- 第一收点：心被舞台桃心吸收的瞬间，桃心现身“咚-咚”接收 --- */
+    if (t >= T_ABSORB + ABSORB && !stageReceived) {
+      stageReceived = true;
+      stageHeart.classList.remove('ceremony-hide');
+      stageHeart.classList.add('stage-receive');
+    }
+
+    /* --- 弹窗淡出（T_FADE 起 380ms，露出顶栏 = 二段收点可见）--- */
+    if (t >= T_FADE) modal.classList.add('fade-out');
+
+    /* --- 光种二段飞行 --- */
+    if (t >= T_SEEDFLY) {
+      const st = clamp01((t - T_SEEDFLY)/SEEDFLY);
+      const se = easeInOutCubic(st);
+      const cpX = (stageC.x+topC.x)/2 + 26, cpY = Math.min(stageC.y, topC.y) - 60;
+      const sx = bez(stageC.x, cpX, topC.x, se);
+      const sy = bez(stageC.y, cpY, topC.y, se);
+      const sd = 13*(1 - st*0.4);
+      ctx.globalAlpha = 0.95;
+      ctx.drawImage(SPRITE_ROSE, sx-sd/2, sy-sd/2, sd, sd);   // 玫瑰色：深浅底上都可见
+      if (sparkles.length < 24 && Math.random() < 0.55) {
+        sparkles.push({ x: sx, y: sy, vx: (Math.random()-0.5)*14, vy: (Math.random()-0.5)*10+6, life: 1 });
+      }
+      if (st >= 1 && !seedArrived) { seedArrived = true; onTopbarReceive(); }
+    }
+    for (let i = sparkles.length-1; i >= 0; i--) {
+      const s = sparkles[i];
+      s.life -= 0.03*currentSpeed; s.x += s.vx*0.016*currentSpeed; s.y += s.vy*0.016*currentSpeed;
+      if (s.life <= 0) { sparkles.splice(i,1); continue; }
+      const d = 4.5*s.life + 1.5;
+      ctx.globalAlpha = s.life*0.6;
+      ctx.drawImage(SPRITE_WHITE, s.x-d/2, s.y-d/2, d, d);
+    }
+
+    ctx.globalAlpha = 1;
+    if (t < TOTAL) raf = requestAnimationFrame(frame);
+    else cleanup();
+  }
+
+  let seedArrived = false;
+  function onTopbarReceive() {
+    topHeart.classList.add('receive-bounce');
+    setTimeout(() => topHeart.classList.remove('receive-bounce'), 800);
+    /* 全屏波纹 + 迷你心（结尾收束） */
+    ripple = { t0: animT, x: topC.x, y: topC.y };
+    setTimeout(() => { ripple = null; }, 700*currentSpeed);
+    spawnMiniHearts(topC.x, topC.y);
+  }
+  function spawnMiniHearts(x, y) {
+    for (let i = 0; i < 3; i++) {
+      const m = document.createElement('div');
+      m.className = 'mini-heart';
+      m.style.left = (x-9+ (i-1)*13) + 'px'; m.style.top = (y-10) + 'px';
+      m.style.setProperty('--mx', ((i-1)*30) + 'px');
+      m.style.animationDelay = (i*0.12*currentSpeed) + 's';
+      m.innerHTML = `<svg viewBox="0 0 32 32" width="18" height="18"><path d="M16 28s-11-6.6-11-14.2C5 9.2 7.9 6.5 11.3 6.5c2 0 3.8 1 4.7 2.6.9-1.6 2.7-2.6 4.7-2.6C24.1 6.5 27 9.2 27 13.8 27 21.4 16 28 16 28z" fill="#f472a0"/></svg>`;
+      $('#phone').appendChild(m);   // 同画布：挂在 phone 上，不随弹窗淡出消失
+      setTimeout(() => m.remove(), 1300*currentSpeed);
+    }
+  }
+  function cleanup() {
+    cancelAnimationFrame(raf); clearCanvas(); canvas.remove();
+  }
+  scene.abort = () => { aborted = true; cancelAnimationFrame(raf); canvas.remove(); };
+
+  /* 真实长按 → 手势驱动充能；按钮播放 → 直接从仪式开始 */
+  if (fromRealPress) {
+    chargeAndStart();
+  } else {
+    /* 免长按：先把充能演出快进演完（逐字点亮 + 进度环），再进仪式 */
+    fastForwardCharge();
+  }
+
+  function fastForwardCharge() {
+    const t0 = performance.now();
+    const step = () => {
+      const p = clamp01((performance.now()-t0)/(500/currentSpeed));
+      drawRing(p);
+      chars.forEach((c, i) => c.classList.toggle('lit', i/chars.length <= p));
+      if (p < 1) requestAnimationFrame(step);
+      else { drawRing(0); startCeremonyClock(0); }
+    };
+    requestAnimationFrame(step);
+  }
+  function chargeAndStart() { startCeremonyClock(0); }
+  function startCeremonyClock() { last = 0; animT = 0; raf = requestAnimationFrame(frame); }
+}
+
+/* --- 文字采样（画布字体与 DOM 一致，位置才对得上）--- */
+function sampleText(text, font, lineHeight, maxW) {
+  const c = document.createElement('canvas');
+  const g = c.getContext('2d');
+  g.font = font;
+  const lines = []; let line = '';
+  for (const ch of text) {
+    if (ch === '\n') { lines.push(line); line = ''; continue; }
+    if (g.measureText(line+ch).width > maxW && line) { lines.push(line); line = ch; }
+    else line += ch;
+  }
+  if (line) lines.push(line);
+  const w = Math.ceil(maxW)+4, h = Math.ceil(lines.length*lineHeight)+8;
+  c.width = w; c.height = h;
+  g.font = font; g.fillStyle = '#000'; g.textBaseline = 'top';
+  lines.forEach((ln, i) => g.fillText(ln, 0, i*lineHeight));
+  const img = g.getImageData(0, 0, w, h).data;
+  const pts = [];
+  for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) {
+    if (img[(y*w+x)*4+3] > 110) pts.push([x, y]);
+  }
+  return { pts };
+}
+
+/* ============================================================
+   旧版动画（线上 text-to-heart.js 原样移植 —— 保留其全部缺陷，
+   用于诚实对比：过曝白块 / 疙瘩心 / 飞向被弹窗遮住的顶栏）
+   ============================================================ */
+function playOld() {
+  if (scene.abort) scene.abort();
+  const text = ($('#textInput').value.trim() || '晚安');
+  renderContent(text);
+  modal.classList.remove('fade-out');
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  const W = $('#phone').clientWidth, H = $('#phone').clientHeight;
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = `position:absolute;inset:0;width:${W}px;height:${H}px;pointer-events:none;z-index:250;`;
+  canvas.width = W*dpr; canvas.height = H*dpr;
+  modal.appendChild(canvas);
+  const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr);
+
+  /* 旧版暗场：一帧闪现（还原 .note-read--cherishing::before 无过渡的问题） */
+  const veil = document.createElement('div');
+  veil.style.cssText = 'position:absolute;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 45%, rgba(30,27,75,0.42) 0%, rgba(24,20,60,0.62) 100%);';
+  modal.appendChild(veil);
+
+  const modalRect = modal.getBoundingClientRect();
+  const rect = contentEl.getBoundingClientRect();
+  // ⚠️ 必须带上 width/height：下游用 r.width/2 算中心，缺了会静默产出 NaN
+  const rel = (r) => ({ left: r.left-modalRect.left, top: r.top-modalRect.top, width: r.width, height: r.height });
+  const br = rel(rect);
+  const cs = getComputedStyle(contentEl);
+  const fontSize = parseFloat(cs.fontSize), lineHeight = parseFloat(cs.lineHeight);
+  const cx = br.left + rect.width/2, cy = br.top + rect.height/2;
+  const topR = rel(topHeart.getBoundingClientRect());
+  const endX = topR.left + topR.width/2, endY = topR.top + topR.height/2;
+
+  const smp = sampleText(text, `${fontSize}px ${cs.fontFamily}`, lineHeight, rect.width-40);
+  let textPts = smp.pts;
+  if (textPts.length > 620) {
+    const stride = textPts.length/620;
+    textPts = Array.from({length:620}, (_,i) => textPts[Math.floor(i*stride)]);
+  } else if (textPts.length < 300) {
+    const extra = [];
+    for (let i = 0; i < 300-textPts.length; i++) {
+      const s = textPts[i % textPts.length];
+      extra.push([s[0]+(Math.random()-0.5)*6, s[1]+(Math.random()-0.5)*6]);
+    }
+    textPts = textPts.concat(extra);
+  }
+  const heartW = 132, scale = heartW/32;
+  /* 旧版心形：三层环 + 随机填充（疙瘩边缘的来源，原样保留） */
+  const heartPts = (function(count) {
+    const pts = [], ringScales = [1, 0.86, 0.7];
+    const ringCount = Math.min(count, Math.floor(count*0.42));
+    for (let i = 0; i < ringCount; i++) {
+      const t = i/ringCount*Math.PI*2, [x,y] = heartXY(t);
+      pts.push([x*scale*ringScales[i%3], y*scale*ringScales[i%3]]);
+    }
+    let tries = 0;
+    while (pts.length < count && tries < count*30) {
+      tries++;
+      const x = (Math.random()*2-1)*16, y = (Math.random()*2-1)*15;
+      if (insideHeart(x, y)) pts.push([x*scale, y*scale]);
+    }
+    while (pts.length < count) {   // 兜底：极短文本时轮廓点循环补足
+      const t = Math.random()*Math.PI*2, [x,y] = heartXY(t);
+      pts.push([x*scale*0.5, y*scale*0.5]);
+    }
+    return pts;
+  })(textPts.length);
+
+  const offX = br.left+20, offY = br.top+22;
+  const spriteText = makeSprite('rgba(248,250,252,0.95)','rgba(248,250,252,0.45)');
+  const spriteRose = makeSprite('rgba(255,183,200,0.95)','rgba(244,63,94,0.5)');
+  const spriteGlow = makeSprite('rgba(255,255,255,0.95)','rgba(255,170,195,0.45)');
+  const particles = textPts.map((tp, i) => ({
+    x: offX+tp[0], y: offY+tp[1], tx: cx+heartPts[i][0], ty: cy+heartPts[i][1],
+    delay: Math.random()*300, dur: 900+Math.random()*300,
+    size: 0.75+Math.random()*0.85, flow: 0.6+Math.random()*0.8, phase: Math.random()*Math.PI*2,
+  }));
+  const T_LOOSEN=380, T_FLOW_END=1900, T_BEAT=1950, BEAT=650, T_FLY=T_BEAT+BEAT, FLY=750;
+  const TOTAL = T_FLY+FLY+120;
+  const cpX = (cx+endX)/2 + (Math.random()*40-20), cpY = Math.min(cy, endY)-90;
+  const sparkles = [];
+  let last = 0, animT = 0, raf = 0, aborted = false;
+  const bez = (p0,p1,p2,t) => { const u=1-t; return u*u*p0+2*u*t*p1+t*t*p2; };
+  const flowAngle = (x,y,t) => (Math.sin(x*0.012+t*1.1)+Math.cos(y*0.014-t*0.8)+Math.sin((x+y)*0.006+t*0.6)+Math.cos((x-y)*0.009-t*0.4))*1.2;
+  const beatCurve = (t) => t<0.14 ? 1+easeOutCubic(t/0.14)*0.10
+    : t<0.30 ? 1.10-easeInOutCubic((t-0.14)/0.16)*0.10
+    : t<0.46 ? 1+easeOutCubic((t-0.30)/0.16)*0.055
+    : t<0.62 ? 1.055-easeInOutCubic((t-0.46)/0.16)*0.055 : 1;
+
+  contentEl.style.transition = 'opacity 0.55s ease-out';
+  contentEl.style.opacity = '0';
+
+  function frame(now) {
+    if (aborted) return;
+    if (!last) last = now;
+    animT += (now-last)*currentSpeed; last = now;
+    const el = animT;
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = 'rgba(0,0,0,0.26)'; ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation = 'lighter';
+    let beatS = 1, beatGlow = 0;
+    if (el >= T_BEAT) { const bt = clamp01((el-T_BEAT)/BEAT); beatS = beatCurve(bt); beatGlow = Math.max(0,beatS-1)*3.2; }
+    let flyT = 0; if (el >= T_FLY) flyT = clamp01((el-T_FLY)/FLY);
+    const flyE = easeInOutCubic(flyT);
+    const gx = flyT>0 ? bez(cx, cpX, endX, flyE) : cx;
+    const gy = flyT>0 ? bez(cy, cpY, endY, flyE) : cy;
+    const gScale = flyT>0 ? 1-0.82*easeOutCubic(flyT) : 1;
+    if (beatGlow > 0 && flyT === 0) {
+      const hs = heartW*1.5; ctx.globalAlpha = Math.min(0.4, 0.16*beatGlow);
+      ctx.drawImage(spriteRose, cx-hs/2, cy-hs/2, hs, hs);
+    }
+    const tSec = el/1000;
+    for (const p of particles) {
+      const t = el - T_LOOSEN - p.delay;
+      const e = t <= 0 ? 0 : clamp01(t/p.dur);
+      const ease = easeInOutCubic(e);
+      let bx, by;
+      if (flyT === 0) { bx = p.x+(p.tx-p.x)*ease; by = p.y+(p.ty-p.y)*ease; }
+      else { bx = gx+(p.tx-cx)*gScale; by = gy+(p.ty-cy)*gScale; }
+      const env = Math.sin(Math.PI*e);
+      const ang = flowAngle(bx, by, tSec+p.phase*0.3);
+      const amp = p.flow*26*env*(flyT>0?0:1);
+      const ox = Math.cos(ang)*amp, oy = Math.sin(ang)*amp - 5*env;
+      let shim = 0;
+      if (e >= 1 && flyT === 0) shim = Math.sin(tSec*3+p.phase)*0.8;
+      const px = bx+ox+shim*Math.cos(p.phase), py = by+oy+shim*Math.sin(p.phase);
+      let a = clamp01(el/220); if (flyT > 0) a *= 1-flyT*0.92;
+      const mix = clamp01(e*1.1 + beatGlow*0.25);
+      const s = p.size*(2.3+1.5*env)*(1-0.45*flyT);
+      const d = s*6;
+      if (mix < 0.5) {
+        ctx.globalAlpha = a*(1-mix*2); ctx.drawImage(spriteText, px-d/2, py-d/2, d, d);
+        ctx.globalAlpha = a*(mix*2); ctx.drawImage(spriteRose, px-d/2, py-d/2, d, d);
+      } else {
+        ctx.globalAlpha = a*(1-(mix-0.5)*2)*0.92; ctx.drawImage(spriteRose, px-d/2, py-d/2, d, d);
+        ctx.globalAlpha = a*((mix-0.5)*2); ctx.drawImage(spriteGlow, px-d/2, py-d/2, d, d);
+      }
+    }
+    if (flyT > 0 && flyT < 1) {
+      if (sparkles.length < 36 && Math.random() < 0.7) {
+        sparkles.push({ x: gx+(Math.random()-0.5)*heartW*gScale, y: gy+(Math.random()-0.5)*heartW*gScale*0.9,
+          vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10-6, life: 1 });
+      }
+      for (let i = sparkles.length-1; i >= 0; i--) {
+        const sp = sparkles[i]; sp.life -= 0.032*currentSpeed;
+        if (sp.life <= 0) { sparkles.splice(i,1); continue; }
+        sp.x += sp.vx*0.016; sp.y += sp.vy*0.016;
+        const sd = 5*sp.life+2;
+        ctx.globalAlpha = sp.life*0.55; ctx.drawImage(spriteGlow, sp.x-sd/2, sp.y-sd/2, sd, sd);
+      }
+    }
+    ctx.globalAlpha = 1;
+    if (el < TOTAL) raf = requestAnimationFrame(frame);
+    else { /* 旧版结尾：直接关弹窗（无收束） */ modal.classList.add('fade-out'); cleanup(); }
+  }
+  function cleanup() { cancelAnimationFrame(raf); canvas.remove(); veil.remove(); contentEl.style.opacity = ''; contentEl.style.transition = ''; }
+  scene.abort = () => { aborted = true; cancelAnimationFrame(raf); canvas.remove(); veil.remove(); contentEl.style.opacity=''; contentEl.style.transition=''; };
+  raf = requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   长按手势（真实 600ms）+ 控制台绑定
+   ============================================================ */
+let pressTimer = null, pressing = false, pressFired = false;
+const chars = () => [...contentEl.querySelectorAll('.ch')];
+
+function startPress() {
+  if (pressing) return;
+  pressing = true; pressFired = false;
+  const t0 = performance.now();
+  const totalChars = chars().length;
+  const step = () => {
+    if (!pressing) return;
+    const p = clamp01((performance.now()-t0)/(600/currentSpeed));
+    drawRing(p);
+    chars().forEach((c, i) => c.classList.toggle('lit', i/totalChars <= p));
+    if (p < 1) requestAnimationFrame(step);
+    else { pressFired = true; drawRing(0); playNew(true); }
+  };
+  requestAnimationFrame(step);
+}
+function cancelPress() {
+  if (!pressing || pressFired) { pressing = false; return; }
+  pressing = false;
+  clearTimeout(pressTimer);
+  drawRing(0);
+  chars().forEach((c) => c.classList.remove('lit'));
+}
+dismissBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); startPress(); });
+dismissBtn.addEventListener('pointerup', cancelPress);
+dismissBtn.addEventListener('pointerleave', cancelPress);
+dismissBtn.addEventListener('pointercancel', cancelPress);
+
+$('#playNew').addEventListener('click', () => playNew(false));
+$('#playOld').addEventListener('click', playOld);
+$('#resetBtn').addEventListener('click', resetScene);
+$('#textInput').addEventListener('change', () => renderContent($('#textInput').value.trim() || '晚安'));
+document.querySelectorAll('#moodSeg button').forEach(b =>
+  b.addEventListener('click', () => setMood(b.dataset.mood)));
+document.querySelectorAll('#speedSeg button').forEach(b =>
+  b.addEventListener('click', () => {
+    currentSpeed = parseFloat(b.dataset.speed);
+    document.querySelectorAll('#speedSeg button').forEach(x => x.classList.toggle('on', x === b));
+  }));
+
+/* 手机框自适应缩放 */
+function fitPhone() {
+  const s = Math.min(1, (window.innerHeight-48)/864, (window.innerWidth-420)/410);
+  $('.phone').style.transform = `scale(${Math.max(0.5, Math.min(1, s))})`;
+}
+window.addEventListener('resize', fitPhone);
+
+renderContent($('#textInput').value.trim());
+setMood('night');
+fitPhone();
+</script>
+</body>
+</html>
