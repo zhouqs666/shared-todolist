@@ -317,8 +317,8 @@ function openReadMode(note) {
   // 清理可能的 leaving 残留（连续阅多条时），再显示
   readPane.classList.remove('note-read--leaving');
   // 时段氛围：按对方写下时的小时数切换（清旧态再加新态）
-  // v2.7.51 P3.3：四档清理（dawn/noon/dusk/night）
-  readPane.classList.remove('note-read--dawn', 'note-read--noon', 'note-read--dusk', 'note-read--night');
+  // v2.7.51 P3.3：四档清理（dawn/noon/dusk/night）；2026-10-03 补 afternoon（14-18 空窗）
+  readPane.classList.remove('note-read--dawn', 'note-read--noon', 'note-read--afternoon', 'note-read--dusk', 'note-read--night');
   const mood = moodForNote(note);
   if (mood) readPane.classList.add(mood);
   readPane.hidden = false;
@@ -354,8 +354,10 @@ function openReadMode(note) {
 
 /** 根据留言写下时的时段返回氛围 class
  *  v2.7.51 P3.3 纪念日时段配色微调：从二档（晨/夜）升级为四档（晨/午/昏/夜），覆盖 10-22 长段空白
+ *  2026-10-03 补午后档：此前 14-18 无档位、落默认浅底（五档里最寡淡），现全覆盖
  *   晨光 dawn（5-10）：金粉暖色调
  *   午间 noon（10-14）：阳光奶油调，更明亮
+ *   午后 afternoon（14-18）：暖杏奶调
  *   黄昏 dusk（18-22）：暮色蜜桃调，更温柔
  *   星空 night（22-5）：深蓝夜幕 + 微光粒子
  */
@@ -364,9 +366,9 @@ function moodForNote(note) {
   const h = new Date(note.createdAt).getHours();
   if (h >= 5 && h < 10) return 'note-read--dawn';
   if (h >= 10 && h < 14) return 'note-read--noon';
+  if (h >= 14 && h < 18) return 'note-read--afternoon';
   if (h >= 18 && h < 22) return 'note-read--dusk';
-  if (h >= 22 || h < 5) return 'note-read--night';
-  return '';
+  return 'note-read--night'; // 22-5
 }
 
 /**
@@ -429,7 +431,7 @@ function updateCharge(progress) {
     const lit = progress * chars.length;
     chars.forEach((c, i) => c.classList.toggle('note-read__char--lit', i < lit));
   }
-  const circle = dismissBtn && dismissBtn.querySelector('.note-read__dismiss-ring circle');
+  const circle = dismissBtn && dismissBtn.querySelector('.note-read__dismiss-ring rect');
   if (circle) circle.style.strokeDashoffset = String(100 - progress * 100);
 }
 function resetCharge() {
@@ -491,6 +493,9 @@ function onCherish() {
 
   const stageEl = readPane ? readPane.querySelector('.note-read__seal') : null;
   ceremonyRunning = true;
+  // 氛围档传给舞台层（夜间仪式的星空身份要延续到光种飞行段，否则高潮段两套底合流）
+  const moodCls = readPane ? Array.from(readPane.classList).find((c) => c.startsWith('note-read--')) : '';
+  document.body.dataset.cherishMood = moodCls ? moodCls.replace('note-read--', '') : '';
   textToHeart({
     textEl: contentEl,
     stageEl,
@@ -503,6 +508,7 @@ function onCherish() {
     onArrive: pulseHeart,    // 第二收点：顶栏桃心接收跳动
     done: () => {
       ceremonyRunning = false;
+      delete document.body.dataset.cherishMood;
       // 仪式结束：本地移除 + 后台删库（即焚）
       notes = notes.filter((n) => n.id !== current.id);
       refreshBell();
