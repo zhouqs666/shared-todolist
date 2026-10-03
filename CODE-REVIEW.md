@@ -107,6 +107,11 @@
 
 - 🔴 XSS：用户输入（todo 文案、留言 content、昵称）渲染时是否转义？`innerHTML` 是否吞了未转义内容？
 - 🔴 密钥：是否硬编码了不该出现的东西？—— 明确边界：`anon key` 可公开（靠 RLS），但 **`service_role key` 绝不允许进前端**。
+- 🔴 **Capacitor 插件代理对象是 thenable，永不进 Promise 链**（2026-10-02 生产事故）：不得被 `await`、
+  放进 Promise 链、或作为 async/Promise 的返回值（native 下变成不存在的桥接方法调用；浏览器里
+  `isNative=false` 走 no-op 分支，Web E2E 拦不住，只有真机炸）。只能 `await` 其**方法调用的返回值**，
+  跨模块传递插件实例用同步函数（见 `notify.js` 的 `getLocalNotifications` + `ensureCapacitorLoaded()`）。
+  完整复盘见 `docs/lessons/2026-10-02-capacitor-thenable.md`。
 - 🔴 **`.example` / 模板 / 文档 / 测试夹具里是否出现了真实凭据或真实账号标识？**
   真值只能放 `.env*`（已 gitignore）与 GitHub Secrets；仓库里一律占位符（`your-xxx` / `test-user@example.com`）。
   功能性例外只有两处：客户端登录映射（`public/js/auth.js`）与测试里的 mock JWT payload —— 它们不含口令，

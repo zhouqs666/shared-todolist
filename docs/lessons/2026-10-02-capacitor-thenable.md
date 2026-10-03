@@ -1,6 +1,6 @@
 # 2026-10-02：Capacitor 插件代理是 thenable，2.8.1 壳发布后 App 不可用
 
-**关联规则**：AGENTS.md「补充：Capacitor 插件对象是 thenable —— 永不进 Promise 链」（🔴 级铁则）
+**关联规则**：AGENTS.md 铁律八（Capacitor 插件代理永不进 Promise 链，🔴 级铁则）
 
 ## 事故
 
