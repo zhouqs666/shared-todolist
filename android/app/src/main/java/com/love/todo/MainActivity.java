@@ -23,15 +23,15 @@ public class MainActivity extends BridgeActivity {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         // 状态栏图标深色（顶栏底色浅 rose，深色图标对比清晰；导航栏同理）
-        // SystemBars 插件默认 STYLE_DEFAULT 在夜间模式会切到白色图标导致不可见，此处强制深色兜底
+        // 系统默认外观跟随夜间模式，会切到白色图标导致在浅色顶栏上不可见，此处强制深色图标兜底
         WindowInsetsControllerCompat controller =
                 WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         controller.setAppearanceLightStatusBars(true);
         controller.setAppearanceLightNavigationBars(true);
 
         // decor view 背景 rose 色（WebView 加载完成前的 100-300ms 间隙可见，避免白条）
-        // SystemBars 在 load() 后会用 windowBackground 重新覆盖，所以 styles.xml 必须把
-        // AppTheme.NoActionBar 的 android:windowBackground 也设为同色（见 styles.xml 改动）
+        // WebView 布局使用主题的 windowBackground，加载后会覆盖此处设置的 decor 背景，
+        // 所以 styles.xml 必须把 AppTheme.NoActionBar 的 android:windowBackground 也设为同色（见 styles.xml）
         getWindow().getDecorView().setBackgroundColor(android.graphics.Color.parseColor("#FFE4E6"));
     }
 }

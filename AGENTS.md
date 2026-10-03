@@ -1,6 +1,8 @@
 # 项目规则（铁律，不可违反）
 
-> 以下规则由真实血泪教训总结，每一条都有代价。违反任何一条都视为严重事故。
+> 以下规则由真实事故总结而来，每一条都有代价。违反任何一条都视为严重事故。
+> 完整事故复盘（发生了什么 / 根因 / 修复与防回归）在 **docs/lessons/**（索引见
+> [docs/lessons/README.md](docs/lessons/README.md)），本文件只保留规则本体 + 一行教训要点。
 
 ---
 
@@ -23,73 +25,69 @@
 **适用范围（2026-09-14 明确，避免两种误用）：**
 - 本律约束的是**「为了验证而改生产数据」**：测试、演示、截图、排查。
 - **发布（铁律三）与回滚**本身就要写生产表（`app_versions` / Storage），属**产品业务动作**，
-  不属本律禁止范围 —— 但必须走审批门（见铁律三 CD 章节）。
+  不属本律禁止范围 —— 但必须走审批门（见铁律三）。
 - 判据一句话：**这个写操作是产品功能的一部分，还是为了「验证一下」？** 后者一律禁止。
 
-**血泪教训：** 2026-07-31，为验证空状态 UI，对生产库执行 `supabase.from('todos').delete().neq(...)` 删全部，导致用户所有待办永久丢失，Free 套餐无备份，无法恢复。从此这条列为最高铁律。
+**为什么「测试已全面隔离」的今天这条仍然必要（2026-10-03 复评）：**
+① 生产合法写通道仍常用（release / rollback / apply-sql / release-apk），上面那句判据是它们的边界定义；
+② `check-test-guards.mjs` 等"漏挂守卫直接红"的基建，存在依据就是本条 —— 规则删了，守卫就成了无动机的"死代码"；
+③ 隔离基建自身会漂移（RLS 曾被手工关掉、`test_pinch.mjs` 漏 mock 打到生产），本条是基建失效时的不变量；
+④ Dashboard 手工 SQL、AI"验证一下"的冲动、演示截图 —— 基建管不到的路径。
+
+**教训：** [docs/lessons/2026-07-31-prod-data-loss.md](docs/lessons/2026-07-31-prod-data-loss.md)
+—— 为验证空状态 UI 执行谓词批量删，用户全部待办永久丢失，Free 套餐无备份不可恢复。
 
 ---
 
 ## 铁律二：交付前必须全面测试，硬限制要列明
 
-**所有功能开发完成、交付前，必须经过模拟器全面测试，不能凭想象宣布"完成"。**
+**所有功能开发完成、交付前，必须经过全面测试，不能凭想象宣布"完成"。**
 
 - ✅ **跑测试前必须先起测试专用服务器**（铁律一）：
   ```bash
   node scripts/serve-test.mjs      # 测试服务器，端口 3100，连独立测试库
   node scripts/reset-test-db.mjs   # 归零测试库（清 E2E 残留 + 贴纸）
-  node scripts/run-web-e2e.mjs     # 推荐：一次跑完 7 个用例（逐个归零 + 失败重试一次 + flaky 显式标记 + 汇总表）
+  node scripts/run-web-e2e.mjs     # 推荐：一次跑完 8 个用例（逐个归零 + 失败重试一次 + flaky 显式标记 + 汇总表）
   python3 scripts/test_undo_complete.py   # 也可单跑某个：脚本自动连 3100 + 自证隔离
   ```
   测试脚本默认连 3100（测试库），**禁止指向 3000**（那是生产库）。指向生产会被 `e2e_common.py` 直接拦下、退出码 2。
   单跑用例时记得自己先归零；`run-web-e2e.mjs` 会在每个用例前自动归零（用例之间不留隐含依赖）。
 - ✅ **测试库必须归零**：`tests` 末尾会自动调 `reset-test-db.mjs` 硬删；`E2E_KEEP_DATA=1` 可保留现场排查。
-  **为什么不能只靠测试内部的删除**：那是**软删除**（`deleted_at` 打时间戳），行永远留在表里 —— 看着清了，其实越跑越脏。贴纸更麻烦：`sticker_key` 有 UNIQUE 约束、解锁幂等，一旦解锁就再也测不了「首次解锁」路径（开奖弹窗/庆祝动画/图鉴+1），盲盒的核心卖点在测试环境里失效。
-- ✅ 核心流程 / 双端同步：用 Playwright 跑真实业务流程（Python 脚本 `scripts/test_*.py`，双账号 E2E，测试账号来自 `app-e2e/.env.test`）
-- ✅ 局部回归：Node 脚本 `scripts/test_*.mjs` 跑在生产服务（:3000）上，**只读** —— 已由 `_lib-readonly-guard.mjs` 在网络层阻断写请求（不是靠自觉，也不是靠 token 恰好无效）；并由 `scripts/check-test-guards.mjs` 在 CI 里做**结构性检查**（漏挂守卫直接红），不靠记忆
+  **为什么不能只靠测试内部的删除**：那是**软删除**（`deleted_at` 打时间戳），行永远留在表里 —— 看着清了，其实越跑越脏。
+  贴纸更麻烦：`sticker_key` 有 UNIQUE 约束、解锁幂等，一旦解锁就再也测不了「首次解锁」路径
+  （开奖弹窗/庆祝动画/图鉴+1），盲盒的核心卖点在测试环境里失效。
+- ✅ 核心流程 / 双端同步：用 Playwright 跑真实业务流程（Python 脚本 `scripts/test_*.py`，双账号 E2E，
+  测试账号来自 `app-e2e/.env.test`）
+- ✅ 局部回归：Node 脚本 `scripts/test_*.mjs` 跑在生产服务（:3000）上，**只读** —— 已由 `_lib-readonly-guard.mjs`
+  在网络层阻断写请求（不是靠自觉，也不是靠 token 恰好无效）；并由 `scripts/check-test-guards.mjs` 在 CI 里做
+  **结构性检查**（漏挂守卫直接红），不靠记忆
 - ✅ 必须覆盖：核心功能、边界情况、错误处理、Realtime 双端同步
+- ✅ 测试要真实验证结果（截图、断言、状态检查），不能只看"没报错"就算过
+- ✅ **测试前跑三个 preflight**：
+  - `node scripts/check-test-env.mjs` —— Web 通道隔离（测试库 ≠ 生产库）
+  - `node app-e2e/scripts/check-test-schema.mjs` —— 测试库 schema 契约（从 `supabase/*.sql` 推导表/列/**函数**，
+    漂移会打印修复 SQL）。缺列/缺表会导致 `listTodos()` 整体报错、界面静默空列表，E2E 只报「元素找不到」，
+    极易误判成定位/时序问题（2026-09-14 烧了多轮 CI）。缺 RPC 函数同理（`increment_login_count` 缺失时冷启动 404）
+  - `node app-e2e/scripts/check-rls.mjs` —— 测试库**表 RLS + 函数执行权限**是否真的生效（anon 视角探针）
 - ✅ **合并前置门 = CI required checks 全绿**（`ci.yml` 三个 job；main 已开分支保护，红灯合不进去）。
   ⚠️ 但**门禁覆盖 ≠ 测试全覆盖**，这是**有意的分层**（2026-09-14 批次 C 定型）：
   - **PR 门禁要「快而稳」**：只放 Node 回归 + admin Playwright E2E + workflow 静态检查。跑得慢会拖住每次合并，
     跑得不稳会让团队开始无视红灯。
-  - **全量回归要「慢而全」**：7 个双账号 Playwright E2E（`scripts/test_blindbox.py` / `test_offline.py` /
-    `test_trash.py` / `test_undo_complete.py` / `test_pin.py` / `test_reminder.py` / `test_camera_image.py`）
-    走 **`.github/workflows/e2e-web-full.yml`** ——
-    **每晚 02:00（北京）定时**跑（`schedule`，cron 按 UTC 写）+ 可手动 `workflow_dispatch`，
+  - **全量回归要「慢而全」**：8 个双账号 Playwright E2E（`scripts/test_blindbox.py` / `test_offline.py` /
+    `test_trash.py` / `test_undo_complete.py` / `test_pin.py` / `test_reminder.py` / `test_camera_image.py` /
+    `test_note_ceremony.py`）走 **`.github/workflows/e2e-web-full.yml`** ——
+    **每晚 02:17（北京）定时**跑（`schedule`，cron 按 UTC 写）+ 可手动 `workflow_dispatch`，
     由 `scripts/run-web-e2e.mjs` 驱动（逐文件归零 / 失败重试一次 / FLAKY 显式标记 / 汇总进 Run Summary）。
   - ⚠️ **该工作流不设 required check**（它不在 PR 上运行；设了会让 check 永远停在 "Expected" 而卡死 PR）。
     本地不跑也仍等于没覆盖 —— 夜里会跑，但**改动等待期内**要自己先跑一遍。
   - 另注意：**CI 绿灯 ≠ 交付物可用** —— 制品/发布结果要单独回读验证（见铁律三 `verify-release.mjs`）
-- ✅ 测试要真实验证结果（截图、断言、状态检查），不能只看"没报错"就算过
-- ✅ **测试前跑三个 preflight**：
-  - `node scripts/check-test-env.mjs` —— Web 通道隔离（测试库 ≠ 生产库）
-  - `node app-e2e/scripts/check-test-schema.mjs` —— 测试库 schema 契约（从 `supabase/*.sql` 推导表/列/**函数**，漂移会打印修复 SQL）
-  - `node app-e2e/scripts/check-rls.mjs` —— 测试库**表 RLS + 函数执行权限**是否真的生效（anon 视角探针，见下方 2026-09-16）
-  测试库缺列/缺表会导致 `listTodos()` 整体报错、界面静默空列表，E2E 只报「元素找不到」，极易误判成定位/时序问题（2026-09-14 烧了多轮 CI）。缺 RPC 函数同理（`increment_login_count` 缺失时冷启动 404）。
-
-**血泪教训（2026-09-16，RLS 被手工关掉却无人发现）：**
-Supabase 安全顾问对**测试项目**报 CRITICAL `rls_disabled_in_public`：`profiles` 的 RLS 没开 ⇒
-「拿到项目 URL 的任何人」可读可写该表（anon key 是公开的，硬编码在 `public/js/supabase.js`、随 APK 分发）。
-**根因不是仓库漏写** —— `supabase/schema.sql` 里 `profiles` 一直是 `ENABLE ROW LEVEL SECURITY`；
-是测试项目上被**手工改过**（同一时期那里还留着仓库里不存在的 `create_test_user` RPC，可佐证跑过 ad-hoc SQL），
-而建表/改表都靠「粘贴一次」，之后**没有任何回读校验**。
-**关键认知**：`ENABLE ROW LEVEL SECURITY`（开关）与 `CREATE POLICY`（策略）是两件事，缺任一个洞都在；
-「照文档粘贴过一次」挡不住漂移 —— 必须机器判定。对策：
-- `node app-e2e/scripts/check-rls.mjs` —— 探针：anon + **必然违反外键**的 INSERT（42501=策略拦下了 / 约束错误=RLS 没开；**不写任何数据**）
-- `node scripts/test_rls_migration.mjs` —— 用 PGlite（真 Postgres 的 WASM 版）把加固 SQL 跑一遍：复现洞 → 修复 → 幂等；不需要凭据，进 CI
-- `admin/scripts/init-test-env.mjs` 第 ④ 步跑 RLS 自检 ⇒ **CI required job 里合并前拦住**
-- ⚠️ 反向教训：两套环境的**手工配置会各自漂移**（实测：生产 `disable_signup=true`、测试项目 `false`）
-  ⇒ 每次都要回读校验，不能只看某一次
-
-**血泪教训（2026-09-14）：**
-Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `public/`（其中 `supabase.js` 硬编码生产库 URL），而 `test_*.py` 直连 `localhost:3000` = 生产库。调试撤销完成功能时，在生产库创建 27 条测试待办，并因盲盒开奖发生在「添加」瞬间，误解锁 `legendary_1` 传说贴纸 —— 清待办也撤不回贴纸。
-**根因**：隔离只做了 Android APK 通道（`build-test-apk.mjs`），Web 通道漏了。
-**修复**：`serve-test.mjs`（运行时改写 supabase.js，生产文件零改动）+ `e2e_common.py`（fail-closed 隔离断言）+ `check-test-env.mjs`（隔离自检）。
-**关键认知**：「E2E- 前缀 + 测完清理」这种软约定挡不住事故 —— 必须是物理隔离，不是命名约定。同理，「脚本本意只读」也挡不住事故（实测 `test_pinch.mjs` 漏 mock 了 `rpc/increment_login_count`，请求直接打到生产库，全靠假 JWT 被 401 才没写入）—— 只读必须是网络层阻断。
+- ✅ 为什么隔离必须是物理的、守卫必须挂网络层（Web 通道曾把 27 条测试数据写进生产库）：
+  [docs/lessons/2026-09-14-web-channel-isolation.md](docs/lessons/2026-09-14-web-channel-isolation.md)；
+  为什么"粘贴过一次"挡不住漂移（测试库 RLS 被手工关掉无人发现）：
+  [docs/lessons/2026-09-16-rls-disabled.md](docs/lessons/2026-09-16-rls-disabled.md)
 
 **如果有硬限制导致无法完整验证：**
-- 必须在交付时**明确列出未验证的功能点**
-- 标注未验证原因（如"无法模拟真机震动"、"无法测试 FCM 推送"）
+- 必须在交付时**明确列出未验证的功能点**，标注未验证原因（如"无法模拟真机震动"、"无法测试 FCM 推送"）
 - 绝不能把"没测"说成"已验证"或"应该没问题"
 
 ---
@@ -98,89 +96,65 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 
 **改完代码 ≠ 交付。用户手机上跑的是 APK 内置的 web 资源，不是你电脑上的源码。改完必须发布，否则用户永远看不到改动。**
 
-有两条交付通道 + 一条 App 内自更新机制：
+有两条交付通道 + 一条 App 内自更新机制。
 
 ### 通道 A：热更新（默认，纯前端改动走这条）
 
-**适用**：只改了 `public/` 下的文件（HTML/CSS/JS、图片等），没动 Android 原生层（Capacitor 插件、`capacitor.config.json`、`AndroidManifest.xml` 等）。
+**适用**：只改了 `public/` 下的文件（HTML/CSS/JS、图片等），没动 Android 原生层（Capacitor 插件、
+`capacitor.config.json`、`AndroidManifest.xml` 等）。
 
 - ✅ 改完代码 + 测试通过后，跑 `node scripts/release.mjs <版本号> --notes "<说明>"`
-- 脚本自动：注入版本号 → 打包 public/ 为 zip → 上传 Supabase Storage（`app_updates` bucket）→ 写 `app_versions` 表
-- 用户下次**冷启动** App 时自动拉取，无需重装 APK
-- ✅ 告知用户：**打开一次 App 即可**（不是"重开两次"）
-  ⚠️ 2026-09-17 更正：早先这里写的是「杀掉 App 重开两次（首次后台下载、二次生效）」，
-  与实现不符 —— `update.js` 是 `download → set → 立即 reload()`，**同一个会话内**就完成切换
-  （重载前用原生 SplashScreen 盖住，用户看到「粉色爱心 → 平滑过渡」）。
-  「两次」只在用户于下载完成前就把 App 杀掉时才需要。文档按实现改正（铁律四）。
-
-**执行环境二选一（同一套脚本，不是两条通道）：**
-- **发布前置（2026-09-14 明确）：目标改动必须已合并到 main。**
+  （自动：注入版本号 → 打包 public/ 为 zip → 上传 Supabase Storage `app_updates` bucket → 写 `app_versions` 表）
+- ✅ 告知用户：**打开一次 App 即可**（不是"重开两次"）。`update.js` 是 `download → set → 立即 reload()`，
+  **同一个会话内**就完成切换（重载前用原生 SplashScreen 盖住，用户看到「粉色爱心 → 平滑过渡」）；
+  「杀掉重开两次」只在用户于下载完成前就把 App 杀掉时才需要
+- ✅ **发布前置（2026-09-14 明确）：目标改动必须已合并到 main。**
   CD 的 `workflow_dispatch` 在默认分支上出包（工作流内已加 dev 守卫：非 main 直接失败）；
-  本地发布也应在 main 上、工作区干净时执行。在 feature 分支上发布 = **把没合并的代码发到线上**，
-  并让 main 落后于线上（制造出「仓库 meta 与线上 bundle 不一致」那个隐患）。
-- 本地直跑：`node scripts/release.mjs <版本号> --notes "<说明>"`
-- 远程跑（CD）：GitHub Actions → `CD · Web 热更新发布` → 填版本号，先 `dry_run=true` 看预演报告，
-  确认后 `dry_run=false` + `confirm=<版本号>`，在 `production` 环境点 Approve 才真正写生产
-- ✅ 发布后必须回读校验：`node scripts/verify-release.mjs [版本号]`（只读，验证版本行 enabled /
-  Storage 对象可下载 / 包内 meta 一致）。**写成功 ≠ 客户端拿得到**，脚本没报错不等于交付完成
+  本地发布也应在 main 上、工作区干净时执行。在 feature 分支上发布 = **把没合并的代码发到线上**
+- 执行环境二选一（同一套脚本，不是两条通道）：本地直跑；或远程 CD —— GitHub Actions → `CD · Web 热更新发布` →
+  先 `dry_run=true` 看预演报告，确认后 `dry_run=false` + `confirm=<版本号>`，在 `production` 环境点 Approve 才真正写生产
+- ✅ 发布后必须回读校验：`node scripts/verify-release.mjs [版本号]`（只读：版本行 enabled / Storage 对象可下载 /
+  包内 meta 一致）。**写成功 ≠ 客户端拿得到**，脚本没报错不等于交付完成
 - ✅ **版本真相 = 发布命令传入的版本号（+ `app_versions` 表），仓库不持有它**（2026-09-14 改）：
-  `public/index.html` 里那两个 meta 恒为**占位值 `0.0.0`**，由构建期注入 ——
-  热更新在 `release.mjs` 的**暂存副本**上注入（发布对工作区零改动），
-  APK 由 `release-apk.mjs` 在 cap sync 后注入（`app-version` = 线上最新 web 版本，`shell-version` = 本次壳版本）。
-  占位值是 fail-safe：万一漏注入，App 只会多重启一次，不会「本地偏高 → 永远收不到更新」。
-  ⚠️ 因此**发布后不再需要任何 meta 补提交**（旧设计下的「补 PR + 11 分钟模拟器 CI」已随设计一并消失）
+  `public/index.html` 里那两个 meta 恒为**占位值 `0.0.0`**，由构建期注入 —— 热更在 `release.mjs` 的**暂存副本**上注入
+  （发布对工作区零改动），APK 由 `release-apk.mjs` 在 cap sync 后注入。占位值是 fail-safe：万一漏注入，
+  App 只会多重启一次，不会「本地偏高 → 永远收不到更新」。⚠️ 因此**发布后不再需要任何 meta 补提交**
 
-**⚠️ 版本号必须比线上高（血泪教训）：**
+**⚠️ 版本号必须比线上高：**
 - 发布前**必须先查线上版本信息**：`node scripts/query-latest-version.mjs`（只读，打印两个口径：
   最新 enabled 版本 + **历史最高版本**）
 - 新版本号必须**语义化大于「历史上出现过的最高版本」**，不只是大于 enabled 的最新的那个（2026-09-16 收紧）：
   已下线的版本号也算"用过" —— 客户端判定更新是「服务端版本 ≤ 本地版本 → 无更新」，而设备本地版本
-  可能是某个曾经下发、后来被下线的版本（回滚演练留下的 2.7.65 就是这种行）。只跟 enabled 行比会放行它，
-  那批设备就永远收不到更新了
-- ❌ 禁止拍脑袋猜版本号。**`index.html` 的 meta 不是权威**（2026-09-14 更正原措辞）：本地发布后
-  它会被同步成最新版本，但 CI 发布后它会滞后 —— 唯一权威是 `app_versions` 表。
-  好在这步已自动化：`release.mjs` 内置 `assertNewerThanLatest()`，版本号不够高会直接拒绝发布
-- **血泪教训：** 2026-08-07，没查线上版本直接发 2.0.1，但线上已经 2.2.4，版本号低导致 App 判定"无更新"，用户连开几次都没变化。从此发布前必查线上版本。
+  可能是某个曾经下发、后来被下线的版本，只跟 enabled 行比会放行那批设备
+- ❌ 禁止拍脑袋猜版本号。**`index.html` 的 meta 不是权威**，唯一权威是 `app_versions` 表
+- 好在这步已自动化：`release.mjs` 内置 `assertNewerThanLatest()`，版本号不够高会直接拒绝发布
+- 教训：[docs/lessons/2026-08-07-stale-version-no-update.md](docs/lessons/2026-08-07-stale-version-no-update.md)
+  （没查线上直接发 2.0.1，线上已 2.2.4，用户连开几次都没变化）
 
-**⚠️ 「下线」≠「回滚」（2026-09-16 定性，别再把前者当后者）：**
+**⚠️ 「下线」≠「回滚」（别再把前者当后者）：**
 
-- **下线 / 止损**：`node scripts/rollback.mjs <版本号>`（热更新）/ `... <版本号> --native`（APK 壳）
-  —— 把对应版本表的 `enabled` 置 `false`。另有 `--restore`（撤销误下线）与 `--dry-run`（只看影响不写生产）。
-  效果是**还没更新的设备 + 新装机不会再拿到这个版本**。
+- **下线 / 止损**：`node scripts/rollback.mjs <版本号>`（热更新）/ `... <版本号> --native`（APK 壳）——
+  把对应版本表的 `enabled` 置 `false`。另有 `--restore`（撤销误下线）与 `--dry-run`（只看影响不写生产）。
+  效果是**还没更新的设备 + 新装机**不会再拿到这个版本。
   ⚠️ 通道 B 特有：关掉**唯一**的启用壳版本后，**所有设备都不再收到壳更新提示**（脚本会把这个后果先打出来）；
-  因为壳安装是用户手动点的，止损对"已经点了安装的人"无效。
+  壳安装是用户手动点的，止损对"已经点了安装的人"无效。
   ❌ 它**不能把已经更新的设备退回去**：那些设备本地版本已经更高，服务端"最新"比它低 → 判定无更新 → 永远停在那儿。
-  （旧版 `rollback.mjs` 打印的"客户端会落到上一条 enabled 版本"就是这句话的错误来源，现已更正。）
-- **回滚锚点用 tag，不要用本地分支**（2026-09-16 定型，实测过）：
-  `--from-git` 收的是任意 git ref（`release.mjs` 用 `git rev-parse --verify <ref>^{commit}` 解析，
-  所以 **annotated tag 也能直接用**）。但**锚点的存放方式有对错**：
-  - ✅ 正确：`git tag -a anchor/<版本或日期>-<主题> <sha>` **并 `git push origin <tag>`**。
-    tag 不可变、可随仓库走、别人也拿得到；实测用 `anchor/v2.7.57-history-page` 跑
-    `release.mjs 2.7.68 --from-git <tag> --dry-run` 全流程通过（打印回退差异 + 包内 meta 注入新号）。
-  - ❌ 错误：本地 `backup/*` 分支。**本地分支不是备份** —— 2026-09-16 清点时发现本机堆了 12 个
-    `backup/pre-*`，一个都没推到远端；其中 11 个的内容早已在 main 历史里（删了无损），
-    但 `backup/v2.7.57-history-page` **是那份功能代码的唯一副本**（main 里查不到该功能）。
-    名称叫 backup 却只活在硬盘上，这种"备份"在换机/丢盘时等于零。
-  - 命名建议 `anchor/<版本>-<主题>`，正文写清"为什么留"（参照现有的那条 tag 的 message）。
-- **真回滚 / 恢复**：`node scripts/release.mjs <新版本号> --from-git <旧 ref>` ——
-  ⚠️ **只覆盖通道 A（热更新）**。通道 B 的对应能力（`release-apk.mjs --from-git`）
-  **决定暂不实现（2026-09-16 决策，非遗漏）**，理由与触发条件见下。
-
-  **理由**：① 通道 B 还没发过任何壳版本 —— 没有真实基线，"退回旧代码"无从演练，
-  也无从判断它是否真比"发一个修好的版本"更好；② 它与 web **不是同一件事**：
-  **Android 不允许 versionCode 更低的包覆盖安装**，所以"退回旧壳"只能是
-  「**旧壳代码 + 更高的 versionCode**」，而 build.gradle 的 versionCode/versionName 又必须与本次发布一致
-  （`release-apk.mjs` 的前置守卫会拦），实现路径比 web 的 `--from-git`（只需 tar 出 `public/`）重得多、
-  也更容易写错；③ 多数坏壳的正解本来就是**尽快发一个修好的更高版本**（本项目已有此结论）。
-  **在它落地之前，坏壳的止损手段是 `rollback.mjs <版本号> --native`（停止推送）+
-  发一个修好的更高版本 —— 注意前者救不了已经装了坏包的人。**
-
-  **触发重新评估的条件**（满足其一再做）：发过第一个壳版本、有了可演练的真实基线；
-  或真的发生坏壳事故且"发修好的版本"不足以止损（例如新壳启动即崩、而旧壳可用）。
-  内容取自旧 ref 的 `public/`、版本号用更高的新号、包内 meta 注入新号。这样已更新的设备会正常下载并退回旧代码。
-  先 `--dry-run` 预演（会打印"本次将回退掉哪些改动"，并回读校验包内 meta）。
-  ⚠️ 为什么必须注入新号：包内 meta 若是旧号，客户端下完会判定"又有新版本"→ **无限重装**。
-  ⚠️ 因为是重发已发布过的旧代码，此模式下「改动必须先合并 main」这条前置不适用。
+- **真回滚 / 恢复（通道 A）**：`node scripts/release.mjs <新版本号> --from-git <旧 ref>` ——
+  内容取自旧 ref 的 `public/`、版本号用更高的新号、包内 meta 注入**新号**
+  （⚠️ 包内 meta 若是旧号，客户端下完会判定"又有新版本"→ **无限重装**）。
+  任意 git ref 可用（annotated tag 也能直接用）。先 `--dry-run` 预演（会打印"本次将回退掉哪些改动"）。
+  因为是重发已发布过的旧代码，此模式下「改动必须先合并 main」这条前置不适用。
+- **回滚锚点用 tag，不要用本地分支**（2026-09-16 定型，实测过）：`git tag -a anchor/<版本或日期>-<主题> <sha>`
+  **并 `git push origin <tag>`**。本地 `backup/*` 分支**不是备份** ——
+  教训：[docs/lessons/2026-09-16-backup-branches.md](docs/lessons/2026-09-16-backup-branches.md)
+- **通道 B 的 `--from-git`（退回旧壳）：决定暂不实现**（2026-09-16 决策；2026-10-03 复评，**结论维持、理由更新为事实版**）：
+  - 复评依据：壳已发布多个版本（2.8.0 误发布后已 `enabled=false`、2.8.1 事故壳），「还没发过壳版本、没有真实基线」
+    的前提已不存在；2.8.1 事故的实际止损 = `rollback --native` 下线 + 热更 2.7.78 修复，坏壳设备拉热更后**自愈** ——
+    实证了「发一个修好的更高版本」足以止损；且 Android 不允许 versionCode 更低的包覆盖安装，"退回旧壳"只能是
+    「旧壳代码 + 更高的 versionCode」，实现路径重、易写错，收益未超过成本
+  - 坏壳止损手段（在它落地之前）：`rollback.mjs <版本号> --native`（停止推送）+ 发一个修好的更高版本 ——
+    ⚠️ 前者救不了已经装了坏包的人
+  - 重新评估触发条件：出现「新壳启动即崩、旧壳可用」且热更无法覆盖的故障形态
 - **自动兜底只有一种**：`resetWhenUpdate:true`（连续启动崩溃 3 次自动回退）—— **只覆盖崩溃类故障**。
   UI / 文案 / 逻辑类问题（App 照常启动）不会触发它，只能靠上面两条命令。
 
@@ -188,15 +162,11 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 
 **适用**：改了 Capacitor 插件、Android 配置、`capacitor.config.json`、原生权限等，热更新覆盖不到的地方。
 
-**两个执行环境（同一套脚本，不是两条通道）：**
-
-1. **本地直跑**：`node scripts/release-apk.mjs <版本号> [--notes "..."]`
-2. **远程跑（CD，2026-09-15 起）**：GitHub Actions → `CD · APK 发布（原生壳）` → 先 `dry_run=true`
-   看预演报告（**真构建**，产物可从 run 里下载安装验证），确认后 `dry_run=false` + `confirm=<版本号>`，
-   在 `production` 环境点 Approve 才真正写生产
-
-脚本自动：**cap sync** → 注入 assets 版本 meta → gradle 打包 → 校验包内 meta + 签名 →
-写 `app_native_versions` 表 → 上传 APK → （本地跑时）覆盖 `~/Desktop/有爱.apk`
+- 执行环境二选一（同一套脚本）：本地 `node scripts/release-apk.mjs <版本号> [--notes "..."]`；
+  或远程 CD —— GitHub Actions → `CD · APK 发布（原生壳）` → 先 `dry_run=true` 看预演报告（**真构建**，
+  产物可从 run 里下载安装验证），确认后 `dry_run=false` + `confirm=<版本号>`，在 `production` 环境点 Approve
+- 脚本自动：**cap sync** → 注入 assets 版本 meta → gradle 打包 → 校验包内 meta + 签名 →
+  写 `app_native_versions` 表 → 上传 APK → （本地跑时）覆盖 `~/Desktop/有爱.apk`
 
 **⚠️ CI 发布的前置条件（两段式，必须先合再发）：**
 版本号是发布命令传入的，但 **`versionCode` 与 `versionName` 都在 `android/app/build.gradle` 里** ——
@@ -205,28 +175,27 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 
 - **`versionName` 必须逐字等于本次发布的版本号。** 客户端把 **APK manifest 里的 versionName**
   当本地版本（`apk-update.js` 用 `App.getInfo().version`），再和表里的 `version_name` 比 ——
-  两者不等就会「表说 2.1.29、装的包自报 2.1.28」⇒ App **反复提示同一次更新，用户陷入无限重装**。
-  ⚠️ 这条是 2026-09-15 补的：此前**没有任何检查**守它（包内 `shell-version` meta 是脚本自己注入的，
-  恒等于版本号、必然通过），而它的症状正是 2026-09-04 那次事故的原样复现。
-- **`versionCode` 必须严格递增**，基准是**含已下线行**的历史最大值（2.8.0 误发布后已 `enabled=false`，
-  但它的 code 33 已经用掉了，而 Android 不允许同码覆盖安装）。
+  两者不等就会「表说 A、装的包自报 B」⇒ App **反复提示同一次更新，用户陷入无限重装**。
+  教训：[docs/lessons/2026-09-04-apk-infinite-reinstall.md](docs/lessons/2026-09-04-apk-infinite-reinstall.md)
+- **`versionCode` 必须严格递增**，基准是**含已下线行**的历史最大值（Android 不允许同码覆盖安装；
+  2.8.0 误发布后已 `enabled=false`，但它的 code 33 已经用掉了）
 - `--code` 参数**不允许**与 `build.gradle` 不一致：APK 里真实的 code 永远取自 `build.gradle`，
-  用 `--code` 覆盖只会让**表里记的号和包里装的不一致**。
+  用 `--code` 覆盖只会让**表里记的号和包里装的不一致**
 
 - ✅ 打包后必须验证：构建时间（确认是最新）、签名通过（`apksigner verify`，工作流里有独立步骤）、
   关键改动已入包（unzip 检查，脚本第 5b 步）
 - ✅ 发布后必须回读校验：`node scripts/verify-apk-release.mjs [版本号]`（只读）——
   版本行 `enabled` / Storage 对象可下载且字节数一致 / **SHA-256 与表里一致** / 包内 meta 一致。
-  ⚠️ 其中 SHA-256 这条是 APK 通道独有的关键项：`apk-update.js` 在唤起系统安装器**之前**会比对它，
+  ⚠️ SHA-256 是 APK 通道独有的关键项：`apk-update.js` 在唤起系统安装器**之前**会比对它，
   对不上就**拒绝安装**，用户侧表现是"下载完成后毫无反应"（服务端全绿）——
   和热更新通道的 `verify-release.mjs` 是同一个「写成功 ≠ 客户端拿得到」的道理
 - ⚠️ **CI 发布不覆盖 `~/Desktop/有爱.apk`**（runner 没有你的桌面）。需要桌面留档时从 run 的
-  artifact 下载，或本地跑一次；「桌面只留一个固定文件名」的纪律仍然只适用于本地打包
-- ✅ 告知用户明确的 APK 路径和构建时间
+  artifact 下载，或本地跑一次
 
 ### APK 自更新机制（App 内提示升级，与"打 APK"区分）
 
-- `public/js/apk-update.js`：冷启动 + 前台切回（60 秒节流）时，用 `App.getInfo()` 读**真实 versionName**（非热更新 meta 值），与线上 `app_native_versions` 最新版本比对
+- `public/js/apk-update.js`：冷启动 + 前台切回（60 秒节流）时，用 `App.getInfo()` 读**真实 versionName**
+  （非热更新 meta 值），与线上 `app_native_versions` 最新版本比对
 - 命中更新 → 原生插件 `ApkInstaller` 下载（**sha256 校验**）→ 唤起系统安装器
 - **强制更新**：`is_force_update=true` 或本地 < `min_supported_version` 时，更新面板不可关闭
 - **版本号纪律**：`versionCode` 必须**严格递增**（脚本强制校验）
@@ -235,37 +204,34 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 
 **桌面 APK 永远只有一个文件：`~/Desktop/有爱.apk`，每次打包直接覆盖它。**
 
-- ✅ 打包后用固定文件名覆盖：`cp app-release.apk ~/Desktop/有爱.apk`（不是带时间戳的 `有爱-20260803_0705.apk`）
-- ✅ 打包前先清理桌面的历史 APK（含旧时间戳文件名），只留覆盖后的那一个
-- ❌ 禁止生成 `有爱-时间戳.apk` 这类带版本/时间的文件名，会造成一堆 APK 堆积，用户分不清哪个是最新
-- **血泪教训：** 多次打包用了带时间戳文件名，桌面累积了一堆，用户困惑哪个能装。从此固定单一文件名 + 覆盖。
+- ✅ 打包前先清理桌面的历史 APK（含旧时间戳文件名），打包后用固定文件名覆盖
+- ❌ 禁止生成 `有爱-时间戳.apk` 这类带版本/时间的文件名，会堆积一堆、用户分不清哪个是最新
 
-### SQL 迁移要可直接复制，不要只放文件里
+### SQL 迁移怎么交付（2026-10-03 更新：apply-sql.mjs 为主，Dashboard 粘贴为兜底）
 
-**任何需要用户在 Supabase Dashboard 执行的 SQL，必须在交付回复里直接贴出可复制的完整 SQL，不能只写进 `.sql` 文件让用户自己去找。**
-
-- ✅ 在对话回复里用代码块贴出**完整、可直接复制**的 SQL（用户全选 → 粘到 SQL Editor → Run）
+- ✅ **主通道**：`node scripts/apply-sql.mjs supabase/xxx.sql --project test --apply` ——
+  走 Management API 把幂等迁移打到指定项目；默认 dry-run，写生产需
+  `--project prod --apply --confirm <文件名>`，应用后自动**再跑第二遍做幂等自证**（详见技术栈备忘「SQL 自动应用」）
+- ✅ **兜底**（本机没有 PAT / 用户主动要求走 Dashboard）：在对话回复里直接贴出**完整、可直接复制**的 SQL
+  （用户全选 → 粘到 SQL Editor → Run），**不能只写进 `.sql` 文件说"见某某文件"**
 - ✅ SQL 必须幂等（`ADD COLUMN IF NOT EXISTS` / `ON CONFLICT DO NOTHING` / `DROP POLICY IF EXISTS`），可重复执行不出错
-- ✅ 附简短说明：去哪执行（Dashboard → SQL Editor）、执行后什么效果、不执行会怎样
-- ✅ 同时保留 `.sql` 文件作为项目档案（方便后续查阅/版本管理），但**对话里必须再贴一次**
-- ❌ 禁止只创建 `.sql` 文件然后说"见某某文件"，用户得自己打开文件复制
-- **血泪教训：** 图片功能交付时 SQL 只写进了 `migration-add-todo-images.sql`，用户没看到可复制版本，差点漏执行，导致功能装上用不了。
+- ✅ 附简短说明：去哪执行、执行后什么效果、不执行会怎样；同时保留 `.sql` 文件作为项目档案
+- 教训：图片功能交付时 SQL 只写进了 `.sql` 文件，用户没看到可复制版本，差点漏执行，功能装上用不了
 
 ### 发布前自检（每次发布都要走一遍）
 
 1. **确认在 main 上、改动已合并、工作区干净**（CD 只从 main 出包；工作流内有 dev 守卫）
 2. 查线上 `app_versions` 最新版本号（`node scripts/query-latest-version.mjs`），新版本必须语义化更大
 3. 跑回归测试（`scripts/test_*.py` + `scripts/test_*.mjs`），截图/断言确认；**PR 的 required checks 必须全绿**
-4. 涉及 SQL 改动 → 对话里贴可复制完整 SQL（不是只放 `.sql` 文件）
+4. 涉及 SQL 改动 → 按上节规则交付
 5. 涉及 APK 改动 → `apksigner verify` + 检查构建时间 + unzip 确认改动入包
 6. **设备侧冒烟（人工，1 分钟）**：把 dry-run 制品装到真机上走一遍关键路径 ——
    壳能启动 → 登录 → 加一条待办 → 完成一条 → 切后台再回来。
-   **为什么必须有这一步**（2026-09-17 定型）：模拟器套件 2026-09-17 起改为**仅手动触发**，
+   **为什么必须有这一步**（2026-09-17 定型）：模拟器套件当天起**已从 CI 整体删除**（不是"仅手动触发"），
    设备侧不再有自动信号；而这条人工冒烟同时覆盖了模拟器套件**从来没覆盖**的部分 ——
-   系统通知、震动、热更新、APK 安装器。
-   走通道 A（热更新）时至少确认一次：打开 App 能看到更新欢迎动画（= 新 bundle 已生效）。
-7. 发布后回读校验 `node scripts/verify-release.mjs`（版本行 / Storage 对象 / 包内 meta）；
-   若走 CI 发布，另外把 `index.html` 的 meta 通过 **PR** 补回（见通道 A 的「已知限制」）；
+   系统通知、震动、热更新、APK 安装器。走通道 A 时至少确认一次：打开 App 能看到更新欢迎动画（= 新 bundle 已生效）。
+   壳发布前另做「模拟器 + debug 壳 + CDP」启动链验证（见下方 thenable 铁则一节）。
+7. 发布后回读校验 `node scripts/verify-release.mjs`（通道 A）/ `verify-apk-release.mjs`（通道 B）；
    交付回复列明"已做 X / 已验证 Y / 未验证 Z"（铁律二的硬限制要标）
 
 ---
@@ -277,6 +243,8 @@ Web 通道原本没有测试库隔离。`scripts/serve.mjs` 托管的是生产 `
 - 新增 / 修改数据库表字段 → 同步更新 `PRODUCT-SPEC.md` 的「数据模型」章节
 - 新增 / 修改发布通道、原生插件、构建机制 → 同步更新本文档「铁律三」与「技术栈备忘」
 - 新增 / 修改产品功能 → 同步更新 `PRODUCT-SPEC.md` 的「功能规格」章节
+- 事故 / 疑难 bug 复盘 → 完整叙事追加到 `docs/lessons/`（结构：发生了什么/根因/修复与防回归/关联规则），
+  并更新其 README 索引；AGENTS.md 里只留规则 + 一行教训要点
 - 废弃 / 删除旧机制 → 同步清理相关文档描述（不要留下"已死代码"的文档）
 - **每个批次/阶段收尾 → 把可讲的判断与踩坑追加到「本机素材库」**（四段结构：是什么 / 常见问法 /
   我的实证 / 怎么讲清楚）。材料**不在本仓库内**，真实路径记在本机记忆 `.workbuddy/memory/MEMORY.md`
@@ -330,79 +298,22 @@ gh pr merge --squash --delete-branch  # 合并需用户明确指令
 ### CI 分层：哪些改动该跑哪一层（2026-09-17 定型）
 
 分层目标是**把「自动跑」压到最少**：让「改一个颜色」的反馈从十几分钟降到 70 秒。
-起因是一次实测 —— 只改了颜色的小改动把整条流水线拖进十几分钟起步的**排队**
-（06:17 触发的 run，其 job 直到 06:23 才开始；06:27 那个等到 06:39）。
 
 | 层 | 何时跑 | 耗时（实测） | 角色 |
 |---|---|---|---|
 | `ci.yml`（3 个 job） | **每次 push / PR** | **约 70 秒** | **必需门禁**：Node 回归 + admin Playwright E2E + actionlint |
-| `e2e-web-full.yml` | 每晚 02:00 + 手动 | 约 4–7 分钟 | 全量业务回归（7 个双账号 E2E）+ 测试库三项 preflight |
+| `e2e-web-full.yml` | 每晚 02:17 + 手动 | 约 4–7 分钟 | 全量业务回归（8 个双账号 E2E）+ 测试库三项 preflight |
 
-### 设备侧（模拟器）**不再进 CI** —— 2026-09-17 定型
+### 设备侧（模拟器）**不进 CI** —— 2026-09-17 删除 e2e-app.yml（#78）
 
-原先的 `.github/workflows/e2e-app.yml`（打测试 APK + 模拟器 + Appium，约 11 分钟）**已删除**。理由：
-
-1. **成本**：一次约 11 分钟，且与夜间全量回归**共用并发组 `e2e-test-db`**（同一测试库，必须串行）、
-   `cancel-in-progress: false`（不可被取消）⇒ 触发即占住队列十几分钟；
-2. **收益**：它只覆盖「登录 + 待办增删改查」，而这些**已被 web 双账号 E2E 等价覆盖**；且翻遍提交历史
-   与文档，它**没有一条「发现产品缺陷」的记录** —— 维护史全是修自己（重试包装 / `adb` 无超时的
-   4h09m 卡死 / ANR 弹窗劫持 a11y 树 / 元素定位 / 10.4s 次交互…）；
-3. **稳定性**：它**常态掉线**（`adb` 失去响应 = 模拟器进程级死亡，仓库侧修不了），
-   把 main 变长期红灯、训练人忽略红色；
-4. **行业对照**：设备 E2E **不挂在 PR 门禁**是主流做法；云设备的核心价值是「并行覆盖机型矩阵」，
-   而本仓双人私用、单一 APK、**没有机型矩阵需求** —— 那份价值不存在。
-
-**那设备侧谁验**：**发布时人工真机走一遍冒烟**（见「发布前自检」第 6 步）——
-它同时覆盖模拟器套件**从未覆盖**的通知 / 震动 / 热更新 / APK 安装器；
-`release-apk.mjs` 与 `verify-apk-release.mjs` 另在发布通道校验真构建、签名、包内 meta 与 SHA。
-
-**这个取舍的代价（明确列出，别当成"没有成本"）**：
-- 设备侧验证 **100% 依赖发布时那一次人工冒烟** —— 不做就等于没验；
-- `android/` 层若被改坏，要到**下次发 APK** 才发现（`release-apk.yml` 的 `dry_run=true` 会真构建 + 签名 + unzip 校验）；
-- `app-e2e/` 套件**保留在仓库里**（可按需在本机接模拟器/真机跑，见 `app-e2e/README.md`），
-  但不再有任何自动信号。
+四条理由（占串行队列十几分钟 / 覆盖内容已被 web E2E 等价且无一条发现缺陷的记录 / adb 常态掉线把 main 变
+长期红灯 / 设备 E2E 不挂 PR 门禁是行业主流且本项目无机型矩阵需求）与**明确接受的代价**（设备侧验证 100%
+依赖发布时人工冒烟；`android/` 改坏要到下次发 APK 才发现；`app-e2e/` 套件保留在仓库、可按需本机跑但无自动信号）
+的完整论证见 **[docs/lessons/2026-09-17-device-ci-removal.md](docs/lessons/2026-09-17-device-ci-removal.md)**。
 
 **要恢复设备测试**：新建一个工作流（或从 git 历史取回 `e2e-app.yml`），`paths` 只留
 `android/**` 与 `app-e2e/**`（**不要含 `public/**`**），并把 `app-e2e/README.md` 里记的
 `check-e2e-env-keys.mjs` 生成方列表一并加回。
-
-**本机模拟器启动备忘（2026-10-02 晚已彻底修复，黑屏 ≠ 卡死）：**
-当天凌晨连续两次启动失败（进程活着、窗口黑屏、`adb` 永远 `offline`），当晚定位为**三类独立根因**，
-全部修复并验证（冷启动 + 快照回环多轮全绿）。**现在默认命令即可稳定启动，不再需要任何参数**：
-
-```bash
-emulator -avd Medium_Phone_API_36.1   # 就绪唯一标准：adb shell getprop sys.boot_completed 返回 1
-```
-
-**三类根因与修复（都是 AVD 本机配置，不涉及仓库代码）：**
-
-1. **GPU 模式**：`hw.gpu.mode=auto` 在本机解析为 `gpu mode host`（gfxstream/宿主 Vulkan，
-   AMD Radeon Pro 5300M），宿主 GPU 初始化**间歇性挂死**（同一命令时好时坏 —— 这就是
-   「有时能开有时黑屏」的来源）。✅ 修复：`config.ini` 持久化 `hw.gpu.mode=swiftshader_indirect`
-   （软渲染，绕开宿主 GPU 驱动；代价是渲染慢一点，测试场景无所谓）。
-   判定生效：启动日志出现 `library_mode swiftshader_indirect gpu mode swiftshader_indirect`。
-2. **跨版本残留快照**：`snapshots/default_boot` 由别的模拟器版本保存，新版加载报
-   `The snapshot requires the feature: 21, which the emulator does not support`（加载失败会回退冷启动，
-   但加载挂死时就是黑屏）。✅ 修复：删除残留快照；**模拟器升级后若快照加载报错/挂死，直接删
-   `~/.android/avd/<名>.avd/snapshots/default_boot`**（只丢开机内存态，不丢 App 数据）。
-   快照回环已验证同版本下可靠（关机存盘 → 下次启动 ~3.5 秒恢复）。
-3. **`linggan_droid` 内存解析失败**：config.ini 里 `hw.ramSize = 2048M`（带单位带空格的模板格式）
-   模拟器**没解析成功，静默回退 256MB** → Android 16 起不来，zygote OOM →
-   `Kernel panic: System is deadlocked on memory` → **无限重启循环**（窗口黑、adb 永远 offline、
-   qemu 200% CPU 空转）。✅ 修复：改成纯数字 `hw.ramSize=2048`（与正常 AVD 同格式）。
-
-**排障手册（下次再遇黑屏，按序取证，不要原地等）：**
-- **判别"真卡死"还是"正常冷启动"**：通知栏出现「Emulator is performing a full startup」= 正常
-  （2-5 分钟，崩溃循环后首次启动可能更久）；持续 5 分钟以上 `getprop sys.boot_completed` 仍空 /
-  offline = 真卡死，杀掉再查。
-- **带内核日志冷启动**：`emulator -avd <名> -no-snapshot -show-kernel > /tmp/emu.log 2>&1`，然后：
-  - `grep 'Memory:' /tmp/emu.log` —— guest 实际拿到的内存（<1G 就是 ramSize 解析问题）；
-    出现多行 `Linux version` banner = 重启循环；
-  - `grep -E 'oom-killer|Kernel panic' /tmp/emu.log` —— 内存耗尽实锤；
-  - `grep 'gpu mode' /tmp/emu.log` —— GPU 模式实际解析成了什么。
-- **生成配置会说话**：config.ini 写错会被**静默忽略**，真相在启动后生成的
-  `~/.android/avd/<名>.avd/hardware-qemu.ini`（本次事故：config 写 2048M，生成配置里是 256）。
-  改完 config.ini 后用它回读校验，别信"写过了"。
 
 ### commit message 规范（Conventional Commits，中文描述）
 - `feat:` 新功能 / `fix:` 修复 / `refactor:` 重构 / `docs:` 文档 / `chore:` 杂项
@@ -422,10 +333,11 @@ emulator -avd Medium_Phone_API_36.1   # 就绪唯一标准：adb shell getprop s
 
 **代码质量参差不齐的根源是「没有第二双眼睛」。一人公司没有 reviewer，就用 AI 审查 + Checklist 兜底。**
 
-- 功能开发完成、回归测试通过后、**合并 PR 之前**（不是 `git commit` 之前 —— 现在提交到分支不产生 main 变更，真正的门是合并），必须按 `CODE-REVIEW.md` 的六维度 Checklist 审查本次改动
+- 功能开发完成、回归测试通过后、**合并 PR 之前**（不是 `git commit` 之前 —— 现在提交到分支不产生 main 变更，
+  真正的门是合并），必须按 `CODE-REVIEW.md` 的六维度 Checklist 审查本次改动
 - 审查结论分 🔴 阻断 / 🟡 建议 / 💭 建议：🔴 必须清零才能 commit；🟡 修复或豁免留注释
 - 审查优先级：数据安全（铁律一）> 正确性 > 安全 > 可维护性 > 性能 > 测试（铁律二）
-- 发布后发生事故 / 疑难 bug → 复盘根因，反哺进 `CODE-REVIEW.md` 的 Checklist（防同类问题再犯）
+- 发布后发生事故 / 疑难 bug → 复盘根因，反哺进 `CODE-REVIEW.md` 的 Checklist 与 `docs/lessons/`（防同类问题再犯）
 - **本文档只写「必须做」，不复制审查细节**：分级、六维度、四时点流程、AI 审查话术都在 `CODE-REVIEW.md`
 
 ---
@@ -441,17 +353,18 @@ emulator -avd Medium_Phone_API_36.1   # 就绪唯一标准：adb shell getprop s
     与测试里的 mock JWT payload（装饰字段，无逻辑读取）。它们不含口令，单独泄露不构成凭据。
     **文档 / SQL / `.example` 没有这个功能理由**，那里出现真实账号标识一律算违规。
 - ✅ 自查命令（工作树）——**判据不是「输出为空」**（伪域名 `@todo.local` 会合法地出现在说明文字里），
-  而是「逐条都能解释」：
+  而是「逐条都能解释」；**必须自己先跑一遍、并且必须能真的变红**（否则和没有一样）：
   ```bash
   # ① 列出仓库里全部凭据类赋值：每一个的「值」都必须是占位符 / process.env 读取 / ${{ secrets.* }}
-  #    出现任何真实字面量 = 立即停下，按下方①②③顺序处理
+  #    出现任何真实字面量 = 立即停下，按下方泄露处理顺序的①②③执行
   git grep -nEi '(password|passwd|secret|token|api[_-]?key)[[:space:]]*=[[:space:]]*[^[:space:]]+' -- . \
     ':!package-lock.json' ':!public/js/vendor' ':!AGENTS.md' ':!CODE-REVIEW.md'
 
   # ② 列出全部账号标识出现点：逐条确认落在「允许的位置」
-  #    允许：客户端登录映射（public/js/auth.js、admin/ 的 AuthContext）、测试账号（e2e-*）、mock JWT payload
+  #    允许：客户端登录映射（public/js/auth.js、admin/ 的 AuthContext）、测试账号（e2e-*）、mock JWT payload、
+  #    以及复盘文档里描述「形状占位」的出处（目前仅 docs/lessons/2026-09-15-credential-leak.md，已排除）
   #    不允许：文档 / SQL / .example —— 那里只能写形状占位（如 <拼音>@todo.local）
-  git grep -n '@todo\.local' -- . ':!AGENTS.md' ':!CODE-REVIEW.md'
+  git grep -n '@todo\.local' -- . ':!AGENTS.md' ':!CODE-REVIEW.md' ':!docs/lessons/2026-09-15-credential-leak.md'
   ```
   ⚠️ **工作树干净 ≠ 没泄露过** —— 历史提交里的值照样能 `git show` 取出来。所以还要扫历史：
   ```bash
@@ -466,60 +379,36 @@ emulator -avd Medium_Phone_API_36.1   # 就绪唯一标准：adb shell getprop s
   → ③ 复核历史提交里是否还有（上面的 ③④）→ ④ 开 GitHub **secret scanning + push protection**
   - 删文件**不等于**修好：历史提交里仍然有，且可能已被克隆（`git log --all -S` 会告诉你从哪个 commit 开始）
   - 改写历史（force push）在本项目**不做**：main 有分支保护、收益小于代价 —— 轮换凭据才是根治
-
-**血泪教训（2026-09-15）：** `admin/.env.test.example` 里写着真实账号邮箱（形状 `<拼音>@todo.local`，
-本文件不复述真值）+ 真实密码（值已在轮换时作废），**从 2026-09-08 起在公开仓库里躺了一周**。
-而生产账号用的是**同一个邮箱**（App 的用户名/邮箱映射就写在 `public/js/auth.js` 里）—— 只要密码复用，
-"邮箱 + 密码"就是完全公开的，任何人都能登进这个双人私密应用读写全部数据。发现时的排查线索：生产库里出现了一条
-**查不到来源**的留言（软删除表里没有、代码里也没有物理删除路径），且 App 端表现"今早才出现、随后消失"。
-
-**血泪教训补记（2026-09-17）：** 上面那条规则写完之后，**规则自己举的例子又把真值写回了 AGENTS.md**，
-且规则给出的自查命令有两个缺陷 —— ① 只扫 `'*.example' '*.md'`，扫不到 `.sql` / `.js`
-（`supabase/schema.sql` 与 `PRODUCT-SPEC.md` 里的真实邮箱因此一直没被这条命令抓到）；
-② 命令文本含 `PASSWORD=[^y]`，会**自匹配**记录它的那两个文件，于是永远不可能是"绿"的。
-**推论**：自查命令必须自己先跑一遍、并且**必须能真的变红**（否则和没有一样）。
-另注：同批还发现 `deliverables/` 下有一份机构向学习文档（37KB）躺在公开仓库里 —— 已迁至本机素材库
-（路径见本机记忆，不入库），并已按素材库的构建流程重新生成索引。
-
-**推论写进规则**：凭据卫生的失效**不会报错、不会报警**，只会以"莫名其妙的数据/登录"的形式出现 ——
-所以它必须是**推送前的静态检查**（人工自查命令 + GitHub push protection），不能靠"我记得没写过"。
+- **推论写进规则**：凭据卫生的失效**不会报错、不会报警**，只会以"莫名其妙的数据/登录"的形式出现 ——
+  所以它必须是**推送前的静态检查**（人工自查命令 + GitHub push protection），不能靠"我记得没写过"。
+- 教训：[docs/lessons/2026-09-15-credential-leak.md](docs/lessons/2026-09-15-credential-leak.md)
+  —— `.env.test.example` 真实邮箱+密码公开躺一周（生产账号同邮箱，密码复用即全面沦陷）；
+  规则自己的例子把真值写回了本文档；旧自查命令扫不到 `.sql`/`.js` 且会自匹配永远不绿。
 
 ---
 
 ## 补充：Capacitor 插件对象是 thenable —— 永不进 Promise 链（2026-10-02 生产事故）
 
-**事故**：2.8.1 壳发布后，App 端**待办完全不加载**（开屏不撤、列表永不渲染），生产不可用；
+**事故一句话**：2.8.1 壳发布后，App 端**待办完全不加载**（开屏不撤、列表永不渲染），生产不可用；
 网页/PWA 不受影响。热更 2.7.78 修复 + 壳 2.8.1 下线止损，装了坏壳的设备拉到热更后自愈。
-
-**根因（一行）**：`notify.js` 新增的 `getLocalNotifications()` 曾是 **async 函数直接 return 插件代理对象**。
-Capacitor 的插件代理（`registerPlugin` 的返回值）是 **thenable** —— async 函数返回它时，Promise 机制会
-二次展开（调用它的 `.then`），native 下这变成一次**不存在的桥接方法调用**，抛
-`LocalNotifications.then() is not implemented on android`；而该调用位于**启动关键路径**
-（`initReminder` 在撤开屏与首屏拉取之前），异常中断整个 init IIFE —— 后面的首屏 fetch、
-render、撤开屏全部不执行。**浏览器里 `isNative=false` 返回 null，走不到出错分支**，
-于是 Playwright E2E 全绿，只有真机暴露。
+根因、两个测试盲区、CDP 验证流程的完整复盘：
+**[docs/lessons/2026-10-02-capacitor-thenable.md](docs/lessons/2026-10-02-capacitor-thenable.md)**
 
 **铁则（代码审查检查项，🔴 级）**：
 - Capacitor 插件代理对象**永远不能**被 `await`、放进 Promise 链、或作为 async/Promise 的返回值
+  （插件代理是 thenable —— async 函数返回它时 Promise 会二次展开 `.then`，native 下变成一次
+  不存在的桥接方法调用；而该调用位于启动关键路径时会中断整个 init，浏览器里 `isNative=false`
+  走不到出错分支，所以 Web E2E 全绿只有真机暴露）
 - **只能** `await` 它的**方法调用的返回值**（如 `await LocalNotifications.schedule({...})` —— 那是 bridge promise）
 - 跨模块传递插件实例用**同步函数**（见 `notify.js` 的 `getLocalNotifications`，时序由
   `ensureCapacitorLoaded()` 显式管理），需要等待就 `await ensureCapacitorLoaded()` 再同步取
 
-**为什么既有测试体系没拦住（两个盲区叠加）**：
-1. 全部 Web E2E 跑在浏览器，`isNative=false` 走 no-op 分支 —— **native-only 路径零自动覆盖**
-   （2026-09-17 删模拟器 CI 时已明确接受的代价，这次事故就是那个代价变现）；
-2. `node --check` 只查语法不查引用，`e2eMode is not defined`（本批第 2 个 bug）就是它漏掉的。
+**对策（壳发布前必做，实测成本 ≈ 10 分钟）**：
+模拟器 + debug 壳 + CDP 直连 WebView，走**产品代码的真实入口**复现/验证；
+判定「启动链完整」的硬指标：`emptyState 或 todoCount > 0`（render 执行过）+ logcat/CDP 无 `exception`。
+release 壳不可调试（CDP 关闭）；**探针直调原生插件成功 ≠ 产品代码路径成功**。
 
-**对策（壳发布前必做，已验证成本 ≈ 10 分钟）**：设备侧验证不再依赖运气 ——
-1. **模拟器 + debug 壳 + CDP 直连 WebView** 复现/验证：`build-test-apk.mjs` 同款流程改
-   `assembleDebug`（debug 包自动开 WebView 调试）→ 装 AVD → `adb forward` +
-   `/json` 拿 page 级 WebSocket → `Runtime.evaluate` 登录/操作/断言（Playwright 的
-   `connect_over_cdp` 与 WebView 不兼容，用原生 page 级 CDP）；
-2. 判定「启动链完整」的硬指标：`emptyState 或 todoCount > 0`（render 执行过）+
-   logcat/CDP 无 `exception`；
-3. release 壳不可调试（CDP 关闭），复现必须用 debug 壳；探针直调原生插件成功 ≠
-   产品代码路径成功 —— **要走产品代码的真实入口**（本次探针直调成功掩盖了第一轮误判，
-   最终靠复现用户操作定位）。
+---
 
 ## 补充：软删除（回收站）机制
 
@@ -530,33 +419,42 @@ render、撤开屏全部不执行。**浏览器里 `isNative=false` 返回 null�
 
 ### 保留策略：**决定不实现自动物理清理**（2026-09-14 决策，非遗漏）
 
-**先纠正一处文档错误**：本节原写「30 天后物理清理（`scripts/cleanup-deleted.mjs` 占位，可手动跑）」，
-但**该脚本从来不存在** —— 属铁律四禁止的「已死代码的文档」。现已按事实改正。
-
-**决策：不做自动清理。** 理由（按重要性）：
-
-1. **用户已经有了显式的物理删除入口**（回收站 → 永久删除）。自动清理会让系统**删掉用户没要求删的数据** ——
-   对一个双人私密应用，这是纯粹的负价值。
-2. **收益接近零**：软删除行只有 2 个用户产生，体量可忽略；不存在存储或性能压力。
-3. **风险是本项目历史上最严重的那一类**：按时间谓词批量物理删真实数据。2026-07-31 的事故就是这个形状。
-   「收益≈0、风险=历史最坏事故」的改动，正确做法是不做。
-4. **行业实践并不要求它**：数据保留策略的要义是「**有意决定**保留多久」，而不是「默认必须清」。
-   本项目的有意决定 = **无限期保留软删除数据，由用户在回收站自行永久删除**。
+**理由（按重要性）**：
+1. **用户已有显式的物理删除入口**（回收站 → 永久删除）。自动清理 = 系统删掉用户没要求删的数据，
+   对双人私密应用是纯粹的负价值
+2. **收益≈0**：软删除行只有 2 个用户产生，无存储/性能压力
+3. **风险是本项目历史上最严重的那一类**：按时间谓词批量物理删真实数据（2026-07-31 事故就是这个形状）——
+   「收益≈0、风险=历史最坏」的正确做法是不做
+4. **行业实践并不要求它**：保留政策的要义是「**有意决定**保留多久」；本项目的有意决定 =
+   无限期保留软删除数据，由用户在回收站自行永久删除
 
 **触发重新评估的条件**（满足其一再考虑）：软删除数据量级增长到影响查询/存储；或出现隐私合规要求；
 或用户明确想要「回收站 30 天自动过期」的产品行为。
 
 **若将来要实现，硬约束如下**（不可削减）：
 1. **默认 dry-run**，必须显式 `--apply` 才真删；先打印将要删除的行数与 id 清单
-2. **先备份再删**：用 `node scripts/backup-tables.mjs --reason "..."`（与 `backups/incident-*.json` 同格式、
-   存完整行、可恢复；不含 Storage 图片）
+2. **先备份再删**：`node scripts/backup-tables.mjs --reason "..."`（完整行、可恢复；不含 Storage 图片）
 3. **禁止按谓词批量删**（铁律一）：先 SELECT 出 id 列表 → 落备份 → 再按**显式 id 列表**删
 4. 只处理 `deleted_at` 超过保留期的行，并支持 `--keep-days N` 覆盖
-5. **上线形态是「计划任务」要格外小心**：`schedule`（cron）触发 = **无人值守**，没有人在旁边看报告。
-   因此必须：默认 dry-run → 先跑一段只报告不删 → 真要删时把删除与告警/报告一起上，
-   且失败要能被看见（job 失败通知 / 制品留痕）
-6. **在测试库上验证**（这正是独立测试项目的价值）：测试库有 `deleted_at` 数据且
-   `scripts/reset-test-db.mjs` 会硬删——清理逻辑可以在这里跑通全流程，再碰生产
+5. **「计划任务」形态要格外小心**（cron = 无人值守，没人在旁边看报告）：默认 dry-run → 先只报告不删一段
+   → 真删时删除与告警/报告一起上，失败要能被看见
+6. **在测试库上验证**：测试库有 `deleted_at` 数据且 `reset-test-db.mjs` 会硬删，清理逻辑可在这里跑通全流程再碰生产
+
+---
+
+## 本机模拟器（Medium_Phone_API_36.1）—— 发版冒烟 / debug 壳验证必用
+
+- 启动：`emulator -avd Medium_Phone_API_36.1`（默认命令即可，2026-10-02 已彻底修复三类根因）；
+  **就绪唯一标准：`adb shell getprop sys.boot_completed` 返回 1**
+  （通知栏出现「Emulator is performing a full startup」= 正常冷启动，2-5 分钟，崩溃循环后首次可能更久；
+  持续 5 分钟以上仍空 / offline = 真卡死，杀掉再查，**不要原地等**）
+- 三类根因均已持久化修复到 AVD `config.ini`：① `hw.gpu.mode=swiftshader_indirect`（软渲染绕开宿主 GPU
+  间歇性挂死）；② `hw.ramSize=2048` 纯数字（带 M 带空格会被静默回退 256MB → 内核 panic 无限重启循环）；
+  ③ 删除跨版本残留快照。**模拟器升级后若快照加载报错/挂死，直接删
+  `~/.android/avd/<名>.avd/snapshots/default_boot`**（只丢开机内存态，不丢 App 数据）
+- config.ini 写错会被**静默忽略**，真相在启动后生成的 `hardware-qemu.ini` —— 改完用它回读校验，别信"写过了"
+- 完整排障手册（带内核日志取证、grep 清单、快照回环）：
+  [docs/emulator-troubleshooting.md](docs/emulator-troubleshooting.md)
 
 ---
 
@@ -572,17 +470,19 @@ render、撤开屏全部不执行。**浏览器里 `isNative=false` 返回 null�
   另：`release-web.yml` 的 publish 作业在回读校验后**顺带跑一次 `dora-metrics.mjs`** 写进 Run Summary
   （`continue-on-error: true` —— 观测不该把一次已成功的发布变成红灯）
 - **PWA**：`manifest.webmanifest` + `sw.js`（Service Worker，仅浏览器环境生效，原生环境 bypass；版本号见文件内 `VERSION` 常量）
-- **Capacitor 插件**：`SystemBars` / `LocalNotifications` / `SplashScreen` / `CapacitorUpdater`（热更）/ 自研 `ApkInstaller`（APK 自更）
+- **Capacitor 插件（2026-10-03 修正，与 package.json 实际一致）**：`@capacitor/app`（`App.getInfo()`，apk-update 用）/
+  `LocalNotifications` / `SplashScreen` / `@capgo/capacitor-updater`（热更）/ 自研 `ApkInstallerPlugin`（APK 自更）；
+  **状态栏外观没有独立插件** —— 由原生 `MainActivity`（WindowCompat/InsetsController）+ `styles.xml` 直接控制
 - **存储 bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更新 zip + APK）
 - **测试**：Playwright（Python 双账号 E2E，连测试库）+ Node 局部回归（可 mock）
-- **CI/CD**：GitHub Actions **五个** workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** + 三个结构性检查）、
-  `release-web.yml`（**通道 A 热更新 CD**，仅手动触发）、
-  `release-apk.yml`（**通道 B APK 发布 CD**，仅手动触发；工序与 release-web.yml 同构：
-  预演真构建 → 审批门 → 发布 → 回读校验）、
-  `e2e-web-full.yml`（**定时全量回归**：每晚 02:00 北京 / `schedule` + `workflow_dispatch`，跑 7 个双账号 Python E2E）、
+- **CI/CD**：GitHub Actions **五个** workflow —— `ci.yml`（Node 回归 + admin Playwright E2E + **workflow 静态检查 actionlint** +
+  三个结构性检查）、`release-web.yml`（**通道 A 热更新 CD**，仅手动触发）、
+  `release-apk.yml`（**通道 B APK 发布 CD**，仅手动触发；工序与 release-web.yml 同构：预演真构建 → 审批门 → 发布 → 回读校验）、
+  `e2e-web-full.yml`（**定时全量回归**：每晚 02:17 北京 / `schedule` + `workflow_dispatch`，跑 8 个双账号 Python E2E）、
   `codeql.yml`（**静态代码扫描**：push / PR / 每周一定时；`security-events: write` 是它唯一需要的写权限）。
   main 已开**分支保护**，required checks 取 `ci.yml` 三个 job；改代码走分支 + PR（见「铁律五 → main 分支保护」）
-  ⚠️ `schedule` 的 cron **按 UTC 解释**，且定时任务只在**默认分支**上运行（夜里跑的是 main 上已合并的代码）
+  ⚠️ `schedule` 的 cron **按 UTC 解释**，且定时任务只在**默认分支**上运行（夜里跑的是 main 上已合并的代码）；
+  本项目用 `17 18 * * *` = 北京 02:17，**分钟位不要写 0**（整点是 GitHub 调度器负载高峰）
   ⚠️ 两个「写生产」的工作流（release-web / release-apk）**共用 `contents: read` + `environment: production` 审批门**，
   但**各有各的 concurrency 组**（`release-web` / `release-apk`）—— 它们写的是不同的表/对象，互不冲突，不需要串行
 - **供应链安全（2026-09-15 批次 D 起）**：所有 `uses:` **固定到完整 commit SHA**（+ `# vX.Y.Z` 注释，Dependabot 靠它识别版本）；
@@ -594,13 +494,14 @@ render、撤开屏全部不执行。**浏览器里 `isNative=false` 返回 null�
   ⚠️ 取 SHA：`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`（`type=tag` 时再解一层 `git/tags/<sha>`）
 - **本地服务**：`node scripts/serve.mjs`（端口 3000，**生产库**，仅手动自测）／`node scripts/serve-test.mjs`（端口 3100，**测试库**，跑 E2E 必须用这个）
 - **测试库维护**：`node scripts/reset-test-db.mjs`（归零，硬删 web 通道 E2E 残留 + 贴纸）／`node scripts/check-test-env.mjs`（隔离自检）／`node app-e2e/scripts/check-test-schema.mjs`（schema 契约）／`node app-e2e/scripts/check-rls.mjs`（RLS 生效自检）
-- **SQL 自动应用（2026-10-02 起，告别 Dashboard 手工粘贴）**：`node scripts/apply-sql.mjs supabase/xxx.sql --project test --apply` ——
+- **SQL 自动应用（2026-10-02 起，SQL 交付的主通道，见铁律三）**：`node scripts/apply-sql.mjs supabase/xxx.sql --project test --apply` ——
   走 Management API（`/v1/projects/{ref}/database/query`）把 supabase/*.sql 幂等迁移打到指定项目；
   默认 dry-run、写生产需 `--confirm <文件名>`、应用后自动**再跑第二遍做幂等自证**、`--query` 提供 read_only 只读探针。
   凭据是**作用域受限 PAT**（`.env` 的 `SUPABASE_ACCESS_TOKEN`，sbp_fc_ 开头，只勾两项目 Database 读写）；
   setup 与安全设计见脚本头部注释。⚠️ 端点官方标注 experimental/Beta（CLI `db query --linked` 底层同源）；
   ⚠️ PAT 是账号级资产：绝不入库/入日志，怀疑泄露即 Dashboard 撤销重发（换 .env 一行）
-- **Web E2E 跑批**：`node scripts/run-web-e2e.mjs`（逐个归零 + 失败重试一次 + flaky 显式标记 + Run Summary；`--files` / `--keep-data` / `--no-retry` / `--fail-on-flaky`）；
+- **Web E2E 跑批**：`node scripts/run-web-e2e.mjs`（8 个用例：逐个归零 + 失败重试一次 + flaky 显式标记 + Run Summary；
+  `--files` / `--keep-data` / `--no-retry` / `--fail-on-flaky`）；
   依赖钉在 `scripts/requirements-e2e.txt`（Python playwright，CI 与本地同版本）
 - **结构性检查（CI required job 里跑，都是纯静态、秒级失败）**：`check-test-guards.mjs`（只读守卫）／
   `check-e2e-env-keys.mjs`（凭证键三方一致：代码读取 / 模板 / 两个工作流生成）／
