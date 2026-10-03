@@ -2144,40 +2144,59 @@ input {
 .note-read__dismiss--pressing {
   background: var(--rose-600);
 }
-/* 进度环：按住时沿按钮外圈填满（circle pathLength=100，dashoffset 由 JS 按进度驱动） */
+/* 进度环：按住时沿按钮外圈填满（rect pathLength=100，dashoffset 由 JS 按进度驱动）。
+   几何约束（2026-10-03 两次实测定型）：
+   ① svg 不写 viewBox —— viewBox 的 1:1 固有比例会把盒撑成正方形、圆心错位；
+   ② 但也不能只靠 inset:-4px + auto 拉伸 —— 无 viewBox 的 svg 是「有默认固有尺寸的
+      替换元素」（300×150），inset 拉不动它，rect 会铺成一条 300px 的顶边横杠。
+      必须显式给 width/height（百分比相对按钮 padding box）。
+   rect 以 100% 铺满、rx=18（=按钮圆角 14 + 4）⇒ 环与按钮轮廓同心环抱。
+   描边用玫粉而非白：环在按钮外侧，白描边在浅色卡面上不可见。 */
 .note-read__dismiss-ring {
   position: absolute;
-  inset: -5px;
-  width: auto;
-  height: auto;
+  left: -4px;
+  top: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  overflow: visible;
   pointer-events: none;
 }
-.note-read__dismiss-ring circle {
+.note-read__dismiss-ring rect {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.85);
-  stroke-width: 2;
+  stroke: rgba(232, 132, 168, 0.95);
+  stroke-width: 2.5;
   stroke-linecap: round;
   stroke-dasharray: 100;
   stroke-dashoffset: 100;
-  transform: rotate(-90deg);
-  transform-origin: center;
-  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.6));
+  filter: drop-shadow(0 0 4px rgba(244, 114, 160, 0.45));
+  /* 松手回退要看得见：环归零与文字暗回同节奏；按住时逐帧驱动，压掉过渡防拖影 */
+  transition: stroke-dashoffset 0.28s ease-out;
 }
-/* 逐字点亮：长按进度由 JS 给前缀字符加 lit（墨色→玫瑰发光，像被逐字珍视） */
+.note-read__dismiss--pressing .note-read__dismiss-ring rect {
+  transition: none;
+}
+/* 逐字点亮：长按进度由 JS 给前缀字符加 lit（墨色→玫瑰发光，像被逐字珍视）。
+   浅底上的「发光」= 深玫色字 + 多层玫粉晕（白底靠晕的粉晕出光感，单层白晕看不见） */
 .note-read__char {
   transition: color 0.25s ease-out, text-shadow 0.25s ease-out, opacity 0.16s linear;
 }
 .note-read__char--lit {
-  color: var(--rose-600);
-  text-shadow: 0 0 12px rgba(244, 114, 160, 0.75), 0 0 3px rgba(255, 220, 232, 0.9);
+  color: var(--rose-700);
+  text-shadow: 0 0 8px rgba(244, 114, 160, 0.85), 0 0 20px rgba(244, 114, 160, 0.5),
+    0 0 2px rgba(255, 235, 245, 0.95);
 }
 .note-read--night .note-read__char--lit {
   color: #ffe3ee;
+  text-shadow: 0 0 10px rgba(255, 190, 216, 0.8), 0 0 22px rgba(244, 114, 160, 0.55);
 }
 /* 仪式透亮：溶解前整块文字先转玫瑰亮（两段式：先亮后散，消除「融化成黏块」） */
 .note-read__content--erode .note-read__char {
-  color: var(--rose-500) !important;
-  text-shadow: 0 0 14px rgba(244, 114, 160, 0.9);
+  color: var(--rose-600) !important;
+  text-shadow: 0 0 10px rgba(244, 114, 160, 0.9), 0 0 26px rgba(244, 114, 160, 0.55),
+    0 0 2px rgba(255, 235, 245, 0.9);
+}
+.note-read--night .note-read__content--erode .note-read__char {
+  color: #ffd7e6 !important;
 }
 @media (prefers-reduced-motion: reduce) {
   .note-read__char--lit,
@@ -2186,16 +2205,30 @@ input {
 
 /* ===== 珍藏仪式中：暗场渐入 + 元素让位，整卡成为文字化心的舞台 ===== */
 .note-read--ceremony { pointer-events: none; }
+/* 内容层必须压在暗场(::before z:1)之上 —— 静态内容默认画在定位伪元素之下，
+   印章「咚-咚」与文字透亮会被暗场压掉 94% 亮度（2026-10-03 实测：收点后印章位仅 50/255） */
+.note-read__seal,
+.note-read__from,
+.note-read__content,
+.note-read__hint {
+  position: relative;
+  z-index: 2;
+}
+.note-read__dismiss {
+  z-index: 2;
+}
 .note-read--ceremony .note-read__from,
 .note-read--ceremony .note-read__hint,
 .note-read--ceremony .note-read__dismiss {
   opacity: 0;
   transition: opacity 0.5s var(--ease);
 }
-/* 内容盒退场（只留被点亮的字，舞台归粒子） */
+/* 内容盒退场（只留被点亮的字，舞台归粒子）。
+   !important 不是偷懒：时段氛围（.note-read--night 等）在文件里更靠后、同等特异性，
+   会把这里盖回半透明底 —— 夜间仪式中段实测留了一块不参与动效的浅色卡（2026-10-03） */
 .note-read--ceremony .note-read__content {
-  background: transparent;
-  box-shadow: none;
+  background: transparent !important;
+  box-shadow: none !important;
   transition: background 0.55s var(--ease), box-shadow 0.55s var(--ease);
 }
 /* 印章桃心：仪式中先淡出让位；被心吸收时重新现身「咚-咚」接收（第一收点，弹窗内可见） */
@@ -2210,25 +2243,61 @@ input {
 }
 @keyframes stage-receive {
   0% { transform: scale(1); box-shadow: 0 0 0 6px rgba(236, 95, 146, 0.1); }
-  25% { transform: scale(1.28); box-shadow: 0 0 34px 12px rgba(244, 114, 160, 0.55), 0 0 0 6px rgba(236, 95, 146, 0.2); }
-  45% { transform: scale(1.04); }
-  62% { transform: scale(1.18); box-shadow: 0 0 26px 8px rgba(244, 114, 160, 0.45); }
+  25% { transform: scale(1.32); box-shadow: 0 0 52px 20px rgba(244, 114, 160, 0.75), 0 0 0 10px rgba(236, 95, 146, 0.28); }
+  45% { transform: scale(1.05); }
+  62% { transform: scale(1.2); box-shadow: 0 0 40px 14px rgba(244, 114, 160, 0.6), 0 0 0 8px rgba(236, 95, 146, 0.22); }
   100% { transform: scale(1); }
 }
 /* 灯光渐暗（渐入，不再一帧闪黑）：卡片沉入暮色，让化心的光成为唯一主角。
-   半透明径向深场：中心压暗保证亮粒子出彩，边缘留出口透出当前时段的氛围色 */
+   深梅紫高透明度（2026-10-03 修复）：旧配方 rgba(30,27,75,.5) 半透明压在奶白/奶油底上
+   = 灰紫泥（实测饱和度仅 8.6%），粒子在灰底上更显脏；高透明梅紫压任何时段底都落到
+   同一档「深梅」（实测 RGB≈(83,43,76)，饱和度 >50%），边缘留一点时段底色出口 */
 .note-read::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: radial-gradient(ellipse at 50% 45%, rgba(30, 27, 75, 0.52) 0%, rgba(24, 20, 60, 0.38) 100%);
+  background: radial-gradient(ellipse at 50% 42%, rgba(72, 16, 56, 0.94) 0%, rgba(44, 12, 44, 0.92) 55%, rgba(32, 10, 36, 0.9) 100%);
   opacity: 0;
   transition: opacity 0.45s var(--ease);
   pointer-events: none;
 }
 .note-read--ceremony::before {
   opacity: 1;
+}
+/* 夜间氛围的暗场用同族靛蓝（舞台层夜间变体也是靛蓝）——
+   否则弹窗暗场是梅紫、舞台是深蓝，交接处色相硬切 283°→242°（2026-10-03 实测） */
+.note-read--night.note-read--ceremony::before {
+  background: radial-gradient(ellipse at 50% 42%, rgba(40, 36, 118, 0.93) 0%, rgba(30, 28, 92, 0.91) 55%, rgba(22, 20, 70, 0.89) 100%);
+}
+/* ===== 仪式舞台层：暗场跨弹窗延续（第二收点飞行不能掉回亮白主界面） =====
+   弹窗淡出时它同步淡入（0.45s 交叉），光种在深梅紫里飞向顶栏；到达后 0.6s 淡出。
+   z 在弹窗(160)之下、应用页之上；顶栏由 body.cherish-stage-on 提到它之上，
+   否则第二收点（顶栏桃心）会被舞台层遮住。canvas(z300) 恒在最上。 */
+.cherish-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  pointer-events: none;
+  opacity: 0;
+  /* 淡入要快（0.25s）：舞台必须先于弹窗淡出落位，否则亮白主界面透出来「闪白」
+     （2026-10-03 实测：弹窗 0.3s 淡出比舞台 0.5s 淡入快，中段全屏亮度抬 55%） */
+  transition: opacity 0.25s var(--ease);
+  background: radial-gradient(ellipse at 50% 42%, #531e43 0%, #3d1f3c 55%, #362239 100%);
+}
+/* 夜间氛围的仪式舞台保留星空身份（否则高潮段夜/日两套底合流成同一块梅紫） */
+body[data-cherish-mood="night"] .cherish-stage {
+  background:
+    radial-gradient(2px 2px at 20% 28%, rgba(255, 255, 255, 0.55), transparent),
+    radial-gradient(1.5px 1.5px at 68% 18%, rgba(255, 255, 255, 0.45), transparent),
+    radial-gradient(2px 2px at 42% 72%, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(1.5px 1.5px at 84% 60%, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1px 1px at 33% 47%, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(1.5px 1.5px at 12% 62%, rgba(255, 255, 255, 0.42), transparent),
+    radial-gradient(ellipse at 50% 42%, #2c2a6e 0%, #211f56 55%, #191745 100%);
+}
+body.cherish-stage-on .topbar {
+  z-index: 170;
 }
 
 /* ===== 阅读态时段氛围（按留言写下时的时段切换）===== */
@@ -2245,6 +2314,14 @@ input {
 }
 .note-read--noon .note-read__seal {
   box-shadow: 0 0 0 6px rgba(217, 119, 6, 0.08);
+}
+/* 午后（14-18点）：暖杏奶调 —— 补上四档之外的空窗（此前 14-18 落默认浅底，
+   是五档里最寡淡的一段，2026-10-03 审查发现）。色相取晨昏同族 25-55° 暖奶油系 */
+.note-read--afternoon {
+  background: linear-gradient(165deg, #fff3e2 0%, #ffeed6 50%, #ffe9c9 100%);
+}
+.note-read--afternoon .note-read__seal {
+  box-shadow: 0 0 0 6px rgba(217, 119, 6, 0.1);
 }
 /* 黄昏（18-22点）：v2.7.51 P3.3 暮色蜜桃调（v2.7.59 提亮一档）
    v2.7.53 A7 CTA → v2.7.55 调整 → v2.7.59 提亮去黄 */
@@ -2335,10 +2412,10 @@ input {
   animation: heart-receive 0.6s var(--ease) !important;
 }
 @keyframes heart-receive {
-  0%   { transform: scale(1); }
-  35%  { transform: scale(1.22); }
-  60%  { transform: scale(0.96); }
-  100% { transform: scale(1); }
+  0%   { transform: scale(1); filter: drop-shadow(0 0 0 rgba(244, 114, 160, 0)); }
+  35%  { transform: scale(1.34); filter: drop-shadow(0 0 14px rgba(244, 114, 160, 0.85)); }
+  60%  { transform: scale(0.95); filter: drop-shadow(0 0 4px rgba(244, 114, 160, 0.4)); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(244, 114, 160, 0)); }
 }
 
 /* 迷你心飘散（珍藏仪式结尾收束，挂 body 不随弹窗消失） */

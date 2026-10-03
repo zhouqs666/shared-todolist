@@ -194,8 +194,11 @@
       <div class="note-read__content" id="noteContent"></div>
       <p class="note-read__hint">轻轻阅过，珍藏于心</p>
       <button id="noteDismiss" class="note-read__dismiss" type="button">
-        <svg class="note-read__dismiss-ring" viewBox="0 0 100 100" aria-hidden="true">
-          <circle cx="50" cy="50" r="46" pathLength="100"/>
+        <!-- 进度环：圆角矩形描边贴合按钮轮廓。
+             刻意不写 viewBox —— viewBox 的 1:1 固有比例会把 svg 盒撑成正方形、
+             圆心掉到按钮下方 40px+（2026-10-03 实测），环变成「斜穿按钮的划痕」 -->
+        <svg class="note-read__dismiss-ring" aria-hidden="true">
+          <rect class="note-read__dismiss-ring-rect" x="0" y="0" width="100%" height="100%" rx="18" pathLength="100"/>
         </svg>
         <span class="note-read__dismiss-text">阅</span>
       </button>
