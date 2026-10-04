@@ -17,6 +17,7 @@ import { isFxEnabled } from './theme.js';
 import { db } from './db.js';
 import { getStickers, setStickers, addOrUpdateSticker } from './state.js';
 import { showToast } from './toast.js';
+import { STORY_META, STORY_ACCENT } from './sticker-series-story.js';
 
 // ===== 概率配置 =====
 const HIDDEN_RATE = 0.15; // 添加待办时开出隐藏款的总概率（15%）
@@ -26,11 +27,8 @@ const RARITY_WEIGHTS = { rare: 60, epic: 30, legendary: 10 };
 // 抽选与展示顺序：rare → epic → legendary（由低到高，与 sticker-book 一致）
 const RARITY_ORDER = ['rare', 'epic', 'legendary'];
 
-// 每个稀有度的贴纸数量（图鉴全集 12 张 = 4+4+4）
+// 每个稀有度的贴纸数量（每册全集 12 张 = 4+4+4）
 export const STICKERS_PER_RARITY = 4;
-
-// 图鉴全集张数
-const TOTAL_STICKERS = STICKERS_PER_RARITY * 3;
 
 /**
  * 稀有度元数据：class 后缀、Toast 文案、撒花配色、贴纸名称 + 贴纸图标。
@@ -134,8 +132,14 @@ export const RARITY_META = {
 export const BASE_SERIES = 'v1';
 
 const SERIES_DEFS = {
-  [BASE_SERIES]: { id: BASE_SERIES, prefix: '', title: '收集图鉴' },
-  // 第二册（批次 3）：{ id: 'story', prefix: 'story', title: '我们的故事' }
+  [BASE_SERIES]: {
+    id: BASE_SERIES, prefix: '', title: '收集图鉴',
+    // 册专属内容（名称/短句/图标）+ 书脊配色：v1 = 樱粉默认（线上零变化）
+    meta: RARITY_META,
+    accent: { spine: '#e884a8', tint: 'rgba(232, 132, 168, 0.14)', ink: '#c2527e' },
+  },
+  // 第二册「我们的故事」（批次 3）：内容在 sticker-series-story.js，第一册集齐后开启
+  story: { id: 'story', prefix: 'story', title: '我们的故事', meta: STORY_META, accent: STORY_ACCENT },
 };
 
 // 注册表防呆：短名仅限 [a-z0-9]+，且不得与档位名 / BASE_SERIES 冲突（见上方警告）
@@ -181,30 +185,35 @@ export function makeStickerKey(series, rarity, index) {
 }
 
 /**
- * 根据 stickerKey（如 'epic_3'）返回对应的贴纸图标 SVG。
- * 用于图鉴弹层渲染每张贴纸的独立图案。
- * ⚠️ 当前按档位查 v1 的 RARITY_META，series 不参与分派——批次 3 story 册
- * 上线时须改为按 series 取各自的图标表（parseStickerKey().series 已备好）。
+ * 根据 stickerKey（如 'epic_3' / 'story_epic_3'）返回对应的贴纸图标 SVG。
+ * 用于图鉴弹层渲染每张贴纸的独立图案。图标按册分派：v1 用 RARITY_META，
+ * story 册用其内容模块的图标表（批次 3 起）。
  */
 export function getStickerIcon(stickerKey) {
   const parsed = parseStickerKey(stickerKey);
   if (!parsed) return '';
-  const meta = RARITY_META[parsed.rarity];
+  const meta = seriesRarityMeta(parsed.series, parsed.rarity);
   const idx = parsed.index - 1;
   if (!meta || !meta.stickerIcons) return '';
   return meta.stickerIcons[idx] || meta.stickerIcons[0];
 }
 
 /**
- * 根据 stickerKey 返回贴纸专属短句（图鉴点击时展示）。
- * 无配置时返回空串（调用方兜底）。
+ * 根据 stickerKey 返回贴纸专属短句（图鉴点击时展示的故事卡文案）。
+ * 短句按册分派（v1 / story 各自的文案表）。无配置时返回空串（调用方兜底）。
  */
 export function getStickerFlavor(stickerKey) {
   const parsed = parseStickerKey(stickerKey);
   if (!parsed) return '';
-  const meta = RARITY_META[parsed.rarity];
+  const meta = seriesRarityMeta(parsed.series, parsed.rarity);
   if (!meta || !meta.stickerFlavors) return '';
   return meta.stickerFlavors[parsed.index - 1] || '';
+}
+
+/** 指定册 + 档位的内容元数据（名称/短句/图标）；未注册册回退 v1（解析层已挡畸形 key） */
+function seriesRarityMeta(series, rarity) {
+  const def = SERIES_DEFS[series];
+  return (def && def.meta && def.meta[rarity]) || RARITY_META[rarity];
 }
 
 /** 判断是否为隐藏款（rare/epic/legendary，排除 common） */
@@ -213,29 +222,66 @@ export function isHidden(rarity) {
 }
 
 /**
- * 本地已知的图鉴进度：各档已解锁张数。
+ * 指定册的图鉴进度：该册各档已解锁张数（批次 3 起按册隔离——多册并存时
+ * 全局计数会污染抽选池）。口径是 key 解析出的 series，不信任 rarity 字段单方。
  *
  * ⚠️ 口径是**本地状态**（getStickers），可能滞后于数据库（冷启动时 listStickers 还没回来、
  * 双端同刻开出同一档）。它只用于「优先开还给得出贴纸的档位」，滞后时最坏结果是白开一次
  * （由 onRollRarity 的已集齐兜底 + 状态对齐收尾），不会产生重复贴纸或数据不一致。
+ * @param {string} [series] 册 id，默认第一册（BASE_SERIES）
  */
-export function rarityProgress() {
+export function rarityProgress(series = BASE_SERIES) {
   const counts = { rare: 0, epic: 0, legendary: 0 };
   for (const s of getStickers()) {
-    if (s && counts[s.rarity] !== undefined) counts[s.rarity]++;
+    if (s && (parseStickerKey(s.stickerKey) || {}).series === series && counts[s.rarity] !== undefined) {
+      counts[s.rarity]++;
+    }
   }
   return counts;
 }
 
-/** 还有未解锁贴纸的档位（本地状态口径）；12 张全齐时返回空数组 */
-export function availableRarities() {
-  const counts = rarityProgress();
+/**
+ * 指定册里还有未解锁贴纸的档位（本地状态口径）；该册 12 张全齐时返回空数组。
+ * @param {string} [series] 册 id，默认第一册（BASE_SERIES）
+ */
+export function availableRarities(series = BASE_SERIES) {
+  const counts = rarityProgress(series);
   return RARITY_ORDER.filter((r) => counts[r] < STICKERS_PER_RARITY);
 }
 
-/** 图鉴是否已全部集齐（本地状态口径） */
-export function isBookComplete() {
-  return availableRarities().length === 0;
+/** 指定册是否已全部集齐（本地状态口径）。@param {string} [series] 册 id，默认第一册 */
+export function isBookComplete(series = BASE_SERIES) {
+  return availableRarities(series).length === 0;
+}
+
+/**
+ * 当前开启册（批次 3 开启机制的核心）：**注册顺序上第一个未集齐的册**。
+ * 开奖的档位抽选与贴纸解锁都指向它——第一册集齐后第二册自然进入抽选池
+ * （路线图 §6.2）；上线时第一册已集齐的用户下一次开奖即立即开启第二册。
+ * 全部册集齐时返回 null（开奖回落全池，只保留惊喜视觉，不再解锁）。
+ * @returns {string|null}
+ */
+export function getRollTargetSeries() {
+  for (const id of getSeriesIds()) {
+    if (!isBookComplete(id)) return id;
+  }
+  return null;
+}
+
+/** 全部已注册册是否都已集齐（本地状态口径） */
+export function isAllBooksComplete() {
+  return getRollTargetSeries() === null;
+}
+
+/**
+ * 指定册的进度短语（Toast 用）：v1 沿用「图鉴 x/12」，后续册带册名防混淆
+ * （多册并存后裸「图鉴 x/12」指代不明）。
+ */
+export function seriesProgressLabel(series = BASE_SERIES) {
+  const def = SERIES_DEFS[series] || SERIES_DEFS[BASE_SERIES];
+  const total = STICKERS_PER_RARITY * 3;
+  const count = getStickers().filter((s) => s && (parseStickerKey(s.stickerKey) || {}).series === series).length;
+  return series === BASE_SERIES ? `图鉴 ${count}/${total}` : `${def.title} ${count}/${total}`;
 }
 
 /**
@@ -267,9 +313,11 @@ export function pickRarityByWeight(pool, weights = RARITY_WEIGHTS) {
  * ⚠️ 钩子是**显式覆盖**（含集齐的档位，也照返回）：E2E 靠它验「本地状态滞后 ⇒ 白开一次
  * → 已集齐提示」这条兜底路径（2026-09-17）。
  *
- * 档位选择性（2026-09-17 修）：命中隐藏款后只在**还有未解锁贴纸**的档位里按权重抽。
+ * 档位选择性（2026-09-17 修，批次 3 起按册）：命中隐藏款后只在**当前开启册**
+ * （getRollTargetSeries，注册顺序第一个未集齐的册）**还有未解锁贴纸**的档位里按权重抽。
  * 否则某一档集齐后仍会被开出 —— 卡片显示该稀有度、撒花照放，却没有任何贴纸可解锁，
  * 用户看到的是「开出稀有款 → 稀有图鉴已集齐」的空开（业主 2026-09-17 报的 bug）。
+ * 第一册集齐后第二册自动成为开启册（其档位池重新计算），全部册集齐后回落三档全池。
  * @returns {'rare'|'epic'|'legendary'|'common'} 85% 返回 'common'
  */
 export function rollRarity() {
@@ -280,9 +328,12 @@ export function rollRarity() {
   if (forced === 'common' || (forced && RARITY_META[forced])) return forced;
 
   if (Math.random() >= HIDDEN_RATE) return 'common';
-  const pool = availableRarities();
-  // 12 张全齐后没有可补的档位：回落到三档全池 —— 隐藏款本身（配色/撒花/对方端揭晓）仍是惊喜，
-  // 不能因为"收集满了"就把盲盒从这个 App 里摘掉；提示文案在 onRollRarity 里另作区分。
+  // 档位池按「当前开启册」（getRollTargetSeries）取——该册已集齐的档退出抽选，
+  // 权重在剩余档位内重新归一；全部册集齐后没有可补的册：回落三档全池 ——
+  // 隐藏款本身（配色/撒花/对方端揭晓）仍是惊喜，不能因为"收集满了"就把盲盒
+  // 从这个 App 里摘掉；提示文案在 onRollRarity 里另作区分。
+  const target = getRollTargetSeries();
+  const pool = target ? availableRarities(target) : [];
   return pickRarityByWeight(pool.length ? pool : RARITY_ORDER);
 }
 
@@ -370,20 +421,28 @@ export async function onRollRarity(todo, userId) {
   const rarity = todo.rarity;
   const meta = RARITY_META[rarity];
 
-  // 本地已知该档解锁数：只当起点，不当结论（可能滞后于数据库）
-  const known = getStickers().filter((s) => s.rarity === rarity).length;
+  // 解锁目标册 = 当前开启册（与 rollRarity 的抽选池同一来源，两处口径天然一致）。
+  // 全部册集齐时回退第一册：循环会逐个试到全满 → 走「全部集齐」兜底提示 + 状态对齐
+  // （本地滞后漏了序号时还能借这次机会自愈补上）。
+  const series = getRollTargetSeries() || BASE_SERIES;
+  const seriesMeta = seriesRarityMeta(series, rarity);
+
+  // 本地已知该册该档解锁数：只当起点，不当结论（可能滞后于数据库）
+  const known = getStickers().filter((s) => {
+    const p = parseStickerKey(s && s.stickerKey);
+    return p && p.series === series && s.rarity === rarity;
+  }).length;
   let staleLocal = false;
 
   for (let n = known + 1; n <= STICKERS_PER_RARITY; n++) {
-    // 第一册无前缀（BASE_SERIES）；批次 3 第二册上线时改传对应册 id
-    const stickerKey = makeStickerKey(BASE_SERIES, rarity, n);
+    const stickerKey = makeStickerKey(series, rarity, n);
     let sticker;
     try {
       sticker = await db.unlockSticker(stickerKey, rarity, userId, todo.id);
     } catch (err) {
       // 解锁失败必须让用户看见：旧实现只 console.warn，界面上毫无痕迹
       console.warn('[blindbox] 解锁贴纸失败:', err.message);
-      showToast(`${meta.toast} 图鉴解锁没成功，下次开出同档会自动补上`, rollToastOpts(rarity));
+      showToast(`${meta.toast} 图鉴解锁没成功，下次开出同档会自动补上`, rollToastOpts(rarity, null, series));
       return null;
     }
     if (!sticker) { staleLocal = true; continue; } // 该序号已被占用 → 试下一个
@@ -393,23 +452,24 @@ export async function onRollRarity(todo, userId) {
     // 撞过已占用的序号 = 本地状态本来就落后于数据库（冷启动/并发开奖）。
     // 只补这一张会让图鉴进度显示出偏小的数字（如 1/12 实际是 2/12），所以拉一次全量对齐。
     if (staleLocal) await syncStickersFromDb();
-    const name = meta.stickerNames[n - 1] || `${meta.label}${n}`;
+    const name = seriesMeta.stickerNames[n - 1] || `${meta.label}${n}`;
     showToast(
-      `${meta.toast} 解锁「${name}」· 图鉴 ${getStickers().length}/${TOTAL_STICKERS}`,
+      `${meta.toast} 解锁「${name}」· ${seriesProgressLabel(series)}`,
       rollToastOpts(rarity, stickerKey)
     );
     return sticker;
   }
 
-  // 该档 4 张都已解锁：本次不再产生新贴纸（图鉴不会出现重复条目）。
+  // 该册该档 4 张都已解锁：本次不再产生新贴纸（图鉴不会出现重复条目）。
   // 正常路径走不到这里 —— rollRarity 已把集齐的档位排除在抽选之外；能走到说明本地状态
   // 滞后于数据库，所以顺手对齐一次：否则接下来的开奖还会继续选中这一档、继续白开。
   if (staleLocal) await syncStickersFromDb();
+  const bookTag = series === BASE_SERIES ? '' : `「${getSeriesDef(series).title}」`;
   showToast(
-    isBookComplete()
-      ? `${meta.toast} 图鉴 12 张已全部集齐，这张留作纪念 ✨`
-      : `${meta.toast} ${meta.label}图鉴已集齐，继续探索其它稀有度吧`,
-    rollToastOpts(rarity)
+    isAllBooksComplete()
+      ? `${meta.toast} 全部图鉴已集齐，这张留作纪念 ✨`
+      : `${meta.toast} ${bookTag}${meta.label}图鉴已集齐，继续探索其它稀有度吧`,
+    rollToastOpts(rarity, null, series)
   );
   return null;
 }
@@ -426,14 +486,16 @@ async function syncStickersFromDb() {
   }
 }
 
-/** 开奖提示的样式：稀有度配色 + 图标（解锁时用该张贴纸的图标，未解锁用该档首张） */
-function rollToastOpts(rarity, stickerKey) {
+/**
+ * 开奖提示的样式：稀有度配色 + 图标（解锁时用该张贴纸的图标；未解锁时用
+ * 目标册该档首张的图标——多册后兜底图标也必须取对册，不能永远拿第一册的）。
+ */
+function rollToastOpts(rarity, stickerKey, series = BASE_SERIES) {
   const meta = RARITY_META[rarity];
+  const fallbackKey = makeStickerKey(series, rarity, 1);
   return {
     variant: 'rarity',
     accent: meta.colors[0],
-    icon: stickerKey
-      ? getStickerIcon(stickerKey)
-      : (meta.stickerIcons ? meta.stickerIcons[0] : ''),
+    icon: stickerKey ? getStickerIcon(stickerKey) : getStickerIcon(fallbackKey),
   };
 }

@@ -35,6 +35,7 @@ import { getStickers, setStickersRenderFn } from './state.js';
 import {
   RARITY_META, STICKERS_PER_RARITY, getStickerIcon, getStickerFlavor,
   parseStickerKey, makeStickerKey, BASE_SERIES, getSeriesIds, getSeriesDef,
+  getRollTargetSeries, isBookComplete,
 } from './blindbox.js';
 import { showMemorialCard, initMemorialCard } from './memorial-card.js';
 import { db } from './db.js';
@@ -65,7 +66,7 @@ const WIGGLE_OPENS_KEY = 'stickerWiggleOpens';
 const WIGGLE_MAX_OPENS = 3;
 
 // 是否已庆祝过集齐全集（当前激活册口径，从持久化恢复；清空重集后会重新庆祝。
-// 批次 2 只注册 v1；批次 3 多册时切换册需按 celebratedKeyFor(series) 重读）
+// 切册 / 打开书架时经 syncCelebratedFlag() 按激活册重读）
 let collectedCelebrated = (() => {
   try {
     return localStorage.getItem(celebratedKeyFor(BASE_SERIES)) === '1';
@@ -73,6 +74,20 @@ let collectedCelebrated = (() => {
     return false;
   }
 })();
+
+/** 某册的「已庆祝」持久化标记（读取即时值，不依赖激活册缓存） */
+function isCelebrated(series) {
+  try {
+    return localStorage.getItem(celebratedKeyFor(series)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** 让激活册的庆祝缓存与持久化对齐（切册 / 打开书架时调用） */
+function syncCelebratedFlag() {
+  collectedCelebrated = isCelebrated(activeSeries);
+}
 
 // 打开图鉴那一刻的"已看"快照：用于判定哪些贴纸对用户是"新"的
 let seenSnapshot = null;
@@ -116,13 +131,16 @@ function buildFullBook(series = BASE_SERIES) {
   const all = [];
   for (const rarity of RARITY_ORDER) {
     const meta = RARITY_META[rarity];
+    // 贴纸名按册取（批次 3 起 v1 / story 各有名称表；缺省回退档位名）
+    const seriesMeta = (getSeriesDef(series) || {}).meta;
+    const rarityMeta = (seriesMeta && seriesMeta[rarity]) || meta;
     for (let i = 1; i <= STICKERS_PER_RARITY; i++) {
       const key = makeStickerKey(series, rarity, i);
       const s = byKey.get(key);
       all.push({
         key,
         rarity,
-        name: meta.stickerNames[i - 1] || `${meta.label}${i}`,
+        name: rarityMeta.stickerNames[i - 1] || `${meta.label}${i}`,
         unlocked: !!s,
         unlockedAt: s ? s.unlockedAt : null,
       });
@@ -163,13 +181,19 @@ function renderBookTabs() {
     btn.setAttribute('role', 'tab');
     btn.setAttribute('aria-selected', String(id === activeSeries));
     btn.textContent = (getSeriesDef(id) || {}).title || id;
+    // 书脊 / 封面专属配色（D5 便宜版）：每册一条书脊色 + 激活态的底色与文字色，
+    // 颜色来自册注册表（v1 樱粉默认，story 夜蓝）
+    const accent = (getSeriesDef(id) || {}).accent;
+    if (accent) {
+      btn.style.setProperty('--tab-spine', accent.spine);
+      btn.style.setProperty('--tab-tint', accent.tint);
+      btn.style.setProperty('--tab-ink', accent.ink);
+    }
     btn.addEventListener('click', () => {
       if (id === activeSeries) return;
       activeSeries = id;
       // 切册：重读该册的庆祝标记，按该册口径重绘（不重放入场动画）
-      try {
-        collectedCelebrated = localStorage.getItem(celebratedKeyFor(id)) === '1';
-      } catch { /* ignore */ }
+      syncCelebratedFlag();
       renderStickerBook();
     });
     tabsEl.appendChild(btn);
@@ -200,13 +224,22 @@ function renderLegend(all) {
   legendEl.appendChild(frag);
 }
 
-/** 按收集进度切换提示文案（空状态引导 / 接近集齐 / 已集齐 / 默认） */
-function updateHint(unlockedCount) {
+/** 按收集进度切换提示文案（空状态引导 / 接近集齐 / 已集齐 / 默认），按册区分口径 */
+function updateHint(unlockedCount, series) {
   const hintEl = document.getElementById('stickerHint');
   if (!hintEl) return;
+  const def = getSeriesDef(series) || {};
+  const isFirst = series === BASE_SERIES;
   let text;
   if (unlockedCount === 0) {
-    text = '每添加一条待办，都有小概率开出隐藏款——和 ta 集满这 12 张吧';
+    if (isFirst) {
+      text = '每添加一条待办，都有小概率开出隐藏款——和 ta 集满这 12 张吧';
+    } else if (getRollTargetSeries() !== series) {
+      // 未开启的册（第一册还没集齐）：先见到剪影，收集从第一册集齐后开始
+      text = `「${def.title}」已就位——集齐第一册后，这本就会开始收集`;
+    } else {
+      text = `「${def.title}」开启！每添加一条待办，都有小概率开出属于你们的故事`;
+    }
   } else if (unlockedCount === TOTAL_STICKERS) {
     text = '12 张全部集齐，这是属于你们的专属纪念 ✨';
   } else if (unlockedCount >= TOTAL_STICKERS - 2) {
@@ -217,10 +250,14 @@ function updateHint(unlockedCount) {
   hintEl.textContent = text;
 }
 
-/** 当前激活册的纪念卡数据（memorial-card 只吃数据；按册传各自的册数据） */
+/** 当前激活册的纪念卡数据（memorial-card 只吃数据；按册传各自的册数据）。
+ *  v1 沿用历史卡片标题（零变化），后续册带册名区分 */
 function buildBookData() {
+  const def = getSeriesDef(activeSeries) || {};
   return {
-    title: `${TOTAL_STICKERS} 张贴纸全部集齐`,
+    title: activeSeries === BASE_SERIES
+      ? `${TOTAL_STICKERS} 张贴纸全部集齐`
+      : `${def.title || activeSeries} · ${TOTAL_STICKERS} 张贴纸全部集齐`,
     stickers: buildFullBook(activeSeries),
   };
 }
@@ -306,7 +343,7 @@ export function renderStickerBook(opts = {}) {
   // 图例 / 册 tab / 提示 / 进度
   renderLegend(all);
   renderBookTabs();
-  updateHint(unlockedCount);
+  updateHint(unlockedCount, activeSeries);
   if (progressEl) progressEl.textContent = `${unlockedCount} / ${TOTAL_STICKERS}`;
   if (barEl) {
     barEl.style.width = `${(unlockedCount / TOTAL_STICKERS) * 100}%`;
@@ -437,6 +474,20 @@ function hideFlavorCard() {
 }
 
 /**
+ * 打开书架时默认翻开哪一本（批次 3 多册）：
+ *   1. 优先「已集齐但还没庆祝过」的册——集齐仪式必须可达（v1 集齐后打开即弹纪念卡，
+ *      与批次 1 行为一致；story 集齐后同理，不依赖用户手动切到那本）；
+ *   2. 否则「正在收集的册」（getRollTargetSeries）——单册期恒为第一册（行为与批次 2 前一致）；
+ *   3. 全部集齐时维持上次所在册（重看纪念卡不被打断）。
+ */
+function pickDefaultSeries() {
+  for (const id of getSeriesIds()) {
+    if (isBookComplete(id) && !isCelebrated(id)) return id;
+  }
+  return getRollTargetSeries() || activeSeries;
+}
+
+/**
  * 打开图鉴弹层。
  * 每次打开都主动从数据库拉取最新 stickers（不依赖 Realtime 是否生效），
  * 拉完再渲染——保证打开图鉴总能看到最新解锁的贴纸。
@@ -447,6 +498,9 @@ async function openStickerBook() {
   if (!modal) return;
   // 快照打开前的已看集合：快照里没有的 = 这次要看的新贴纸
   seenSnapshot = getSeenKeys();
+  // 默认翻开待庆祝 / 正在收集的那本（多册书架，见 pickDefaultSeries）
+  activeSeries = pickDefaultSeries();
+  syncCelebratedFlag();
   // 先显示弹层（渲染期间用户能看到加载态）
   modal.classList.remove('hidden');
   // 锁背景滚动（与其他弹层一致）

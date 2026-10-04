@@ -9,6 +9,8 @@
    —— 提示是否被顶掉、贴纸序号是否重复/空转、完成时「撤销」按钮是否还在、rarity_seen 是否正确
 4. 集齐纪念卡（路线图批次 1）：真实开奖链路集齐 12/12 → 打开图鉴纪念卡自动弹出
    （12 格拼贴 / 起止日期 / 隐藏款开出次数）→ 金色完成态可重看、ESC 出口不连带关图鉴
+5. 第二册「我们的故事」（路线图批次 3）：v1 集齐 → 开启册自动切到 story → 强制钩子开出
+   story_* 贴纸（key 前缀系列化）→ 第二册网格/故事卡/红点按册隔离 → story 自己的集齐纪念卡
 
 （原注释写「生产库迁移尚未执行，rarity 列/stickers 表不存在」——已过时：2026-09-16 复核确认
  线上两张表/列都在（todos.rarity 已回填、stickers 有数据），本测试在测试库上完整跑真实链路。）
@@ -136,6 +138,35 @@ with sync_playwright() as p:
         check("epic 有 todo--epic class", "todo--epic" in dom_result["epic"]["classes"])
         check("legendary 有 todo--legendary class", "todo--legendary" in dom_result["legendary"]["classes"])
 
+        # --- 4a. key 系列化：story 前缀的解析/构造/按册内容（批次 3）---
+        # 背景（路线图 §5.1）：v1 无前缀，第二册起带册短名前缀（story_rare_1），
+        # 全仓解析收敛在 parseStickerKey。这里验 key 往返 + story 册的专属图标/短句接线。
+        keys = page.evaluate("""async () => {
+            const bb = await import('/js/blindbox.js');
+            const round = (k) => { const p = bb.parseStickerKey(k); return p && bb.makeStickerKey(p.series, p.rarity, p.index); };
+            return {
+                storyParsed: bb.parseStickerKey('story_rare_1'),
+                storyRound: round('story_rare_1'),
+                v1Round: round('epic_3'),
+                storyIconIsSvg: bb.getStickerIcon('story_legendary_1').includes('<svg'),
+                storyFlavor: bb.getStickerFlavor('story_rare_1'),
+                v1Flavor: bb.getStickerFlavor('rare_1'),
+                targetWhenEmpty: bb.getRollTargetSeries(),
+                seriesIds: bb.getSeriesIds(),
+            };
+        }""")
+        check("story 前缀 key 解析正确",
+              keys["storyParsed"] == {"series": "story", "rarity": "rare", "index": 1},
+              f"实际: {keys['storyParsed']}")
+        check("story key 构造往返一致", keys["storyRound"] == "story_rare_1", f"实际: {keys['storyRound']}")
+        check("v1 无前缀 key 往返不变（历史格式零变化）", keys["v1Round"] == "epic_3", f"实际: {keys['v1Round']}")
+        check("story 贴纸有专属图标与短句（按册分派）",
+              keys["storyIconIsSvg"] and bool(keys["storyFlavor"]) and keys["storyFlavor"] != keys["v1Flavor"],
+              f"story 短句: {keys['storyFlavor'][:20]}…")
+        check("两册已注册且空图鉴时开启册为第一册",
+              keys["seriesIds"] == ["v1", "story"] and keys["targetWhenEmpty"] == "v1",
+              f"实际: {keys['seriesIds']} / {keys['targetWhenEmpty']}")
+
         # --- 4b. 档位选择性：已集齐的档位必须退出抽选池（2026-09-17 修）---
         # 为什么必须在这里测（而不是靠真实添加去撞）：旧实现不看图鉴进度，某一档 4 张集齐后
         # 仍会被开出 —— 卡片显示该稀有度、撒花照放，却一张贴纸都解锁不了（"开出稀有款 →
@@ -166,7 +197,8 @@ with sync_playwright() as p:
                 const allDone = run(2000);                                // 12 张全齐
                 const availAll = bb.availableRarities();
                 const bookDoneAll = bb.isBookComplete();
-                return { afterRare, availAfterRare, bookDoneAfterRare, allDone, availAll, bookDoneAll };
+                const targetAll = bb.getRollTargetSeries();               // v1 全齐 → 目标册切到 story（批次 3 开启机制）
+                return { afterRare, availAfterRare, bookDoneAfterRare, allDone, availAll, bookDoneAll, targetAll };
             } finally {
                 state.setStickers(real);
             }
@@ -187,7 +219,9 @@ with sync_playwright() as p:
         check("12 张全齐后 availableRarities 为空、isBookComplete 为真",
               select["availAll"] == [] and select["bookDoneAll"] is True,
               f"实际: {select['availAll']} / {select['bookDoneAll']}")
-        check("12 张全齐后仍能开出隐藏款，且三档都在池里（盲盒不因收集满而消失）",
+        check("第一册集齐后开启册自动切到 story（批次 3 开启机制）",
+              select["targetAll"] == "story", f"实际: {select['targetAll']}")
+        check("12 张全齐后仍能开出隐藏款，且三档都在池里（此时池已属于 story 册——盲盒不因第一册满而消失）",
               hidden_all > 0 and all(all_done[r] > 0 for r in ("rare", "epic", "legendary")),
               f"实际: {all_done}")
         check("构造用的假图鉴已还原（真实 stickers 未被污染）",
@@ -219,6 +253,32 @@ with sync_playwright() as p:
         check("贴纸格子数=12", cells_rendered and cell_count == 12, f"实际 {cell_count}")
         progress_text = page.locator('#stickerProgress').text_content()
         check("进度条显示 X/12", "/ 12" in progress_text or "/12" in progress_text, f"实际: {progress_text}")
+
+        # 批次 3：story 册已注册 → 册 tab 栏出现（多册书架上线）
+        tab_count = page.locator('#stickerBookTabs .sticker-book-tabs__tab').count()
+        check("多册 tab 栏出现且有两册", tab_count == 2, f"实际 {tab_count}")
+        check("story tab 名称正确",
+              page.locator('#stickerBookTabs .sticker-book-tabs__tab', has_text="我们的故事").count() == 1)
+        # 切到 story：全新开（0 解锁）+ 第一册未集齐 → 12 格剪影 + 「集齐第一册后开启」引导
+        page.locator('#stickerBookTabs .sticker-book-tabs__tab', has_text="我们的故事").click()
+        story_locked = wait_until(
+            page,
+            lambda: page.locator('.sticker-cell').count() == 12
+            and page.locator('.sticker-cell--unlocked').count() == 0,
+            desc="story 册 12 格剪影",
+        )
+        hint_text = page.locator('#stickerHint').text_content() or ""
+        check("story 册未开启时 12 格全剪影 + 开启引导文案", story_locked and "第一册" in hint_text,
+              f"实际: {hint_text}")
+        check("story 册完成徽章不亮（未开启）", not page.locator('#stickerCompleteChip').is_visible())
+        page.screenshot(path="/tmp/blindbox-story-locked.png", full_page=True)
+        # 切回第一册再关弹层（后续断言都在 v1 口径上）
+        page.locator('#stickerBookTabs .sticker-book-tabs__tab', has_text="收集图鉴").click()
+        wait_until(
+            page,
+            lambda: page.locator('.sticker-book-tabs__tab--active').text_content() == "收集图鉴",
+            desc="切回 v1 册",
+        )
         page.screenshot(path="/tmp/blindbox-stickerbook.png", full_page=True)
         # 关闭图鉴弹层，等它真的收起再继续，避免遮挡后续操作
         page.locator('#stickerModalClose').click()
@@ -338,32 +398,36 @@ with sync_playwright() as p:
         check("真实图鉴下 1000 次开奖不再开出 rare（无钩子的真实路径）",
               real_pool["counts"]["rare"] == 0, f"实际: {real_pool['counts']}")
 
-        # --- 7.3c 12 张全齐时的提示文案 ---
-        # 构造 12/12（不真去集齐：那要 12 次开奖，还会污染后面 7.5 的序号期望）。
-        # onRollRarity 在「该档已知 4/4」时循环一次都不执行 ⇒ 不产生任何数据库写入，只走兜底文案。
+        # --- 7.3c 全部册集齐时的提示文案 ---
+        # 构造 24/24（v1 + story 两册全齐，不真去集齐：那要 24 次开奖）。
+        # ⚠️ 批次 3 起解锁目标 = 第一个未集齐的册：只把 v1 钉满 12/12，onRollRarity 会
+        # **真的去开 story 册**（写库！）——必须两册全满，才走「不写库」的兜底文案分支。
         check("文案断言前提示已清空",
               wait_until(page, lambda: page.locator(".toast--show").count() == 0, desc="无提示在显示"))
         book_done = page.evaluate("""async () => {
             const state = await import('/js/state.js');
             const bb = await import('/js/blindbox.js');
             const real = state.getStickers();
-            const fake = (rarity, n) => Array.from({ length: n }, (_, i) => ({
-                id: `${rarity}_${i + 1}`, stickerKey: `${rarity}_${i + 1}`, rarity,
-                unlockedBy: null, todoId: null, unlockedAt: new Date().toISOString(),
-            }));
+            const fake = (series, rarity, n) => Array.from({ length: n }, (_, i) => {
+                const key = `${series === 'v1' ? '' : series + '_'}${rarity}_${i + 1}`;
+                return { id: key, stickerKey: key, rarity,
+                         unlockedBy: null, todoId: null, unlockedAt: new Date().toISOString() };
+            });
+            const book = (series) => [...fake(series, 'rare', 4), ...fake(series, 'epic', 4), ...fake(series, 'legendary', 4)];
             const todo = state.getTodos().find((t) => t.text === 'E2E-测试-强制稀有5');
             try {
-                state.setStickers([...fake('rare', 4), ...fake('epic', 4), ...fake('legendary', 4)]);
+                state.setStickers([...book('v1'), ...book('story')]);
                 await bb.onRollRarity({ id: todo.id, rarity: 'rare' }, todo.createdBy);
-                return { bookComplete: bb.isBookComplete() };
+                return { allComplete: bb.isAllBooksComplete(), target: bb.getRollTargetSeries() };
             } finally {
                 state.setStickers(real);
             }
         }""")
-        shown = wait_until(page, lambda: "全部集齐" in toast_text(), desc="12 张全齐文案")
-        check("12 张全齐时提示说「已全部集齐」，不再说「继续探索其它稀有度」",
-              shown and book_done["bookComplete"] and "继续探索其它稀有度" not in toast_text(),
-              f"实际: {toast_text()}")
+        shown = wait_until(page, lambda: "全部图鉴已集齐" in toast_text(), desc="两册全齐文案")
+        check("全部册集齐时提示说「全部图鉴已集齐」，不再说「继续探索其它稀有度」",
+              shown and book_done["allComplete"] and book_done["target"] is None
+              and "继续探索其它稀有度" not in toast_text(),
+              f"实际: {toast_text()} / {book_done}")
         check("构造 12/12 期间没有多解锁贴纸（该分支不写库）",
               len(rare_keys()) == 4, f"实际: {rare_keys()}")
         wait_toast_gone(page)
@@ -613,6 +677,153 @@ with sync_playwright() as p:
 
         page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")
         check("钩子已清理（9）", page.evaluate("() => localStorage.getItem('__e2e_force_rarity')") is None)
+
+        # ===== 10. 第二册「我们的故事」（批次 3：v1 集齐 → story 开启 → 专属链路）=====
+        print()
+        print("=" * 60)
+        print("10. 第二册「我们的故事」（开启 → 解锁 story_* → 网格/故事卡 → 红点隔离 → 纪念卡）")
+        print("=" * 60)
+        # 真实状态：v1 12/12（第 9 节走真实开奖集齐），story 0/12 → 开启册已切到 story，
+        # 后续开奖直接解锁 story_*。这也覆盖了「上线时第一册已集齐则立即开启」的形态。
+        # 此刻图鉴弹层仍开着（第 9 节没关）——先关掉（激活册 v1 → 只把 v1 的 key 标已看）
+        page.locator('#stickerModalClose').click()
+        wait_until(page, lambda: not page.locator('#stickerModal').is_visible(), desc="书架收起")
+
+        state_ok = page.evaluate("""async () => {
+            const bb = await import('/js/blindbox.js');
+            return {
+                target: bb.getRollTargetSeries(),
+                v1Done: bb.isBookComplete(),
+                storyDone: bb.isBookComplete('story'),
+                all: bb.isAllBooksComplete(),
+            };
+        }""")
+        check("v1 集齐后开启册已切到 story（真实链路）",
+              state_ok["target"] == "story" and state_ok["v1Done"] and not state_ok["storyDone"] and not state_ok["all"],
+              f"实际: {state_ok}")
+
+        # --- 10.1 story 稀有档 4 张：解锁带前缀的 story_* key，名字/进度按 story 册口径 ---
+        force_rarity("rare")
+        story_rare = ["便当", "满城", "衣撑", "暗号"]
+        for i in (1, 2, 3, 4):
+            ti = f"E2E-测试-story稀有{i}"
+            check(f"（story）第 {i} 条强制 rare 添加成功", add_todo(page, ti))
+            ok = wait_until(page, lambda n=i: f"解锁「{story_rare[n - 1]}」" in toast_text(),
+                            desc=f"解锁「{story_rare[i - 1]}」提示")
+            check(f"（story）第 {i} 张解锁 · story 进度 {i}/12",
+                  ok and f"{i}/12" in toast_text(), f"实际: {toast_text()}")
+            wait_add_settled(page, ti)
+        story_keys = page.evaluate("""async () => {
+            const s = await import('/js/state.js');
+            return s.getStickers().filter((x) => (x.stickerKey || '').startsWith('story_'))
+                .map((x) => x.stickerKey).sort();
+        }""")
+        check("解锁的是带前缀的 story_rare_1..4（key 系列化落地）",
+              story_keys == ["story_rare_1", "story_rare_2", "story_rare_3", "story_rare_4"],
+              f"实际: {story_keys}")
+        check("story 新解锁点亮顶栏红点", wait_until(
+            page, lambda: page.locator('#stickerBadge').is_visible(), desc="红点亮"))
+
+        # --- 10.2 红点/已看集合按册隔离 + story 网格渲染 + 故事卡 ---
+        page.locator('#stickerEntry').click()
+        wait_until(page, lambda: page.locator('.sticker-book-tabs__tab--active').text_content() == "我们的故事",
+                   desc="打开书架默认翻到正在收集的 story 册")
+        check("story 册网格 4 解锁 / 12 格",
+              page.locator('.sticker-cell--unlocked').count() == 4 and page.locator('.sticker-cell').count() == 12,
+              f"实际解锁 {page.locator('.sticker-cell--unlocked').count()} / 共 {page.locator('.sticker-cell').count()}")
+        first_name = page.locator('.sticker-cell--unlocked .sticker-cell__name').first.text_content()
+        check("story 首张贴纸名为「便当」（D11 序号顺序）", first_name == "便当", f"实际: {first_name}")
+        page.screenshot(path="/tmp/blindbox-story-grid.png", full_page=True)
+        # 只翻 v1 再关闭 → v1 无新贴纸，story 的红点必须保持（不能误清别册的未看状态）
+        page.locator('#stickerBookTabs .sticker-book-tabs__tab', has_text="收集图鉴").click()
+        wait_until(page, lambda: page.locator('.sticker-book-tabs__tab--active').text_content() == "收集图鉴",
+                   desc="切到 v1 册")
+        page.locator('#stickerModalClose').click()
+        wait_until(page, lambda: not page.locator('#stickerModal').is_visible(), desc="书架收起")
+        check("只翻 v1 不熄 story 红点（已看集合按册隔离）",
+              page.locator('#stickerBadge').is_visible(), "红点意外熄灭")
+        # 再开书架（默认翻 story）→ 点贴纸看故事卡 → 关闭 → story 标已看 → 红点熄灭
+        page.locator('#stickerEntry').click()
+        wait_until(page, lambda: page.locator('.sticker-book-tabs__tab--active').text_content() == "我们的故事",
+                   desc="再次默认 story 册")
+        page.locator('.sticker-cell--unlocked').first.click()
+        check("点击 story 贴纸弹出故事卡（叙事藏在故事卡里）", wait_until(
+            page,
+            lambda: "sticker-modal__flavor--show" in (page.locator('#stickerFlavor').get_attribute("class") or "")
+            and len((page.locator('#stickerFlavor').text_content() or "").strip()) > 0,
+            desc="故事卡浮现"))
+        page.locator('#stickerModalClose').click()
+        wait_until(page, lambda: not page.locator('#stickerModal').is_visible(), desc="书架收起")
+        check("浏览 story 册后关闭红点熄灭", wait_until(
+            page, lambda: not page.locator('#stickerBadge').is_visible(), desc="红点熄灭"))
+
+        # --- 10.3 该档集齐后的兜底文案带册名（钩子显式覆盖仍开出 rare）---
+        t_s5 = "E2E-测试-story稀有5"
+        check("（story）第 5 条 rare 添加成功", add_todo(page, t_s5))
+        full_rare = wait_until(page, lambda: "我们的故事" in toast_text() and "已集齐" in toast_text(),
+                               desc="story 稀有档集齐提示")
+        check("story 稀有档集齐提示带册名", full_rare, f"实际: {toast_text()}")
+        wait_add_settled(page, t_s5)
+
+        # --- 10.4 史诗 + 传说：补满 12 张（序号/进度按 story 册）---
+        story_epic = ["初遇", "深夜", "和好", "小心"]
+        force_rarity("epic")
+        for i in (1, 2, 3, 4):
+            ti = f"E2E-测试-story史诗{i}"
+            check(f"（story）史诗第 {i} 条添加成功", add_todo(page, ti))
+            ok = wait_until(page, lambda n=i: f"解锁「{story_epic[n - 1]}」" in toast_text(),
+                            desc=f"解锁「{story_epic[i - 1]}」提示")
+            check(f"（story）史诗第 {i} 张解锁 · 进度 {4 + i}/12",
+                  ok and f"{4 + i}/12" in toast_text(), f"实际: {toast_text()}")
+            wait_add_settled(page, ti)
+        story_leg = ["宝宝", "双生", "平常", "一直"]
+        force_rarity("legendary")
+        for i in (1, 2, 3, 4):
+            ti = f"E2E-测试-story传说{i}"
+            check(f"（story）传说第 {i} 条添加成功", add_todo(page, ti))
+            ok = wait_until(page, lambda n=i: f"解锁「{story_leg[n - 1]}」" in toast_text(),
+                            desc=f"解锁「{story_leg[i - 1]}」提示")
+            check(f"（story）传说第 {i} 张解锁 · 进度 {8 + i}/12",
+                  ok and f"{8 + i}/12" in toast_text(), f"实际: {toast_text()}")
+            wait_add_settled(page, ti)
+
+        # --- 10.5 story 12/12 → 属于它自己的集齐纪念卡（复用批次 1 组件，带册名）---
+        page.locator('#stickerEntry').click()
+        check("story 集齐后打开书架，其纪念卡自动弹出（待庆祝册优先翻开）", wait_until(
+            page, lambda: page.locator('#memorialCard').is_visible(), desc="story 纪念卡仪式"))
+        title_text = page.locator('#memorialCardTitle').text_content() or ""
+        check("story 纪念卡标题带册名", "我们的故事" in title_text, f"实际: {title_text}")
+        cell_n = page.locator('#memorialCardGrid .memorial-card__cell').count()
+        check("story 纪念卡 12 格拼贴", cell_n == 12, f"实际 {cell_n}")
+        page.screenshot(path="/tmp/blindbox-story-memorial.png", full_page=True)
+        page.locator('#memorialCardClose').click()
+        check("story 完成态：金色面板徽章 + 重看入口 + 激活 tab 为 story", wait_until(
+            page,
+            lambda: page.locator('#stickerCompleteChip').is_visible()
+            and page.locator('#stickerMemorialBtn').is_visible()
+            and page.locator('.sticker-book-tabs__tab--active').text_content() == "我们的故事",
+            desc="story 完成态"))
+        all_done_state = page.evaluate("""async () => {
+            const bb = await import('/js/blindbox.js');
+            return { all: bb.isAllBooksComplete(), target: bb.getRollTargetSeries() };
+        }""")
+        check("两册全齐：isAllBooksComplete 为真、开启册为空",
+              all_done_state["all"] and all_done_state["target"] is None, f"实际: {all_done_state}")
+        # 两册全齐后（无钩子）的真实开奖回落三档全池：盲盒仍是惊喜，只是不再解锁贴纸
+        page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")
+        final_pool = page.evaluate("""async () => {
+            const bb = await import('/js/blindbox.js');
+            const counts = { common: 0, rare: 0, epic: 0, legendary: 0 };
+            for (let i = 0; i < 1000; i++) counts[bb.rollRarity()]++;
+            return counts;
+        }""")
+        check("两册全齐后开奖回落三档全池（不再解锁，惊喜保留）",
+              final_pool["rare"] > 0 and final_pool["epic"] > 0 and final_pool["legendary"] > 0,
+              f"实际: {final_pool}")
+        page.locator('#stickerModalClose').click()
+        wait_until(page, lambda: not page.locator('#stickerModal').is_visible(), desc="书架收起")
+        page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")
+        check("钩子已清理（10）", page.evaluate("() => localStorage.getItem('__e2e_force_rarity')") is None)
 
     browser.close()
 
