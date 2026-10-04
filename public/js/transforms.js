@@ -73,6 +73,7 @@ export function toSticker(row) {
     id: row.id,
     stickerKey: row.sticker_key,
     rarity: row.rarity,
+    starLevel: row.star_level || 0, // 星级（批次 4）：0=普通/1=闪卡/2=烫金；列缺失/未返回时兜底 0
     unlockedBy: row.unlocked_by,
     todoId: row.todo_id || null,
     unlockedAt: row.unlocked_at,

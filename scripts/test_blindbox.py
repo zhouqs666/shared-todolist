@@ -11,6 +11,9 @@
    （12 格拼贴 / 起止日期 / 隐藏款开出次数）→ 金色完成态可重看、ESC 出口不连带关图鉴
 5. 第二册「我们的故事」（路线图批次 3）：v1 集齐 → 开启册自动切到 story → 强制钩子开出
    story_* 贴纸（key 前缀系列化）→ 第二册网格/故事卡/红点按册隔离 → story 自己的集齐纪念卡
+6. 升星（路线图批次 4）：两册全齐进入升星期（D12）→ 强制开奖星级 +1（0 闪卡→烫金封顶）、
+   满星顺延下一张、乐观守卫未过的兜底、双端 Realtime 同步（stickers UPDATE）→ 网格星级
+   角标 + 故事卡星级行；全部满星为终局（不写库兜底文案，7.3c）
 
 （原注释写「生产库迁移尚未执行，rarity 列/stickers 表不存在」——已过时：2026-09-16 复核确认
  线上两张表/列都在（todos.rarity 已回填、stickers 有数据），本测试在测试库上完整跑真实链路。）
@@ -398,38 +401,73 @@ with sync_playwright() as p:
         check("真实图鉴下 1000 次开奖不再开出 rare（无钩子的真实路径）",
               real_pool["counts"]["rare"] == 0, f"实际: {real_pool['counts']}")
 
-        # --- 7.3c 全部册集齐时的提示文案 ---
-        # 构造 24/24（v1 + story 两册全齐，不真去集齐：那要 24 次开奖）。
-        # ⚠️ 批次 3 起解锁目标 = 第一个未集齐的册：只把 v1 钉满 12/12，onRollRarity 会
-        # **真的去开 story 册**（写库！）——必须两册全满，才走「不写库」的兜底文案分支。
+        # --- 7.3c 全部册**满星**时的终局兜底（不写库）---
+        # 构造 24/24 且星级全满（star_level=2，不真去集齐+升星：那要 ~72 次开奖）。
+        # ⚠️ 批次 4 起（D12）解锁目标 = 第一个未集齐的册、升星目标 = 第一个未满星的册：
+        # 只把「集齐」钉满（星级 0）会走**升星路径**（发 UPDATE！）——必须两册全满星，
+        # 才走「不写库」的终局分支（getStarTargetSeries 为空，在任何 DB 调用前短路）。
         check("文案断言前提示已清空",
               wait_until(page, lambda: page.locator(".toast--show").count() == 0, desc="无提示在显示"))
         book_done = page.evaluate("""async () => {
             const state = await import('/js/state.js');
             const bb = await import('/js/blindbox.js');
             const real = state.getStickers();
+            const fake = (series, rarity, n, star) => Array.from({ length: n }, (_, i) => {
+                const key = `${series === 'v1' ? '' : series + '_'}${rarity}_${i + 1}`;
+                return { id: crypto.randomUUID(), stickerKey: key, rarity, starLevel: star,
+                         unlockedBy: null, todoId: null, unlockedAt: new Date().toISOString() };
+            });
+            const book = (series, star) => [...fake(series, 'rare', 4, star), ...fake(series, 'epic', 4, star), ...fake(series, 'legendary', 4, star)];
+            const todo = state.getTodos().find((t) => t.text === 'E2E-测试-强制稀有5');
+            try {
+                state.setStickers([...book('v1', 2), ...book('story', 2)]);
+                await bb.onRollRarity({ id: todo.id, rarity: 'rare' }, todo.createdBy);
+                return { allComplete: bb.isAllBooksComplete(), target: bb.getRollTargetSeries(),
+                         starTarget: bb.getStarTargetSeries() };
+            } finally {
+                state.setStickers(real);
+            }
+        }""")
+        shown = wait_until(page, lambda: "全部图鉴已满星" in toast_text(), desc="两册满星文案")
+        check("全部册满星时提示说「全部图鉴已满星，这张留作纪念」且升星目标为空（终局）",
+              shown and book_done["allComplete"] and book_done["target"] is None
+              and book_done["starTarget"] is None,
+              f"实际: {toast_text()} / {book_done}")
+        check("构造满星期间没有写库（该分支在任何 DB 调用前短路）",
+              len(rare_keys()) == 4, f"实际: {rare_keys()}")
+        wait_toast_gone(page)
+
+        # --- 7.3d 升星乐观守卫未过：候选全部打不中 → 顺延到耗尽 + 兜底提示 ---
+        # 两册集齐但星级全 0（合法的升星期形态）：onRollRarity 走升星路径；候选行的 id 是
+        # 随机 UUID（库里不存在）→ 每次 UPDATE 守卫 0 行命中 → 顺延到候选耗尽 → 对齐 +
+        # 「已满星」兜底。等价模拟「对方同刻抢先升星 / 本地星级滞后」的自愈路径，
+        # 全程不命中任何真实行（打不中的 UUID 对测试库无副作用）。
+        guard = page.evaluate("""async () => {
+            const state = await import('/js/state.js');
+            const bb = await import('/js/blindbox.js');
+            const real = state.getStickers();
             const fake = (series, rarity, n) => Array.from({ length: n }, (_, i) => {
                 const key = `${series === 'v1' ? '' : series + '_'}${rarity}_${i + 1}`;
-                return { id: key, stickerKey: key, rarity,
+                return { id: crypto.randomUUID(), stickerKey: key, rarity, starLevel: 0,
                          unlockedBy: null, todoId: null, unlockedAt: new Date().toISOString() };
             });
             const book = (series) => [...fake(series, 'rare', 4), ...fake(series, 'epic', 4), ...fake(series, 'legendary', 4)];
             const todo = state.getTodos().find((t) => t.text === 'E2E-测试-强制稀有5');
             try {
                 state.setStickers([...book('v1'), ...book('story')]);
-                await bb.onRollRarity({ id: todo.id, rarity: 'rare' }, todo.createdBy);
-                return { allComplete: bb.isAllBooksComplete(), target: bb.getRollTargetSeries() };
+                const r = await bb.onRollRarity({ id: todo.id, rarity: 'rare' }, todo.createdBy);
+                return { upgraded: r && r.stickerKey, starTarget: bb.getStarTargetSeries() };
             } finally {
                 state.setStickers(real);
             }
         }""")
-        shown = wait_until(page, lambda: "全部图鉴已集齐" in toast_text(), desc="两册全齐文案")
-        check("全部册集齐时提示说「全部图鉴已集齐」，不再说「继续探索其它稀有度」",
-              shown and book_done["allComplete"] and book_done["target"] is None
-              and "继续探索其它稀有度" not in toast_text(),
-              f"实际: {toast_text()} / {book_done}")
-        check("构造 12/12 期间没有多解锁贴纸（该分支不写库）",
-              len(rare_keys()) == 4, f"实际: {rare_keys()}")
+        shown_guard = wait_until(page, lambda: "都已满星" in toast_text(), desc="守卫未过兜底文案")
+        # starTarget=None 是「兜底前已对齐真实库状态」的证据：候选耗尽后 syncStickersFromDb()
+        # 用真实状态（此时尚未两册集齐）替换了假状态，升星目标自然回到空——同步确实发生了
+        check("守卫全部未过时顺延到候选耗尽并给「已满星」兜底提示（无升星结果）",
+              shown_guard and guard["upgraded"] is None and guard["starTarget"] is None,
+              f"实际: {toast_text()} / {guard}")
+        check("守卫路径同样没有动真实图鉴", len(rare_keys()) == 4, f"实际: {rare_keys()}")
         wait_toast_gone(page)
 
         # --- 7.4 完成隐藏款：完成提示必须留在屏上（旧实现被开奖提示连「撤销」按钮一起清掉）---
@@ -824,6 +862,178 @@ with sync_playwright() as p:
         wait_until(page, lambda: not page.locator('#stickerModal').is_visible(), desc="书架收起")
         page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")
         check("钩子已清理（10）", page.evaluate("() => localStorage.getItem('__e2e_force_rarity')") is None)
+
+        # ===== 11. 升星（批次 4：全部册集齐 → 升星期 → 闪卡/烫金）=====
+        print()
+        print("=" * 60)
+        print("11. 升星（全部册集齐后：注册顺序选册 → 星级 0→1→2 → 满星顺延 → 双端同步）")
+        print("=" * 60)
+        # 真实状态：v1 12/12 + story 12/12（第 9/10 节真实开奖集齐），星级全 0。
+        # D12：全部集齐 → 升星期，开奖不再解锁、改为升星；升星目标册按注册顺序 = v1。
+        star_state = page.evaluate("""async () => {
+            const bb = await import('/js/blindbox.js');
+            return {
+                target: bb.getRollTargetSeries(),
+                starTarget: bb.getStarTargetSeries(),
+                all: bb.isAllBooksComplete(),
+                upgradable: bb.upgradableRarities('v1'),
+            };
+        }""")
+        check("两册全齐进入升星期：开启册为空、升星目标 v1（注册顺序）、三档都可升",
+              star_state["target"] is None and star_state["starTarget"] == "v1"
+              and star_state["all"] and star_state["upgradable"] == ["rare", "epic", "legendary"],
+              f"实际: {star_state}")
+
+        # --- 11.1 升星口径（构造状态）：注册顺序切册 + 满星档退出抽选池 ---
+        star_pool = page.evaluate("""async () => {
+            const state = await import('/js/state.js');
+            const bb = await import('/js/blindbox.js');
+            const real = state.getStickers();
+            const fake = (series, rarity, n, star) => Array.from({ length: n }, (_, i) => {
+                const key = `${series === 'v1' ? '' : series + '_'}${rarity}_${i + 1}`;
+                return { id: crypto.randomUUID(), stickerKey: key, rarity, starLevel: star,
+                         unlockedBy: null, todoId: null, unlockedAt: new Date().toISOString() };
+            });
+            const book = (series, star) => [...fake(series, 'rare', 4, star), ...fake(series, 'epic', 4, star), ...fake(series, 'legendary', 4, star)];
+            try {
+                // v1 全满星、story 星级全 0 → 升星目标按注册顺序切到 story
+                state.setStickers([...book('v1', 2), ...book('story', 0)]);
+                const afterV1Maxed = { starTarget: bb.getStarTargetSeries(), upgradable: bb.upgradableRarities('story') };
+                // v1 稀有档满星、其余星级 0 → 升星期抽选池不再含 rare（满星档退出，同收集期思路）
+                state.setStickers([
+                    ...fake('v1', 'rare', 4, 2), ...fake('v1', 'epic', 4, 0), ...fake('v1', 'legendary', 4, 0),
+                    ...book('story', 0),
+                ]);
+                const counts = { common: 0, rare: 0, epic: 0, legendary: 0 };
+                for (let i = 0; i < 2000; i++) counts[bb.rollRarity()]++;
+                return { afterV1Maxed, counts, upgradableV1: bb.upgradableRarities('v1') };
+            } finally {
+                state.setStickers(real);
+            }
+        }""")
+        check("第一册升满后升星目标切到 story（注册顺序，与「合上第一本翻开第二本」一致）",
+              star_pool["afterV1Maxed"]["starTarget"] == "story"
+              and star_pool["afterV1Maxed"]["upgradable"] == ["rare", "epic", "legendary"],
+              f"实际: {star_pool['afterV1Maxed']}")
+        check("稀有档满星后升星期抽选池剔除 rare（2000 次不开出稀有）",
+              star_pool["upgradableV1"] == ["epic", "legendary"] and star_pool["counts"]["rare"] == 0,
+              f"实际: {star_pool['upgradableV1']} / {star_pool['counts']}")
+        check("构造用假状态已还原（真实图鉴 24 张未被污染）",
+              page.evaluate("async () => (await import('/js/state.js')).getStickers().length") == 24)
+
+        # --- 11.2 真实升星链路：0→闪卡→烫金→顺延下一张（写测试库，断言打在库真值上）---
+        def star_levels():
+            return page.evaluate("""async () => {
+                const s = await import('/js/state.js');
+                const out = {};
+                for (const x of s.getStickers()) {
+                    if (x.stickerKey === 'rare_1' || x.stickerKey === 'rare_2') out[x.stickerKey] = x.starLevel || 0;
+                }
+                return out;
+            }""")
+
+        force_rarity("rare")
+        t_s1 = "E2E-测试-升星1"
+        check("升星期强制 rare 添加成功", add_todo(page, t_s1))
+        ok = wait_until(page, lambda: "「初心」升为闪卡" in toast_text(), desc="升星提示（闪卡）")
+        check("第一颗：rare_1 升为闪卡（星级 +1，提示含星级名）",
+              ok and star_levels().get("rare_1") == 1, f"实际: {toast_text()} / {star_levels()}")
+        wait_add_settled(page, t_s1)
+
+        t_s2 = "E2E-测试-升星2"
+        check("第二条强制 rare 添加成功", add_todo(page, t_s2))
+        ok = wait_until(page, lambda: "「初心」升为烫金" in toast_text(), desc="升星提示（烫金）")
+        check("满星顺延：rare_1 再 +1 到烫金（2 星封顶，不提前跳 rare_2）",
+              ok and star_levels() == {"rare_1": 2, "rare_2": 0}, f"实际: {toast_text()} / {star_levels()}")
+        wait_add_settled(page, t_s2)
+
+        t_s3 = "E2E-测试-升星3"
+        check("第三条强制 rare 添加成功", add_todo(page, t_s3))
+        ok = wait_until(page, lambda: "「萌芽」升为闪卡" in toast_text(), desc="顺延到下一张提示")
+        check("rare_1 满星后顺延到 rare_2（+1 闪卡）",
+              ok and star_levels() == {"rare_1": 2, "rare_2": 1}, f"实际: {toast_text()} / {star_levels()}")
+        wait_add_settled(page, t_s3)
+
+        # 库真值对账（不只信本地状态）
+        db_stars = page.evaluate("""async () => {
+            const { db } = await import('/js/db.js');
+            const rows = await db.listStickers();
+            const out = {};
+            for (const r of rows) {
+                if (r.stickerKey === 'rare_1' || r.stickerKey === 'rare_2') out[r.stickerKey] = r.starLevel || 0;
+            }
+            return out;
+        }""")
+        check("数据库真值：rare_1=2（烫金）、rare_2=1（闪卡）",
+              db_stars == {"rare_1": 2, "rare_2": 1}, f"实际: {db_stars}")
+
+        # --- 11.3 图鉴 UI：星级角标 + 闪卡/烫金质感 + 完成态引导 + 故事卡星级行 ---
+        page.locator('#stickerEntry').click()
+        wait_until(page, lambda: page.locator('#stickerModal').is_visible(), desc="书架打开")
+        # 打开书架默认册 = story（上次所在册）→ 切到 v1 看星级
+        page.locator('#stickerBookTabs .sticker-book-tabs__tab', has_text="收集图鉴").click()
+        wait_until(page, lambda: page.locator('.sticker-book-tabs__tab--active').text_content() == "收集图鉴",
+                   desc="切到 v1 册")
+        star2_cells = page.locator('.sticker-cell--star2').count()
+        star1_cells = page.locator('.sticker-cell--star1').count()
+        check("v1 网格：1 个烫金格（rare_1）+ 1 个闪卡格（rare_2）",
+              star2_cells == 1 and star1_cells == 1, f"实际: 烫金{star2_cells} 闪卡{star1_cells}")
+        check("烫金格角标显示 ★★", page.locator('.sticker-cell--star2 .sticker-cell__star', has_text="★★").count() == 1)
+        check("完成态提示引导升星（含剩余次数）",
+              "升星机会" in (page.locator('#stickerHint').text_content() or ""),
+              f"实际: {page.locator('#stickerHint').text_content()}")
+        page.screenshot(path="/tmp/blindbox-star-grid.png", full_page=True)
+        # 点烫金格 → 故事卡出现「★★ 烫金」星级行
+        page.locator('.sticker-cell--star2').first.click()
+        star_card = wait_until(
+            page,
+            lambda: "烫金" in (page.locator('#stickerFlavor').text_content() or ""),
+            desc="故事卡星级行",
+        )
+        star_line = page.locator('#stickerFlavor .sticker-modal__flavor-star').text_content() or ""
+        check("故事卡显示「★★ 烫金」星级行", star_card and "★★" in star_line, f"实际: {star_line}")
+        page.locator('#stickerModalClose').click()
+        wait_until(page, lambda: not page.locator('#stickerModal').is_visible(), desc="书架收起")
+
+        # --- 11.4 双端同步：beta 经 Realtime stickers UPDATE 收到星级变化 + 提示（不刷新）---
+        print("    （双账号）beta 登录 → alpha 升星 → beta 实时同步星级 + 提示")
+        context2 = browser.new_context()
+        page2 = context2.new_page()
+        page2.set_default_timeout(15000)
+        second_user = os.environ.get("E2E_SECOND_ACCOUNT", "e2e-beta")
+        check("（升星）第二账号登录成功", login(page2, BASE, second_user, TEST_PASSWORD), page2.url)
+        # Realtime 订阅真正生效需 ~2-3s（本项目记录过的已知时序），取宽等待
+        page2.wait_for_timeout(4000)
+
+        def beta_rare2_star():
+            return page2.evaluate("""async () => {
+                const s = await import('/js/state.js');
+                const x = s.getStickers().find((y) => y.stickerKey === 'rare_2');
+                return x ? (x.starLevel || 0) : null;
+            }""")
+
+        def toast2_text():
+            el = page2.locator("#toast")
+            return (el.text_content() or "") if el.count() > 0 else ""
+
+        before_star = beta_rare2_star()
+        check("（beta）升星前本地 rare_2 星级为 1（冷启动拉取）", before_star == 1, f"实际: {before_star}")
+
+        t_s4 = "E2E-测试-升星4"
+        check("（alpha）第四条强制 rare 添加成功", add_todo(page, t_s4))
+        ok_alpha = wait_until(page, lambda: "「萌芽」升为烫金" in toast_text(), desc="（alpha）rare_2 烫金提示")
+        ok_beta = wait_until(page2, lambda: beta_rare2_star() == 2, timeout_ms=20000,
+                             desc="（beta）Realtime 星级同步")
+        beta_toast = wait_until(page2, lambda: "升为烫金" in toast2_text(), timeout_ms=20000,
+                                desc="（beta）升星提示")
+        check("（beta）对方升星实时同步到 star_level=2（UPDATE 通道，无需刷新）",
+              ok_alpha and ok_beta, f"实际: {beta_rare2_star()}")
+        check("（beta）收到升星提示（含贴纸名「萌芽」）", beta_toast and "萌芽" in toast2_text(),
+              f"实际: {toast2_text()}")
+        context2.close()
+
+        page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")
+        check("钩子已清理（11）", page.evaluate("() => localStorage.getItem('__e2e_force_rarity')") is None)
 
     browser.close()
 

@@ -205,6 +205,21 @@ export function onStickerUnlockedView(sticker) {
 }
 
 /**
+ * 对方升星的视图层星芒反馈（批次 4；本端自己的升星由 blindbox.celebrateStarUpgrade 放）。
+ * 金色星形粒子与升星主题呼应：闪卡一束、烫金两束错时。
+ */
+export function celebrateStarUpgradeView(level = 1) {
+  if (!isFxEnabled()) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const colors = ['#fbbf24', '#fcd34d', '#fde68a', '#fff7ed'];
+  const origin = { y: 0.55 };
+  confetti({ particleCount: 18, spread: 60, startVelocity: 28, ticks: 180, colors, origin, scalar: 0.85, shapes: ['star'] });
+  if (level >= 2) {
+    setTimeout(() => confetti({ particleCount: 22, spread: 80, startVelocity: 33, ticks: 220, colors, origin, scalar: 1, shapes: ['star'] }), 150);
+  }
+}
+
+/**
  * 对方贴表情时，给对应待办一个轻量脉冲反馈（克制，不弹通知）
  */
 export function pulseTodoOnRemoteReaction(todoId) {
