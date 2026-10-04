@@ -25,6 +25,6 @@
     "allure-commandline": "^2.32.0",
     "allure-playwright": "^3.12.1",
     "dotenv": "^17.4.2",
-    "vite": "^5.4.11"
+    "vite": "^6.4.3"
   }
 }
