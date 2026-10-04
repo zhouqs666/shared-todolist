@@ -3573,6 +3573,44 @@ body.cherish-stage-on .topbar {
   color: var(--color-text-muted);
 }
 
+/* ===== 册 tab 栏（多册书架 · 路线图批次 3）=====
+   每册一条书脊色竖条（v1 樱粉 / story 夜蓝，颜色由 JS 按册注册表注入
+   --tab-spine / --tab-tint / --tab-ink），像书架上并排的两本书 */
+.sticker-book-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 2px;
+}
+.sticker-book-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+.sticker-book-tabs__tab::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 3.5px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--tab-spine, var(--rose-500));
+}
+.sticker-book-tabs__tab--active {
+  color: var(--tab-ink, var(--rose-700));
+  background: var(--tab-tint, var(--rose-50));
+  border-color: transparent;
+}
+
 /* ===== 贴纸故事卡：点击已解锁贴纸时浮现（替代全局 Toast，弹层内展示）===== */
 .sticker-modal__flavor {
   position: absolute;
