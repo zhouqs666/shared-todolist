@@ -156,7 +156,7 @@ export const BASE_SERIES = 'v1';
 
 const SERIES_DEFS = {
   [BASE_SERIES]: {
-    id: BASE_SERIES, prefix: '', title: '收集图鉴',
+    id: BASE_SERIES, prefix: '', title: '怦然心动', // 2026-10-04 更名（原「收集图鉴」与书架弹层大标题重名）；仅 tab 展示名，v1 的 toast / 纪念卡文案不变
     // 册专属内容（名称/短句/图标）+ 书脊配色：v1 = 樱粉默认（线上零变化）
     meta: RARITY_META,
     accent: { spine: '#e884a8', tint: 'rgba(232, 132, 168, 0.14)', ink: '#c2527e' },

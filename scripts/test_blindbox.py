@@ -276,10 +276,10 @@ with sync_playwright() as p:
         check("story 册完成徽章不亮（未开启）", not page.locator('#stickerCompleteChip').is_visible())
         page.screenshot(path="/tmp/blindbox-story-locked.png", full_page=True)
         # 切回第一册再关弹层（后续断言都在 v1 口径上）
-        page.locator('#stickerBookTabs .sticker-book-tabs__tab', has_text="收集图鉴").click()
+        page.locator('#stickerBookTabs .sticker-book-tabs__tab', has_text="怦然心动").click()
         wait_until(
             page,
-            lambda: page.locator('.sticker-book-tabs__tab--active').text_content() == "收集图鉴",
+            lambda: page.locator('.sticker-book-tabs__tab--active').text_content() == "怦然心动",
             desc="切回 v1 册",
         )
         page.screenshot(path="/tmp/blindbox-stickerbook.png", full_page=True)
@@ -773,8 +773,8 @@ with sync_playwright() as p:
         check("story 首张贴纸名为「便当」（D11 序号顺序）", first_name == "便当", f"实际: {first_name}")
         page.screenshot(path="/tmp/blindbox-story-grid.png", full_page=True)
         # 只翻 v1 再关闭 → v1 无新贴纸，story 的红点必须保持（不能误清别册的未看状态）
-        page.locator('#stickerBookTabs .sticker-book-tabs__tab', has_text="收集图鉴").click()
-        wait_until(page, lambda: page.locator('.sticker-book-tabs__tab--active').text_content() == "收集图鉴",
+        page.locator('#stickerBookTabs .sticker-book-tabs__tab', has_text="怦然心动").click()
+        wait_until(page, lambda: page.locator('.sticker-book-tabs__tab--active').text_content() == "怦然心动",
                    desc="切到 v1 册")
         page.locator('#stickerModalClose').click()
         wait_until(page, lambda: not page.locator('#stickerModal').is_visible(), desc="书架收起")
@@ -971,8 +971,8 @@ with sync_playwright() as p:
         page.locator('#stickerEntry').click()
         wait_until(page, lambda: page.locator('#stickerModal').is_visible(), desc="书架打开")
         # 打开书架默认册 = story（上次所在册）→ 切到 v1 看星级
-        page.locator('#stickerBookTabs .sticker-book-tabs__tab', has_text="收集图鉴").click()
-        wait_until(page, lambda: page.locator('.sticker-book-tabs__tab--active').text_content() == "收集图鉴",
+        page.locator('#stickerBookTabs .sticker-book-tabs__tab', has_text="怦然心动").click()
+        wait_until(page, lambda: page.locator('.sticker-book-tabs__tab--active').text_content() == "怦然心动",
                    desc="切到 v1 册")
         star2_cells = page.locator('.sticker-cell--star2').count()
         star1_cells = page.locator('.sticker-cell--star1').count()
