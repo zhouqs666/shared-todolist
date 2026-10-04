@@ -3927,6 +3927,195 @@ body.cherish-stage-on .topbar {
 }
 
 /* ============================================================
+   集齐纪念卡（memorial-card.js · 路线图批次 1）
+   全屏仪式：首次集齐自动弹出；之后从图鉴金色完成态"重看"进入。
+   金色系呼应图鉴完成态；z-index 1100 = 高于图鉴弹层(1000)、低于 Toast(11000)。
+   ============================================================ */
+.memorial-card {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 1;
+  transition: opacity 0.25s var(--ease);
+}
+.memorial-card.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.memorial-card__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.memorial-card__card {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  max-height: 82vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-radius: 24px;
+  padding: 26px 20px calc(22px + var(--safe-bottom));
+  box-shadow: 0 12px 48px rgba(245, 158, 11, 0.25), 0 4px 16px rgba(184, 90, 124, 0.12);
+  text-align: center;
+}
+.memorial-card:not(.hidden) .memorial-card__card {
+  animation: memorial-card-in 0.45s var(--ease);
+}
+@keyframes memorial-card-in {
+  from { opacity: 0; transform: scale(0.9) translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+.memorial-card__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 50%;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.memorial-card__close:active {
+  background: rgba(0, 0, 0, 0.05);
+}
+.memorial-card__eyebrow {
+  margin: 0 0 6px;
+  font-family: var(--font-cn);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 4px;
+  text-indent: 4px; /* 抵消最后一个字的字距，保持视觉居中 */
+  color: #b45309;
+}
+.memorial-card__title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+.memorial-card__dates {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+.memorial-card__dates.hidden { display: none; }
+.memorial-card__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.memorial-card__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px 7px;
+  border-radius: var(--radius-md);
+  animation: memorial-cell-in 0.38s var(--ease) both;
+}
+@keyframes memorial-cell-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+.memorial-card__cell--rare {
+  background: linear-gradient(160deg, var(--rose-50), var(--rose-100));
+}
+.memorial-card__cell--epic {
+  background: linear-gradient(160deg, var(--violet-50), var(--violet-100));
+}
+.memorial-card__cell--legendary {
+  background: linear-gradient(160deg, var(--gold-50), var(--gold-100));
+}
+.memorial-card__plate {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(150, 74, 102, 0.08), 0 2px 6px rgba(150, 74, 102, 0.07);
+}
+.memorial-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.memorial-card__icon svg {
+  width: 32px;
+  height: 32px;
+}
+.memorial-card__name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+.memorial-card__date {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  line-height: 1.2;
+}
+.memorial-card__stats {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--color-text);
+}
+.memorial-card__stats:empty {
+  display: none; /* 计数拉不到时整行让位（宁缺毋错） */
+}
+.memorial-card__foot {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .memorial-card:not(.hidden) .memorial-card__card,
+  .memorial-card__cell {
+    animation: none !important;
+  }
+  .memorial-card {
+    transition: none;
+  }
+}
+
+/* 纪念卡重看入口：图鉴金色完成态才显示（renderStickerBook 控制 hidden） */
+.sticker-modal__memorial-btn {
+  display: block;
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 10px;
+  border: 1px solid rgba(252, 211, 77, 0.7);
+  border-radius: 12px;
+  background: var(--gold-50);
+  color: #b45309;
+  font-family: var(--font-cn);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.sticker-modal__memorial-btn.hidden { display: none; }
+.sticker-modal__memorial-btn:active {
+  background: var(--gold-100);
+}
+
+/* ============================================================
    App 内 APK 更新（apk-update.js）— 呼吸图标 + 跳进面板
    顶栏入口：14px 下载箭头，4s 循环微晃
    展开：图标缩放 → 面板从图标位置弹出 → 图标跳进面板顶部

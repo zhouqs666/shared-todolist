@@ -521,6 +521,21 @@ export const db = {
   },
 
   /**
+   * 隐藏款开出总次数（供集齐纪念卡统计，见 memorial-card.js）。
+   * 计 todos 表 rarity 为隐藏三档的行数——**不过滤 deleted_at**：软删行也计入，
+   * 语义是"开出过"（2026-10-04 路线图批次 1 定稿，无需改表）。
+   * @returns {Promise<number>}
+   */
+  async countHiddenReveals() {
+    const { count, error } = await supabase
+      .from('todos')
+      .select('id', { count: 'exact', head: true })
+      .in('rarity', ['rare', 'epic', 'legendary']);
+    if (error) throw wrapError(error);
+    return count || 0;
+  },
+
+  /**
    * 标记一条隐藏款待办为"已被看过"（对方端首次见到播完惊喜提示后回标）。
    * 失败静默（锦上添花字段，不影响主流程）。
    */
