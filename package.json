@@ -42,5 +42,10 @@
     "playwright": "^1.62.1",
     "sharp": "^0.35.4",
     "typescript": "^7.0.2"
+  },
+  "overrides": {
+    "xcode": {
+      "uuid": "^11.1.1"
+    }
   }
 }
