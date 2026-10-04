@@ -81,7 +81,7 @@ jobs:
         # （init 写出的配置版本与 analyze 的运行版本必须一致）。
         # 因此升 CodeQL 时要手动把本文件里**两处** `codeql-action/*` 一起改，
         # 并关闭 Dependabot 那个只动 analyze 的 PR（已并入本改动）。
-        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           languages: ${{ matrix.language }}
           # ── 查询集：留在默认档，但这是**量过之后**的决定，不是没想过 ──────────────
@@ -116,7 +116,7 @@ jobs:
       # （若将来加了 java/kotlin 语言项，这里需要补 autobuild 或手写 gradle 构建 ——
       #  这是 advanced setup 相对 default setup 唯一真正多出来的心智负担。）
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           # category 决定结果在 Security 页面里的分组名。
           # 单语言时它只是好看；一旦加了第二种语言，没有它两路结果会互相覆盖。
