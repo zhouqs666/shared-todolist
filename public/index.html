@@ -331,12 +331,30 @@
       <div id="stickerLegend" class="sticker-legend"></div>
       <p id="stickerHint" class="sticker-modal__hint">小概率出现隐藏款待办，解锁专属贴纸～</p>
       <div id="stickerGrid" class="sticker-grid"></div>
+      <!-- 集齐纪念卡重看入口：金色完成态才显示（memorial-card.js） -->
+      <button id="stickerMemorialBtn" class="sticker-modal__memorial-btn hidden" type="button">📖 重看集齐纪念卡</button>
       <!-- 贴纸故事卡：点击已解锁贴纸时浮现（稀有度渐变底，自动淡出） -->
       <div id="stickerFlavor" class="sticker-modal__flavor" aria-live="polite"></div>
       <div class="sticker-modal__progress">
         <div class="sticker-modal__progress-bar"><span id="stickerProgressBar" class="sticker-modal__progress-fill"></span></div>
         <span id="stickerProgress" class="sticker-modal__progress-text">0 / 12</span>
       </div>
+    </div>
+  </div>
+
+  <!-- 集齐纪念卡：全屏仪式，首次集齐自动弹出；之后从图鉴完成态"重看"进入（memorial-card.js） -->
+  <div id="memorialCard" class="memorial-card hidden" role="dialog" aria-label="集齐纪念卡" aria-modal="true">
+    <div class="memorial-card__scrim"></div>
+    <div class="memorial-card__card">
+      <button id="memorialCardClose" class="memorial-card__close" type="button" aria-label="关闭纪念卡">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <p class="memorial-card__eyebrow">集齐纪念</p>
+      <h2 id="memorialCardTitle" class="memorial-card__title"></h2>
+      <p id="memorialCardDates" class="memorial-card__dates"></p>
+      <div id="memorialCardGrid" class="memorial-card__grid"></div>
+      <p id="memorialCardStats" class="memorial-card__stats"></p>
+      <p class="memorial-card__foot">这是属于你们的专属纪念 ✨</p>
     </div>
   </div>
 

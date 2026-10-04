@@ -7,6 +7,8 @@
 2. 页面加载/登录测试：验证模块链无报错、登录后主页渲染、createTodo 落库
 3. 隐藏款链路（强制开奖）：用 localStorage 钩子把开奖锁到指定稀有度，覆盖 15% 概率撞不到的路径
    —— 提示是否被顶掉、贴纸序号是否重复/空转、完成时「撤销」按钮是否还在、rarity_seen 是否正确
+4. 集齐纪念卡（路线图批次 1）：真实开奖链路集齐 12/12 → 打开图鉴纪念卡自动弹出
+   （12 格拼贴 / 起止日期 / 隐藏款开出次数）→ 金色完成态可重看、ESC 出口不连带关图鉴
 
 （原注释写「生产库迁移尚未执行，rarity 列/stickers 表不存在」——已过时：2026-09-16 复核确认
  线上两张表/列都在（todos.rarity 已回填、stickers 有数据），本测试在测试库上完整跑真实链路。）
@@ -503,6 +505,114 @@ with sync_playwright() as p:
         )
         check("（beta）共享图鉴同步到新解锁", shared, f"登录时 {epic_before} 张 → 现在 {epic_count2()} 张")
         context2.close()
+
+        # ===== 9. 集齐纪念卡（路线图批次 1：12/12 全屏仪式 + 完成态重看）=====
+        print()
+        print("=" * 60)
+        print("9. 集齐纪念卡（12/12 → 全屏仪式 → 完成态重看）")
+        print("=" * 60)
+        # 此刻真实图鉴：rare 4/4（7.1-7.3）+ epic 3/4（7.5 自愈两条 + 8 的 t7）= 7/12。
+        # 补 1 张 epic + 4 张 legendary 走**真实开奖链路**集齐；强制钩子只钉稀有度，
+        # 序号分配 / 进度文案 / 解锁提示仍由产品代码决定。
+        force_rarity("epic")
+        t8 = "E2E-测试-集齐8"
+        check("第 8 条（补 epic_4）添加成功", add_todo(page, t8))
+        check("解锁「炽爱」· 进度 8/12",
+              wait_until(page, lambda: "解锁「炽爱」" in toast_text() and "8/12" in toast_text(), desc="epic_4 提示"),
+              f"实际: {toast_text()}")
+        wait_add_settled(page, t8)
+
+        leg_names = {1: "永恒", 2: "璀璨", 3: "至臻", 4: "神话"}
+        force_rarity("legendary")
+        for i in (1, 2, 3, 4):
+            ti = f"E2E-测试-集齐{8 + i}"
+            check(f"第 {8 + i} 条（legendary_{i}）添加成功", add_todo(page, ti))
+            ok = wait_until(page, lambda n=i: f"解锁「{leg_names[n]}」" in toast_text(), desc=f"解锁「{leg_names[i]}」提示")
+            check(f"第 {8 + i} 张解锁 · 进度 {8 + i}/12",
+                  ok and f"{8 + i}/12" in toast_text(), f"实际: {toast_text()}")
+            wait_add_settled(page, ti)
+
+        # 12/12 → 打开图鉴：全屏纪念卡自动弹出（首次集齐仪式，替代旧的 Toast + 一次性撒花）
+        page.locator('#stickerEntry').click()
+        check("集齐后打开图鉴，纪念卡自动弹出", wait_until(
+            page, lambda: page.locator('#memorialCard').is_visible(), desc="纪念卡仪式"))
+        cell_n = page.locator('#memorialCardGrid .memorial-card__cell').count()
+        check("纪念卡 12 格拼贴", cell_n == 12, f"实际 {cell_n}")
+        # 起止日期按数据库真实的 unlocked_at min/max 断言（两种形态都合法）：
+        #   跨天  → 「M月d日 — M月d日 · 共 N 天」；同一天 → 「M月d日 · 12 张集于同一天」
+        range_info = page.evaluate("""async () => {
+            const s = await import('/js/state.js');
+            const ts = s.getStickers().map((x) => new Date(x.unlockedAt).getTime())
+                .filter((t) => !Number.isNaN(t));
+            const fmt = (t) => { const d = new Date(t); return (d.getMonth() + 1) + '月' + d.getDate() + '日'; };
+            const min = Math.min(...ts), max = Math.max(...ts);
+            return {
+                minText: fmt(min), maxText: fmt(max),
+                sameDay: new Date(min).toDateString() === new Date(max).toDateString(),
+            };
+        }""")
+        dates_text = page.locator('#memorialCardDates').text_content() or ""
+        if range_info["sameDay"]:
+            dates_ok = range_info["minText"] in dates_text and "集于同一天" in dates_text
+        else:
+            dates_ok = (range_info["minText"] in dates_text and range_info["maxText"] in dates_text
+                        and "共" in dates_text)
+        check("纪念卡起止日期与库内 unlocked_at 一致", dates_ok, f"实际: {dates_text} / 库: {range_info}")
+        # 隐藏款开出总数：卡片异步填充。断言两层：与库计数一致（接线正确）+ ≥ 本用例
+        # 确定开出的 12 次隐藏款（内容真实——本用例每次添加都走强制钩子，全部是隐藏款）。
+        reveal_count = page.evaluate("async () => (await import('/js/db.js')).db.countHiddenReveals()")
+        stats_filled = wait_until(
+            page,
+            lambda: f"{reveal_count} 次" in (page.locator('#memorialCardStats').text_content() or ""),
+            desc="开出次数填充",
+        )
+        check("开出次数与库计数一致（软删行也计入）", stats_filled, f"库计数 {reveal_count}")
+        check("开出次数 ≥ 本用例开出的 12 次隐藏款", reveal_count >= 12, f"实际 {reveal_count}")
+        page.screenshot(path="/tmp/blindbox-memorial.png", full_page=True)
+
+        # 关闭仪式 → 金色完成态仍在，可从面板重看（不是一次性的）
+        page.locator('#memorialCardClose').click()
+        check("仪式关闭后纪念卡收起", wait_until(
+            page, lambda: not page.locator('#memorialCard').is_visible(), desc="纪念卡收起"))
+        check("图鉴弹层仍在（关闭仪式没把它一起带走）", page.locator('#stickerModal').is_visible())
+        check("完成态出现重看入口", page.locator('#stickerMemorialBtn').is_visible())
+        page.locator('#stickerMemorialBtn').click()
+        check("点重看再开纪念卡", wait_until(
+            page, lambda: page.locator('#memorialCard').is_visible(), desc="重看纪念卡"))
+        # ESC 出口：纪念卡的 ESC 监听负责关卡，且不能把背后的图鉴弹层一起关掉
+        page.keyboard.press("Escape")
+        check("ESC 关闭重看的纪念卡", wait_until(
+            page, lambda: not page.locator('#memorialCard').is_visible(), desc="ESC 收起纪念卡"))
+        check("ESC 没有连带关闭图鉴弹层", page.locator('#stickerModal').is_visible())
+
+        # 补覆盖跨天形态：只改**本地状态**里一张贴纸的 unlocked_at（不写库），
+        # 点重看触发重渲染 → 「M月d日 — M月d日 · 共 N 天」分支；断言完立即还原
+        page.evaluate("""async () => {
+            const state = await import('/js/state.js');
+            window.__e2e_real_stickers = state.getStickers();
+            state.setStickers(state.getStickers().map((s, i) => i === 0
+                ? { ...s, unlockedAt: new Date(Date.now() - 3 * 86400000).toISOString() }
+                : s));
+        }""")
+        page.locator('#stickerMemorialBtn').click()
+        multi_ok = wait_until(
+            page, lambda: page.locator('#memorialCard').is_visible(), desc="跨天形态重开")
+        multi_text = page.locator('#memorialCardDates').text_content() or ""
+        check("跨天形态显示「min — max · 共 N 天」",
+              multi_ok and "—" in multi_text and "共" in multi_text
+              and range_info["minText"] in multi_text and range_info["maxText"] in multi_text,
+              f"实际: {multi_text}")
+        page.keyboard.press("Escape")
+        page.evaluate("""async () => {
+            const state = await import('/js/state.js');
+            state.setStickers(window.__e2e_real_stickers || []);
+            delete window.__e2e_real_stickers;
+        }""")
+        check("跨天断言后本地图鉴状态已还原",
+              page.evaluate("async () => (await import('/js/state.js')).getStickers().length") == 12)
+
+        page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")
+        check("钩子已清理（9）", page.evaluate("() => localStorage.getItem('__e2e_force_rarity')") is None)
 
     browser.close()
 

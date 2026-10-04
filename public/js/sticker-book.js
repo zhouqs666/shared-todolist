@@ -6,7 +6,8 @@
  *   - 已解锁：白色贴纸底板 + 彩色贴纸 + 名称 + 解锁日期，点击弹专属短句
  *   - 未解锁：本尊图案的灰色剪影（雾显悬念）+ "???"
  * 顶部有分档图例（稀有 x/4 · 史诗 x/4 · 传说 x/4），底部进度条，
- * 集齐时面板进入金色完成态并庆祝一次。
+ * 集齐时面板进入金色完成态，并弹出全屏「集齐纪念卡」仪式（可从完成态重复查看，
+ * 见 memorial-card.js）。
  *
  * 全集定义从 blindbox.js 的 RARITY_META 派生（保持单一真相）。
  *
@@ -24,11 +25,9 @@
  *   全程零文案、零新 UI 元素；prefers-reduced-motion 下由 CSS 禁用动画。
  */
 
-import confetti from './vendor/canvas-confetti.esm.min.js';
-import { isFxEnabled } from './theme.js';
 import { getStickers, setStickersRenderFn } from './state.js';
 import { RARITY_META, STICKERS_PER_RARITY, getStickerIcon, getStickerFlavor } from './blindbox.js';
-import { showToast } from './toast.js';
+import { showMemorialCard, initMemorialCard } from './memorial-card.js';
 import { db } from './db.js';
 import { setStickers } from './state.js';
 
@@ -154,14 +153,21 @@ function updateHint(unlockedCount) {
   hintEl.textContent = text;
 }
 
-/** 集齐庆祝：金色彩带（左右两发）+ 提示。特效开关关闭时只弹提示。 */
+/** 当前册的纪念卡数据（memorial-card 只吃数据；批次 3 起按册传各自的册数据） */
+function buildBookData() {
+  return {
+    title: `${TOTAL_STICKERS} 张贴纸全部集齐`,
+    stickers: buildFullBook(),
+  };
+}
+
+/**
+ * 集齐庆祝：全屏纪念卡仪式（首次，带金色彩带）。
+ * 批次 1 前是「Toast + 一次性撒花」；纪念卡承载同样的宣告且可从完成态重复查看，
+ * 不再单独弹 Toast（卡片本身就是宣告，两条同屏互相干扰）。
+ */
 function celebrateComplete() {
-  showToast('🎉 恭喜！图鉴已全部集齐！');
-  if (!isFxEnabled()) return;
-  const gold = RARITY_META.legendary.confettiColors;
-  const base = { spread: 60, ticks: 90, gravity: 0.9, scalar: 0.9, colors: gold };
-  confetti({ ...base, particleCount: 40, origin: { x: 0.15, y: 0.7 }, angle: 60 });
-  confetti({ ...base, particleCount: 40, origin: { x: 0.85, y: 0.7 }, angle: 120 });
+  showMemorialCard(buildBookData(), { celebrate: true });
 }
 
 /**
@@ -243,10 +249,12 @@ export function renderStickerBook(opts = {}) {
     barEl.classList.toggle('sticker-modal__progress-fill--complete', unlockedCount === TOTAL_STICKERS);
   }
 
-  // 集齐状态：面板金色完成态 + 徽章
+  // 集齐状态：面板金色完成态 + 徽章 + 纪念卡重看入口
   const complete = unlockedCount === TOTAL_STICKERS;
   if (panelEl) panelEl.classList.toggle('sticker-modal__panel--complete', complete);
   if (chipEl) chipEl.classList.toggle('hidden', !complete);
+  const memorialBtn = document.getElementById('stickerMemorialBtn');
+  if (memorialBtn) memorialBtn.classList.toggle('hidden', !complete);
 
   // 集齐庆祝：持久化标记，只在真正"集齐那一刻"庆祝一次；
   // 图鉴重新变得不完整（如清理测试数据）时清除标记，下次集齐重新庆祝
@@ -445,14 +453,25 @@ export function initStickerBook(opts = {}) {
       if (e.target === modal) closeStickerBook();
     });
   }
-  // ESC 关闭（与其他弹层一致的键盘出口）
+  // ESC 关闭（与其他弹层一致的键盘出口）。
+  // 纪念卡叠在图鉴弹层之上：卡开着时 ESC 只关卡（纪念卡模块自己的监听负责），
+  // 不把背后的图鉴弹层一起关掉
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    const mc = document.getElementById('memorialCard');
+    if (mc && !mc.classList.contains('hidden')) return;
     const m = document.getElementById('stickerModal');
     if (m && !m.classList.contains('hidden')) closeStickerBook();
   });
 
   bindGridInteraction();
+
+  // 纪念卡：完成态面板的"重看"入口 + 弹层自身的关闭交互（一次绑定）
+  const memorialBtn = document.getElementById('stickerMemorialBtn');
+  if (memorialBtn) {
+    memorialBtn.addEventListener('click', () => showMemorialCard(buildBookData()));
+  }
+  initMemorialCard();
 
   // 注册渲染回调：stickers 变化时更新红点 + 若弹层开着则刷新网格（不重放入场动画）
   setStickersRenderFn(() => {
