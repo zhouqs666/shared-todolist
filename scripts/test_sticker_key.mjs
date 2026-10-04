@@ -4,7 +4,11 @@
  * 背景（docs/sticker-book-roadmap.md §5.1，2026-10-04 批次 2）：key 采用语义前缀方案——
  * 第一册 v1 无前缀（历史数据形态），后续册带册短名前缀（如 `story_rare_1`）。
  * 解析收敛在 blindbox.js 的 parseStickerKey() 单点。本脚本把解析行为矩阵钉住：
- * 批次 3 给 key 加前缀 / 改造 rollRarity 时，任何破坏 v1 兼容的改动在这里当场变红。
+ * 任何破坏 v1 兼容、或破坏「前缀 ↔ 册」映射的改动在这里当场变红。
+ *
+ * 批次 3 更新（2026-10-04）：第二册 story 已注册（SERIES_DEFS 两册），
+ * 原先「story 注册前 throw / 未注册」的三条断言改为「story 已注册的正行为锚 +
+ * 未注册册（foo）仍被拒」；图标/短句补按册分派锚。
  *
  * 浏览器全局 stub：blindbox.js 的 import 链会触达 window/document/localStorage，
  * 模块求值期只碰这些 API 的存在性，空实现即可。
@@ -56,24 +60,38 @@ console.log('=== makeStickerKey：构造互逆 + 未注册册拒绝 ===');
 
 check("make('v1','epic',3) === 'epic_3'（v1 输出与历史格式逐字相同）",
   makeStickerKey('v1', 'epic', 3) === 'epic_3');
+check("make('story','rare',1) === 'story_rare_1'（批次 3 已注册，前缀形态）",
+  makeStickerKey('story', 'rare', 1) === 'story_rare_1');
+{
+  const p = parseStickerKey(makeStickerKey('story', 'legendary', 4));
+  check("story key 构造→解析互逆", !!p && p.series === 'story' && p.rarity === 'legendary' && p.index === 4);
+}
 let threw = false;
-try { makeStickerKey('story', 'rare', 1); } catch { threw = true; }
-check("make('story',…) 在册注册前 throw（批次 3 注册后才会放行）", threw);
+try { makeStickerKey('foo', 'rare', 1); } catch { threw = true; }
+check("make(未注册册 'foo',…) 仍 throw（注册表是唯一准入）", threw);
 
-console.log('=== 注册表：v1 唯一、无前缀、禁用名未占用 ===');
+console.log('=== 注册表：两册、前缀、禁用名未占用 ===');
 
-check("当前只注册 v1 一册（批次 2 口径）", JSON.stringify(getSeriesIds()) === JSON.stringify(['v1']));
+check("已注册两册（v1 + story，批次 3 口径）",
+  JSON.stringify(getSeriesIds()) === JSON.stringify(['v1', 'story']));
 check("v1 册 prefix 为空串", getSeriesDef('v1')?.prefix === '');
-check("getSeriesDef('story') 未注册 → undefined", getSeriesDef('story') === undefined);
+check("story 册 prefix === 'story'", getSeriesDef('story')?.prefix === 'story');
+check("story 册 title === '我们的故事'", getSeriesDef('story')?.title === '我们的故事');
+check("getSeriesDef(未注册) → undefined", getSeriesDef('foo') === undefined);
 check("BASE_SERIES === 'v1'", BASE_SERIES === 'v1');
 
-console.log('=== getStickerIcon / getStickerFlavor：v1 行为锚 ===');
+console.log('=== getStickerIcon / getStickerFlavor：v1 锚 + 按册分派 ===');
 
 check("icon('epic_3') 返回 SVG（含 <svg）", getStickerIcon('epic_3').includes('<svg'));
+check("icon('story_rare_1') 返回 story 册专属 SVG（按册分派）",
+  getStickerIcon('story_rare_1').includes('<svg')
+  && getStickerIcon('story_rare_1') !== getStickerIcon('rare_1'));
 check("icon(畸形) 返回空串（原兜底行为）", getStickerIcon('rls-probe') === '');
 check("icon(超界序号) 回退首张（原行为：|| stickerIcons[0]）",
   getStickerIcon('epic_99') === getStickerIcon('epic_1'));
 check("flavor('rare_2') 返回非空短句", getStickerFlavor('rare_2').length > 0);
+check("flavor('story_rare_1') 返回 story 册专属短句（与 v1 不同表）",
+  getStickerFlavor('story_rare_1').length > 0 && getStickerFlavor('story_rare_1') !== getStickerFlavor('rare_1'));
 check("flavor(畸形) 返回空串", getStickerFlavor('nope') === '');
 
 console.log(`\n结果: ${passed} 通过 / ${failed} 失败`);
