@@ -237,9 +237,9 @@ function updateHint(unlockedCount, series) {
       text = '每添加一条待办，都有小概率开出隐藏款——和 ta 集满这 12 张吧';
     } else if (getRollTargetSeries() !== series) {
       // 未开启的册（第一册还没集齐）：先见到剪影，收集从第一册集齐后开始
-      text = `「${def.title}」已就位——集齐第一册后，这本就会开始收集`;
+      text = `集满第一册，就能翻开${def.title}`;
     } else {
-      text = `「${def.title}」开启！每添加一条待办，都有小概率开出属于你们的故事`;
+      text = `${def.title}开启！每条待办都可能开出新的一页`;
     }
   } else if (unlockedCount === TOTAL_STICKERS) {
     // 升星期（批次 4）：集齐不是终点——还差多少张没满星就继续引导；全部烫金后才是终局
