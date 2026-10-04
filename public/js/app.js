@@ -45,7 +45,7 @@ import { checkForUpdate, setUpdateSupabase, notifyAppReady, getCurrentBundleInfo
 import { checkNativeUpdate, showNativeUpdatePanel, setApkUpdateSupabase, bindForegroundCheck } from './apk-update.js';
 import { supabase } from './supabase.js';
 import { showToast } from './toast.js';
-import { rollRarity, isHidden, applyRarity, celebrateRarity, onRollRarity, RARITY_META } from './blindbox.js';
+import { rollRarity, isHidden, applyRarity, celebrateRarity, onRollRarity, RARITY_META, getStickerName, starLabel, isSelfStarEcho } from './blindbox.js';
 import { initStickerBook, handleStickerUnlocked } from './sticker-book.js';
 // 图片全屏预览（lightbox）已从本文件拆出到 ./lightbox.js（技术清单第8条：app.js 过长）
 // 通过 handlers 注入 attachImageToTodo / removeImageFromTodo，避免与 db/state 形成紧耦合
@@ -71,6 +71,7 @@ import {
   celebrateCompletion,
   burstCardRing,
   onStickerUnlockedView,
+  celebrateStarUpgradeView,
   pulseTodoOnRemoteReaction,
 } from './confetti-effects.js';
 
@@ -313,6 +314,8 @@ async function reconcileRemoteState() {
       onRarityReveal: handleRarityReveal,
       // 图鉴贴纸解锁：双端同步更新图鉴状态 + 红点 + 撒花
       onStickerUnlocked: handleStickerUnlockedFromRealtime,
+      // 图鉴升星（批次 4）：stickers UPDATE（star_level 变化），双端同步 + 对方端提示
+      onStickerUpdated: handleStickerUpdatedFromRealtime,
       getInFlightIntent, // 完成切换竞态守卫：丢弃与本端意图相反的陈旧回声
       // 断线重连 → 对账（todos / 留言 / 表情，详见 reconcileRemoteState）
       // ⚠️ 只在**重连**时做，不在冷启动（firstTime=true）时做：冷启动那次整体替换
@@ -2295,6 +2298,28 @@ function handleStickerUnlockedFromRealtime(sticker) {
   addOrUpdateSticker(sticker);
   // 触发图鉴模块的红点/弹层刷新 + 撒花视图反馈
   handleStickerUnlocked(sticker);
+}
+
+/**
+ * Realtime 图鉴升星回调（批次 4）：stickers UPDATE 推来 star_level 变化。
+ * 本端自己的升星：onRollRarity 已给过合并提示，Realtime 回声到达时本地星级已同步
+ * （incoming ≤ local）→ 只做幂等对齐、不提示；incoming > local = 对方升的星 →
+ * 提示 + 星芒反馈（红点不亮：星级变化不是"新贴纸"，已看集合按 key 未变）。
+ */
+function handleStickerUpdatedFromRealtime(sticker) {
+  if (!sticker) return;
+  const local = getStickers().find((s) => s.stickerKey === sticker.stickerKey);
+  const incoming = sticker.starLevel || 0;
+  const known = local ? (local.starLevel || 0) : 0;
+  addOrUpdateSticker(sticker); // 幂等对齐（含自回声 / 冷启动补拉场景）
+  // 自己升的星：onRollRarity 已给过合并提示（回声按星级比对 + isSelfStarEcho 双保险）
+  if (incoming <= known || isSelfStarEcho(sticker)) return;
+  const name = getStickerName(sticker.stickerKey) || '贴纸';
+  showToast(`「${name}」升为${starLabel(incoming)}！${known > 0 ? '' : '（ta 开出的隐藏款）'}`, {
+    variant: 'rarity',
+    accent: '#fbbf24',
+  });
+  celebrateStarUpgradeView(incoming);
 }
 
 /**

@@ -496,7 +496,7 @@ export const db = {
   async listStickers() {
     const { data, error } = await supabase
       .from('stickers')
-      .select('id, sticker_key, rarity, unlocked_by, todo_id, unlocked_at');
+      .select('id, sticker_key, rarity, star_level, unlocked_by, todo_id, unlocked_at');
     if (error) throw wrapError(error);
     return (data || []).map(toSticker);
   },
@@ -513,9 +513,30 @@ export const db = {
         { sticker_key: stickerKey, rarity, unlocked_by: userId, todo_id: todoId || null },
         { onConflict: 'sticker_key', ignoreDuplicates: true }
       )
-      .select('id, sticker_key, rarity, unlocked_by, todo_id, unlocked_at');
+      .select('id, sticker_key, rarity, star_level, unlocked_by, todo_id, unlocked_at');
     if (error) throw wrapError(error);
     // ignoreDuplicates:true 时，已存在的行不会返回 → data 为空数组 = 重复解锁
+    if (!data || data.length === 0) return null;
+    return toSticker(data[0]);
+  },
+
+  /**
+   * 升星一颗贴纸（批次 4，docs/sticker-book-roadmap.md §7）。
+   * **乐观守卫**：UPDATE 带 `WHERE star_level = <期望值>`——对方同刻升过这颗
+   * （或本地星级滞后）时 0 行更新，返回 null，调用方顺延下一张候选
+   * （与解锁路径"撞 UNIQUE 自愈"同一思路：以数据库结果为准，不信本地计数）。
+   * @param {string} id 贴纸行 id
+   * @param {number} expectedStar 本地看到的当前星级（0/1）
+   * @returns {Promise<Object|null>} 升星成功的贴纸；守卫未过（0 行更新）返回 null
+   */
+  async upgradeStickerStar(id, expectedStar) {
+    const { data, error } = await supabase
+      .from('stickers')
+      .update({ star_level: expectedStar + 1 })
+      .eq('id', id)
+      .eq('star_level', expectedStar)
+      .select('id, sticker_key, rarity, star_level, unlocked_by, todo_id, unlocked_at');
+    if (error) throw wrapError(error);
     if (!data || data.length === 0) return null;
     return toSticker(data[0]);
   },

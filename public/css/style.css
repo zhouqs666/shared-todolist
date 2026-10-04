@@ -3674,6 +3674,13 @@ body.cherish-stage-on .topbar {
   color: var(--color-text-muted);
   margin-bottom: 3px;
 }
+/* 升星（批次 4）：故事卡的星级行（★ 闪卡 / ★★ 烫金），普通态不渲染 */
+.sticker-modal__flavor-star {
+  font-size: 11px;
+  font-weight: 700;
+  color: #d97706;
+  margin-bottom: 3px;
+}
 .sticker-modal__flavor-text {
   font-size: 14px;
   font-weight: 600;
@@ -3813,6 +3820,39 @@ body.cherish-stage-on .topbar {
 .sticker-cell--legendary .sticker-cell__plate {
   box-shadow: 0 1px 2px rgba(150, 74, 102, 0.08), 0 2px 6px rgba(150, 74, 102, 0.07),
     0 0 0 1.5px rgba(245, 158, 11, 0.45), 0 0 12px rgba(251, 191, 36, 0.35);
+}
+
+/* ===== 升星视觉（批次 4：0=普通 / 1=闪卡 / 2=烫金）=====
+   只改底板质感与角标，贴纸插画本体不动——闪卡是白底板叠一层斜向幻彩流光，
+   烫金再进一步换成金箔质感 + 金圈微光；全部静态渐变（克制，reduced-motion 无需豁免） */
+.sticker-cell--star1 .sticker-cell__plate {
+  background: linear-gradient(120deg,
+    #ffffff 0%, #e7f5ff 22%, #ffffff 42%, #ffe9f4 62%, #ffffff 82%, #e9f9f0 100%);
+  box-shadow: 0 1px 2px rgba(150, 74, 102, 0.08), 0 2px 6px rgba(150, 74, 102, 0.07),
+    0 0 0 1.5px rgba(125, 211, 252, 0.55), 0 0 10px rgba(147, 197, 253, 0.35);
+}
+.sticker-cell--star2 .sticker-cell__plate {
+  background: linear-gradient(120deg,
+    #fffbeb 0%, #fde68a 30%, #fff7db 52%, #fcd34d 78%, #fffbeb 100%);
+  box-shadow: 0 1px 2px rgba(150, 74, 102, 0.08), 0 2px 6px rgba(150, 74, 102, 0.07),
+    0 0 0 1.5px rgba(245, 158, 11, 0.6), 0 0 14px rgba(251, 191, 36, 0.5);
+}
+
+/* 星级角标：左上角金色小胶囊（"新"角标在右上，互不占位） */
+.sticker-cell__star {
+  position: absolute;
+  top: -5px;
+  left: -3px;
+  padding: 2px 4px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  color: #fff;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(245, 158, 11, 0.4);
+  text-shadow: 0 1px 1px rgba(180, 83, 9, 0.5);
 }
 
 /* 点击贴纸：弹跳 + 专属短句 */

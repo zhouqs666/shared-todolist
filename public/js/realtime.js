@@ -38,12 +38,14 @@ import { toExternal, toNote, toReaction, toSticker } from './transforms.js';
  * @param {(reactionId:string,todoId:string)=>void} [handlers.onReactionRemoved] 表情删除（reactions DELETE）
  * @param {(todo)=>void} [handlers.onRarityReveal] 对方开出的隐藏款首次推来（todos UPDATE，raritySeen=false 且非自己创建）
  * @param {(sticker)=>void} [handlers.onStickerUnlocked] 图鉴贴纸解锁（stickers INSERT）
+ * @param {(sticker)=>void} [handlers.onStickerUpdated] 图鉴贴纸更新（stickers UPDATE——升星改 star_level，批次 4；
+ *        不订 UPDATE 则对方升星本端永远看不到）
  * @param {({firstTime:boolean})=>void} [handlers.onSubscribed]
  *        进入 SUBSCRIBED 时回调：firstTime=true 是订阅刚建立，false 是断线重连。
  *        两种都意味着「有一段窗口的远端变更收不到」（复制槽不重放历史），由调用方去对账。
  * @returns {Object} channel（用于 unsubscribe）
  */
-export function initRealtime({ getTodos, setTodos, notifyCompleted, setOnline, getCurrentUserId, displayNameOf, onNoteAdded, onNoteRemoved, onNoteUpdated, onReactionAdded, onReactionRemoved, onRarityReveal, onStickerUnlocked, getInFlightIntent, onSubscribed }) {
+export function initRealtime({ getTodos, setTodos, notifyCompleted, setOnline, getCurrentUserId, displayNameOf, onNoteAdded, onNoteRemoved, onNoteUpdated, onReactionAdded, onReactionRemoved, onRarityReveal, onStickerUnlocked, onStickerUpdated, getInFlightIntent, onSubscribed }) {
   let ready = false;
 
   /**
@@ -279,6 +281,17 @@ export function initRealtime({ getTodos, setTodos, notifyCompleted, setOnline, g
         if (!sticker || !onStickerUnlocked) return;
         onStickerUnlocked(sticker);
         // 图鉴解锁：双端都更新（共享图鉴），不弹系统通知（用 UI 红点 + Toast）
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'stickers' },
+      (payload) => {
+        // 升星（批次 4）走这里：star_level 变化没有 INSERT 事件，必须单订 UPDATE。
+        // 自我回声的去重在 onStickerUpdated 里做（按本地星级比较），这里只转发。
+        const sticker = toSticker(payload.new);
+        if (!sticker || !onStickerUpdated) return;
+        onStickerUpdated(sticker);
       }
     )
     .subscribe((status, err) => {

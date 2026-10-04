@@ -35,7 +35,7 @@ import { getStickers, setStickersRenderFn } from './state.js';
 import {
   RARITY_META, STICKERS_PER_RARITY, getStickerIcon, getStickerFlavor,
   parseStickerKey, makeStickerKey, BASE_SERIES, getSeriesIds, getSeriesDef,
-  getRollTargetSeries, isBookComplete,
+  getRollTargetSeries, isBookComplete, upgradableCount, starLabel,
 } from './blindbox.js';
 import { showMemorialCard, initMemorialCard } from './memorial-card.js';
 import { db } from './db.js';
@@ -123,7 +123,7 @@ function formatDate(iso) {
 /**
  * 生成指定册的全集（12 张的元信息），标记每张是否已解锁。
  * @param {string} [series] 册 id，默认第一册（BASE_SERIES）
- * @returns {Array<{key,rarity,name,unlocked,unlockedAt}>}
+ * @returns {Array<{key,rarity,name,unlocked,unlockedAt,starLevel}>}
  */
 function buildFullBook(series = BASE_SERIES) {
   const unlocked = getStickers();
@@ -143,6 +143,7 @@ function buildFullBook(series = BASE_SERIES) {
         name: rarityMeta.stickerNames[i - 1] || `${meta.label}${i}`,
         unlocked: !!s,
         unlockedAt: s ? s.unlockedAt : null,
+        starLevel: s ? (s.starLevel || 0) : 0, // 升星（批次 4）：0=普通/1=闪卡/2=烫金
       });
     }
   }
@@ -241,7 +242,11 @@ function updateHint(unlockedCount, series) {
       text = `「${def.title}」开启！每添加一条待办，都有小概率开出属于你们的故事`;
     }
   } else if (unlockedCount === TOTAL_STICKERS) {
-    text = '12 张全部集齐，这是属于你们的专属纪念 ✨';
+    // 升星期（批次 4）：集齐不是终点——还差多少张没满星就继续引导；全部烫金后才是终局
+    const upgradable = upgradableCount(series);
+    text = upgradable > 0
+      ? `12 张全部集齐！继续添加待办，还有 ${upgradable} 次升星机会（闪卡 → 烫金）✨`
+      : '12 张全部集齐并升满烫金，这是属于你们的专属纪念 ✨';
   } else if (unlockedCount >= TOTAL_STICKERS - 2) {
     text = `就差 ${TOTAL_STICKERS - unlockedCount} 张就集齐啦，加油～`;
   } else {
@@ -294,13 +299,17 @@ export function renderStickerBook(opts = {}) {
   //       未解锁 = 本尊图案的灰色剪影（雾显悬念）+ ???
   const frag = document.createDocumentFragment();  all.forEach((s, idx) => {
     const meta = RARITY_META[s.rarity];
+    // 升星视觉（批次 4）：--star1 闪卡 / --star2 烫金改格子底板质感，角标显示星数
+    const starCls = s.starLevel >= 2 ? ' sticker-cell--star2'
+      : s.starLevel === 1 ? ' sticker-cell--star1' : '';
     const cell = document.createElement('div');
     cell.className = 'sticker-cell'
       + (s.unlocked ? ` sticker-cell--unlocked sticker-cell--${s.rarity}` : '')
+      + (s.unlocked ? starCls : '')
       + (animate ? ' sticker-cell--in' : '');
     if (animate) cell.style.animationDelay = `${idx * 35}ms`;
     cell.setAttribute('aria-label', s.unlocked
-      ? `已解锁：${s.name}（${meta.label}${formatDate(s.unlockedAt) ? '，' + formatDate(s.unlockedAt) : ''}）`
+      ? `已解锁：${s.name}（${meta.label}${s.starLevel ? `，${'★'.repeat(s.starLevel)}${starLabel(s.starLevel)}` : ''}${formatDate(s.unlockedAt) ? '，' + formatDate(s.unlockedAt) : ''}）`
       : `未解锁：${meta.label}贴纸`);
 
     if (s.unlocked) {
@@ -316,6 +325,13 @@ export function renderStickerBook(opts = {}) {
       icon.innerHTML = getStickerIcon(s.key);
       plate.appendChild(icon);
       cell.appendChild(plate);
+
+      if (s.starLevel) {
+        const star = document.createElement('span');
+        star.className = 'sticker-cell__star';
+        star.textContent = '★'.repeat(s.starLevel);
+        cell.appendChild(star);
+      }
 
       if (isNewOf(s.key)) {
         const fresh = document.createElement('span');
@@ -439,6 +455,7 @@ function revealFlavor(cell) {
   const name = meta.stickerNames[parsed.index - 1] || meta.label;
   const sticker = getStickers().find((s) => s.stickerKey === key);
   const date = sticker ? formatDate(sticker.unlockedAt) : '';
+  const starLevel = sticker ? (sticker.starLevel || 0) : 0;
 
   card.className = 'sticker-modal__flavor sticker-modal__flavor--' + parsed.rarity;
   card.innerHTML = '';
@@ -453,10 +470,17 @@ function revealFlavor(cell) {
   const title = document.createElement('div');
   title.className = 'sticker-modal__flavor-title';
   title.textContent = `${name} · ${meta.label}${date ? ` · ${date}解锁` : ''}`;
+  bodyEl.appendChild(title);
+  // 升星（批次 4）：故事卡标题下加一行金色星级（★ 闪卡 / ★★ 烫金），普通态不占位
+  if (starLevel) {
+    const starLine = document.createElement('div');
+    starLine.className = 'sticker-modal__flavor-star';
+    starLine.textContent = `${'★'.repeat(starLevel)} ${starLabel(starLevel)}`;
+    bodyEl.appendChild(starLine);
+  }
   const text = document.createElement('div');
   text.className = 'sticker-modal__flavor-text';
   text.textContent = flavor;
-  bodyEl.appendChild(title);
   bodyEl.appendChild(text);
   card.appendChild(bodyEl);
 
