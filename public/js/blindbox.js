@@ -121,16 +121,76 @@ export const RARITY_META = {
   },
 };
 
+// ===== 册（book series）注册表 =====
+// key 语义前缀方案（docs/sticker-book-roadmap.md §5.1）：sticker_key 形如
+// `[册短名_]档位_序号`——第一册（v1）**无前缀**（历史数据即此形态），后续册带册短名前缀
+// （第二册 = `story_rare_1` …）。不用"加 series 列"：免 DB 迁移、key 自解释，
+// 两种形态的兼容成本由 parseStickerKey() 单点承担。
+//
+// ⚠️ 册短名禁用 rare / epic / legendary（与档位名冲突，解析歧义）也不得占用 'v1'；
+// 注册新册时同步在 SERIES_DEFS 里加一行（模块加载期校验不合法直接 throw）。
+
+/** 第一册的内部标识：key 无前缀，解析时缺省视为 v1 */
+export const BASE_SERIES = 'v1';
+
+const SERIES_DEFS = {
+  [BASE_SERIES]: { id: BASE_SERIES, prefix: '', title: '收集图鉴' },
+  // 第二册（批次 3）：{ id: 'story', prefix: 'story', title: '我们的故事' }
+};
+
+// 注册表防呆：短名仅限 [a-z0-9]+，且不得与档位名 / BASE_SERIES 冲突（见上方警告）
+for (const def of Object.values(SERIES_DEFS)) {
+  if (!/^[a-z0-9]+$/.test(def.id)) throw new Error(`册短名非法: ${def.id}`);
+  if (RARITY_META[def.id]) throw new Error(`册短名 ${def.id} 与稀有度名冲突，解析会歧义`);
+  if (def.id === BASE_SERIES && def.prefix) throw new Error(`${BASE_SERIES} 册必须无前缀`);
+}
+
+/** 全部已注册册的 id（展示顺序即注册顺序） */
+export function getSeriesIds() {
+  return Object.keys(SERIES_DEFS);
+}
+
+/** 查册定义（title / prefix 等）；未注册的 series 返回 undefined */
+export function getSeriesDef(series) {
+  return SERIES_DEFS[series];
+}
+
+/**
+ * sticker_key 解析——**全仓唯一解析点**（原先 blindbox / sticker-book 各自维护裸正则，
+ * 2026-10-04 批次 2 收敛于此）。
+ *
+ * @param {string} key
+ * @returns {{series: string, rarity: string, index: number}|null}
+ *   series 为 BASE_SERIES（'v1'）表示第一册（key 无前缀）；
+ *   解析失败（畸形 key / 非贴纸 key）返回 null，调用方按"无图标 / 未解锁"兜底
+ */
+export function parseStickerKey(key) {
+  const m = /^(?:([a-z0-9]+)_)?(rare|epic|legendary)_(\d+)$/.exec(key || '');
+  if (!m) return null;
+  return { series: m[1] || BASE_SERIES, rarity: m[2], index: parseInt(m[3], 10) };
+}
+
+/**
+ * 构造 sticker_key（parseStickerKey 的逆操作）。v1 无前缀，输出与历史格式逐字相同；
+ * 批次 3 起传入册 id 即得带前缀 key（如 makeStickerKey('story', 'rare', 1) → 'story_rare_1'）。
+ */
+export function makeStickerKey(series, rarity, index) {
+  const def = SERIES_DEFS[series];
+  if (!def) throw new Error(`未注册的册 series: ${series}`);
+  return def.prefix ? `${def.prefix}_${rarity}_${index}` : `${rarity}_${index}`;
+}
+
 /**
  * 根据 stickerKey（如 'epic_3'）返回对应的贴纸图标 SVG。
  * 用于图鉴弹层渲染每张贴纸的独立图案。
+ * ⚠️ 当前按档位查 v1 的 RARITY_META，series 不参与分派——批次 3 story 册
+ * 上线时须改为按 series 取各自的图标表（parseStickerKey().series 已备好）。
  */
 export function getStickerIcon(stickerKey) {
-  const match = /^(rare|epic|legendary)_(\d+)$/.exec(stickerKey || '');
-  if (!match) return '';
-  const rarity = match[1];
-  const idx = parseInt(match[2], 10) - 1;
-  const meta = RARITY_META[rarity];
+  const parsed = parseStickerKey(stickerKey);
+  if (!parsed) return '';
+  const meta = RARITY_META[parsed.rarity];
+  const idx = parsed.index - 1;
   if (!meta || !meta.stickerIcons) return '';
   return meta.stickerIcons[idx] || meta.stickerIcons[0];
 }
@@ -140,12 +200,11 @@ export function getStickerIcon(stickerKey) {
  * 无配置时返回空串（调用方兜底）。
  */
 export function getStickerFlavor(stickerKey) {
-  const match = /^(rare|epic|legendary)_(\d+)$/.exec(stickerKey || '');
-  if (!match) return '';
-  const meta = RARITY_META[match[1]];
-  const idx = parseInt(match[2], 10) - 1;
+  const parsed = parseStickerKey(stickerKey);
+  if (!parsed) return '';
+  const meta = RARITY_META[parsed.rarity];
   if (!meta || !meta.stickerFlavors) return '';
-  return meta.stickerFlavors[idx] || '';
+  return meta.stickerFlavors[parsed.index - 1] || '';
 }
 
 /** 判断是否为隐藏款（rare/epic/legendary，排除 common） */
@@ -316,7 +375,8 @@ export async function onRollRarity(todo, userId) {
   let staleLocal = false;
 
   for (let n = known + 1; n <= STICKERS_PER_RARITY; n++) {
-    const stickerKey = `${rarity}_${n}`;
+    // 第一册无前缀（BASE_SERIES）；批次 3 第二册上线时改传对应册 id
+    const stickerKey = makeStickerKey(BASE_SERIES, rarity, n);
     let sticker;
     try {
       sticker = await db.unlockSticker(stickerKey, rarity, userId, todo.id);
