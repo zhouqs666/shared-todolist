@@ -61,8 +61,8 @@
 |---|---|---|---|---|
 | 1 | 集齐纪念卡 | ✅ 已完成 | 2026-10-04 | [#109](https://github.com/zhouqs666/shared-todolist/pull/109) |
 | 2 | 地基：key 系列化 + 书架骨架 + 主题残留清理 | ✅ 已完成 | 2026-10-04 | [#110](https://github.com/zhouqs666/shared-todolist/pull/110) |
-| 3 | 「我们的故事」册内容与上线 | ✅ 已完成 | 2026-10-04 | PR 见 §6.5 实施记录 |
-| 4 | 升星（闪卡 / 烫金） | 未开始 | — | — |
+| 3 | 「我们的故事」册内容与上线 | ✅ 已完成 | 2026-10-04 | [#111](https://github.com/zhouqs666/shared-todolist/pull/111) |
+| 4 | 升星（闪卡 / 烫金） | ✅ 已完成 | 2026-10-04 | [#114](https://github.com/zhouqs666/shared-todolist/pull/114) |
 
 > ⚠️ 每批完成后**必须**回写本表（状态 / 日期 / PR 链接）——这是下一会话认领工作的依据。
 
@@ -244,7 +244,7 @@
    批次 4 起这个形态**会走升星路径**（发 UPDATE）；"不写库"分支移到「两册全满星」。假行 id 必须用
    合法 UUID：升星守卫按 `id` 过滤，非法 UUID 会让 Postgres 在类型铸造期直接报错（走不进 0 行分支）。
 5. **验收实绩**：test_blindbox.py 156 项断言全绿（含第 11 节升星全链路 20 项 + 双账号 Realtime 同步）；
-   迁移 test 项目幂等自证通过；三 preflight 全绿；`run-web-e2e` 8 用例全绿。
+   迁移 test 项目幂等自证通过；三 preflight 全绿；`run-web-e2e` 8 用例全绿。PR：#114。
 
 ---
 
