@@ -29,11 +29,12 @@
  *     点图鉴入口先逐张弹通知卡，看完回标 rarity_seen + 标记贴纸已看（一个动作清两个信号）
  *
  * 可点击性引导（轻晃演示，克制版）：
- *   已解锁贴纸可点出专属短句，但触屏上没有 hover/pointer 线索，用户发现不了。
- *   只教不纠缠：仅当用户从未点过任何贴纸（localStorage: stickerTapEver）且
- *   演示展示次数未达上限（stickerWiggleOpens < 3）时，打开图鉴约 1.2s 后
- *   第一张已解锁贴纸轻晃一次做"可以戳"的暗示；点过任意一张后永久退场。
- *   全程零文案、零新 UI 元素；prefers-reduced-motion 下由 CSS 禁用动画。
+ *   已解锁贴纸可点出「复看卡」（批次 3 前 = 专属短句故事卡），但触屏上没有 hover/pointer
+ *   线索，用户发现不了。只教不纠缠：仅当用户从未点过任何贴纸且演示展示次数未达上限
+ *   （localStorage，按**引导代际**记 key——新交互上线 bump TEACH_VERSION 让老用户重学，
+ *   见 TAP_EVER_KEY 处注释）时，打开图鉴约 1.2s 后第一张已解锁贴纸轻晃一次做"可以戳"的
+ *   暗示；点过任意一张后本代际内永久退场。全程零文案、零新 UI 元素；
+ *   prefers-reduced-motion 下由 CSS 禁用动画。
  */
 
 import { getStickers, setStickersRenderFn } from './state.js';
@@ -68,8 +69,13 @@ function celebratedKeyFor(series) {
 // localStorage key：轻晃演示的持久化——
 //   TAP_EVER_KEY：用户点过任意贴纸 → 演示永久退场
 //   WIGGLE_OPENS_KEY：演示已展示的打开次数（达 WIGGLE_MAX_OPENS 后不再出现）
-const TAP_EVER_KEY = 'stickerTapEver';
-const WIGGLE_OPENS_KEY = 'stickerWiggleOpens';
+// 【引导代际（2026-10-05）】"点贴纸"从弹小故事卡升级为弹复看卡（D7-③），且复看卡是
+// 收集玩法的核心入口之一 —— "学会即退场"的语义改为**跟随交互代际**：TEACH_VERSION bump
+// 后，旧代际的已学会/计数标记全部失效，老用户重新被教一轮（仍是最多 3 次、点过即退场）。
+// 将来再有可教学的新交互上线，bump 这个常量即可。
+const TEACH_VERSION = 'reveal-card';
+export const TAP_EVER_KEY = `stickerTapEver@${TEACH_VERSION}`;
+export const WIGGLE_OPENS_KEY = `stickerWiggleOpens@${TEACH_VERSION}`;
 const WIGGLE_MAX_OPENS = 3;
 
 // 是否已庆祝过集齐全集（当前激活册口径，从持久化恢复；清空重集后会重新庆祝。
@@ -508,6 +514,8 @@ let flavorTimer = null;
 function revealFlavor(cell) {
   // 用户戳了贴纸 → 轻晃演示永久退场（学会即不再出现）
   try { localStorage.setItem(TAP_EVER_KEY, '1'); } catch { /* ignore */ }
+  // 点击瞬间摘掉轻晃类（暗示已完成使命，不与后续动画叠着）
+  cell.classList.remove('sticker-cell--pop', 'sticker-cell--wiggle');
 
   const key = cell.dataset.key || '';
   const sticker = getStickers().find((s) => s.stickerKey === key);
@@ -521,7 +529,6 @@ function revealFlavor(cell) {
   }
 
   // —— 故事卡回落（第二册等暂无专属卡的 key；批次 4 上卡后自然消失）——
-  cell.classList.remove('sticker-cell--pop', 'sticker-cell--wiggle');
   // 强制 reflow，保证连续点击也能重放动画
   void cell.offsetWidth;
   cell.classList.add('sticker-cell--pop');
