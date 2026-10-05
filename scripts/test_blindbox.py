@@ -37,6 +37,10 @@ from e2e_common import (
     wait_toast_gone,
     login,
     wait_until,
+    wait_reveal_card,
+    close_reveal_card,
+    dismiss_reveal_card,
+    reveal_card_snapshot,
 )
 
 BASE = resolve_base()
@@ -100,13 +104,17 @@ with sync_playwright() as p:
         print("=" * 60)
 
         # rollRarity 概率分布：跑 5000 次，验证大致符合 85/15 分布
+        # （先摘掉 login() 钉的 common 钩子 —— 钩子是显式覆盖，会绕过概率链；
+        #   跑完装回去，后续用例仍然随机命中普通款）
         result = page.evaluate("""async () => {
+            localStorage.removeItem('__e2e_force_rarity');
             const mod = await import('/js/blindbox.js');
             const counts = { common: 0, rare: 0, epic: 0, legendary: 0 };
             const N = 5000;
             for (let i = 0; i < N; i++) {
                 counts[mod.rollRarity()]++;
             }
+            localStorage.setItem('__e2e_force_rarity', 'common');
             return { counts, N };
         }""")
         counts = result["counts"]
@@ -334,41 +342,86 @@ with sync_playwright() as p:
         check("强制开奖钩子已就位",
               page.evaluate("() => localStorage.getItem('__e2e_force_rarity')") == "rare")
 
-        # --- 7.1 开奖与解锁合成一条提示（旧实现是两条，后一条把前一条顶掉）---
-        # 断言钉在该张贴纸的**名字**上（初心/萌芽/晨光/清欢 各对应一个序号）：
-        # 只匹配 "开出稀有款" 会撞上一条还在屏上的旧提示，把断言读成假通过。
+        # --- 7.1 开出卡片（2026-10-05 批次 3，D7-①）· fx 全开冒烟（§12：视觉断言从宽）---
+        # 卡片接管了 v1 解锁时刻的展示（合并提示只在卡片无法播放时兜底），断言迁移到卡面：
+        # 贴纸名 / 档位绶带 / 图鉴进度（技术方案 §12）。本节顺手用 t1 跑 fx 全开形态：
+        # 完整仪式（rare 无悬念段，~1s 到 idle）+ NEW 角标（仅本端开出事件显示，D11 备注①）。
+        # t1 仍是「解锁的第一张 rare」→ 名字/序号期望与旧版一致（初心 / rare_1）。
+        page.evaluate("() => localStorage.removeItem('__e2e_fx_off')")
         t1 = "E2E-测试-强制稀有1"
         check("强制 rare 添加成功", add_todo(page, t1))
-        merged = wait_until(
-            page,
-            lambda: "开出稀有款" in toast_text() and "解锁「初心」" in toast_text(),
-            desc="合并提示（开奖 + 解锁，含贴纸名）",
-        )
-        check("开奖与解锁合成为一条提示", merged, f"实际: {toast_text()}")
-        check("提示含图鉴进度 1/12", "1/12" in toast_text(), f"实际: {toast_text()}")
+        snap1 = wait_reveal_card(page, desc="开出卡片弹出")
+        check("开出卡片弹出（卡片接管揭晓时刻）", snap1 is not None, f"实际: {snap1}")
+        check("卡面贴纸名 =「初心」", snap1 is not None and snap1["name"] == "初心", f"实际: {snap1}")
+        check("卡面档位绶带 = 稀有款", snap1 is not None and "稀有款" in snap1["tier"], f"实际: {snap1}")
+        check("卡面图鉴进度 1/12", snap1 is not None and "1/12" in snap1["meta"], f"实际: {snap1}")
+        check("（fx on）无 no-anim 降级", snap1 is not None and not snap1["noAnim"], f"实际: {snap1}")
+        idle1 = wait_until(page, lambda: (reveal_card_snapshot(page) or {}).get("phaseIdle"),
+                           timeout_ms=8000, desc="仪式播到 idle")
+        check("（fx on）仪式播完进入 idle", idle1)
+        check("（fx on）NEW 角标显示（本端开出事件专属）",
+              (reveal_card_snapshot(page) or {}).get("newVisible") is True)
+        check("开出卡片可关闭", close_reveal_card(page))
+        page.evaluate("() => localStorage.setItem('__e2e_fx_off', '1')")  # 装回降级钩子（跑批默认）
         wait_add_settled(page, t1)
         check("卡片带 todo--rare 稀有度样式",
               "todo--rare" in (page.locator(".todo", has_text=t1).first.get_attribute("class") or ""))
         check("图鉴实际解锁 rare_1", rare_keys() == ["rare_1"], f"实际: {rare_keys()}")
 
-        # --- 7.2 第二条：序号递增，不重复 ---
+        # --- 7.1b 第二条：序号递增，不重复；fx off = 静态精卡降级通道（§9：信息全保留）---
         t2 = "E2E-测试-强制稀有2"
         check("第二条强制 rare 添加成功", add_todo(page, t2))
-        check("第二条解锁的是 rare_2（序号递增、未重复同一张）",
-              wait_until(page, lambda: "解锁「萌芽」" in toast_text(), desc="解锁「萌芽」提示")
-              and rare_keys() == ["rare_1", "rare_2"], f"实际: {toast_text()} / {rare_keys()}")
+        snap2 = wait_reveal_card(page, desc="第二条开出卡片弹出")
+        check("第二条卡面贴纸名 =「萌芽」（序号递增）",
+              snap2 is not None and snap2["name"] == "萌芽", f"实际: {snap2}")
+        check("（fx off）静态精卡带 no-anim（降级不丢信息）",
+              snap2 is not None and snap2["noAnim"] and snap2["phaseIdle"], f"实际: {snap2}")
+        check("（fx off）NEW 角标立显（self 事件专属；no-anim 全信息静态卡不隐藏内容）",
+              snap2 is not None and snap2["newVisible"], f"实际: {snap2}")
+        check("开出卡片可关闭（7.1b）", close_reveal_card(page))
         wait_add_settled(page, t2)
+        check("第二条解锁的是 rare_2（序号递增、未重复同一张）",
+              rare_keys() == ["rare_1", "rare_2"], f"实际: {rare_keys()}")
 
-        # --- 7.3 集齐：第 5 次不再产生新贴纸，且提示说清「已集齐」---
+        # --- 7.1c 图鉴复看卡（D7-③）：点已解锁格子弹复看卡——日期=unlocked_at、
+        #     无 NEW、无爆发（mode-quiet 淡入），翻面看档案铭牌（人称行=开出方称呼）---
+        page.locator('#stickerEntry').click()
+        check("复看：图鉴弹层打开", wait_until(
+            page, lambda: page.locator('#stickerModal').is_visible(), desc="图鉴弹层可见"))
+        wait_until(page, lambda: page.locator('.sticker-cell--unlocked').count() > 0, desc="格子渲染")
+        page.locator('.sticker-cell--unlocked').first.click()
+        rv = wait_reveal_card(page, desc="复看卡弹出")
+        check("点已解锁格子弹出复看卡", rv is not None, f"实际: {rv}")
+        check("复看卡面 = 该贴纸（初心）", rv is not None and rv["name"] == "初心", f"实际: {rv}")
+        check("复看为安静模式（无 NEW、无仪式）",
+              rv is not None and rv["modeQuiet"] and not rv["modeNotify"] and not rv["newVisible"],
+              f"实际: {rv}")
+        # 翻面：idle 点卡片 → 档案铭牌出现（人称行「… 开出」+ 册编号 No.02/12）
+        page.locator('#rvCard3d').click(position={"x": 120, "y": 300})
+        flipped = wait_until(page, lambda: (reveal_card_snapshot(page) or {}).get("flippedVisible"),
+                             timeout_ms=5000, desc="复看卡翻面")
+        plaque = (reveal_card_snapshot(page) or {}).get("plaqueText") or ""
+        check("翻面档案铭牌可见（人称行=开出方称呼 + No.01/12）",
+              flipped and "开出" in plaque and "No.01/12" in plaque, f"实际: {plaque}")
+        check("复看卡可关闭（书架仍开着）", close_reveal_card(page))
+        check("关闭复看卡后图鉴弹层仍在", page.locator('#stickerModal').is_visible())
+        page.locator('#stickerModalClose').click()
+        wait_until(page, lambda: not page.locator('#stickerModal').is_visible(), desc="书架收起")
+
+        # --- 7.2c 集齐前的第 3/4 条：卡片逐张弹出（晨光/清欢）---
         names = {3: "晨光", 4: "清欢"}
         for i in (3, 4):
             ti = f"E2E-测试-强制稀有{i}"
             check(f"第{i}条强制 rare 添加成功", add_todo(page, ti))
-            ok = wait_until(page, lambda: f"解锁「{names[i]}」" in toast_text(), desc=f"解锁「{names[i]}」提示")
-            check(f"第{i}条解锁 rare_{i}（进度 {i}/12）",
-                  ok and f"{i}/12" in toast_text() and len(rare_keys()) == i,
-                  f"实际: {toast_text()} / {rare_keys()}")
+            snap = wait_reveal_card(page, desc=f"第{i}张开出卡片")
+            check(f"第{i}条解锁 rare_{i}（卡面「{names[i]}」，进度 {i}/12）",
+                  snap is not None and snap["name"] == names[i] and f"{i}/12" in snap["meta"],
+                  f"实际: {snap} / {rare_keys()}")
+            check(f"第{i}张卡片可关闭", close_reveal_card(page))
             wait_add_settled(page, ti)
+            check(f"第{i}张后图鉴实锁 {i} 张", len(rare_keys()) == i, f"实际: {rare_keys()}")
+        # --- 7.3 集齐：第 5 次不再产生新贴纸（无卡片可弹），且提示说清「已集齐」---
+        # （集齐兜底没有贴纸本体 → 无卡片，Toast 是唯一通道 —— 与升星期同构）
         t5 = "E2E-测试-强制稀有5"
         check("集齐后仍能开出隐藏款（第5条）", add_todo(page, t5))
         full = wait_until(page, lambda: "已集齐" in toast_text(), desc="集齐提示")
@@ -456,7 +509,7 @@ with sync_playwright() as p:
             try {
                 state.setStickers([...book('v1'), ...book('story')]);
                 const r = await bb.onRollRarity({ id: todo.id, rarity: 'rare' }, todo.createdBy);
-                return { upgraded: r && r.stickerKey, starTarget: bb.getStarTargetSeries() };
+                return { upgraded: r && r.sticker ? r.sticker.stickerKey : null, starTarget: bb.getStarTargetSeries() };
             } finally {
                 state.setStickers(real);
             }
@@ -470,22 +523,29 @@ with sync_playwright() as p:
         check("守卫路径同样没有动真实图鉴", len(rare_keys()) == 4, f"实际: {rare_keys()}")
         wait_toast_gone(page)
 
-        # --- 7.4 完成隐藏款：完成提示必须留在屏上（旧实现被开奖提示连「撤销」按钮一起清掉）---
+        # --- 7.4 完成隐藏款（D1，2026-10-05）：完成时刻所有待办一律平等 ---
+        # 旧的隐藏款完成专属文案/图鉴进度/卡片光环已按 D1 删除 —— 完成回归普通路径：
+        # 随机鼓励文案 + 带「撤销」按钮（撤销 Toast 不受影响）。回归点收窄为：
+        # ① 撤销按钮还在；② 文案不得再出现「开出」（完成 ≠ 开出，语义回归防线）。
         page.locator(".todo", has_text=t5).first.locator(".todo__check").click()
         undo_present = wait_until(
             page, lambda: page.locator(".toast__action").count() > 0, desc="完成提示带撤销按钮"
         )
         done_toast = toast_text()
         check("完成隐藏款后「撤销」按钮存在", undo_present, f"实际提示: {done_toast}")
-        check("完成文案是「完成」而非「开出」", "完成" in done_toast and "开出" not in done_toast,
+        check("完成文案不再有隐藏款专属内容（无「开出」）", "开出" not in done_toast,
               f"实际: {done_toast}")
-        check("完成提示带图鉴进度", "4/12" in done_toast, f"实际: {done_toast}")
+        check("完成文案不再带图鉴进度（D1：惊喜预算集中到开出时刻）",
+              "4/12" not in done_toast and "/12" not in done_toast, f"实际: {done_toast}")
 
         # --- 7.5 本地状态滞后时序号自愈（不再静默丢一次开奖）---
         force_rarity("epic")
         t6 = "E2E-测试-自愈"
         check("强制 epic 添加成功", add_todo(page, t6))
-        wait_until(page, lambda: "史诗" in toast_text(), desc="epic 开奖提示")
+        snap6 = wait_reveal_card(page, desc="epic 开出卡片弹出")
+        check("（epic）卡片弹出、卡面「心动」（epic_1）",
+              snap6 is not None and snap6["name"] == "心动" and snap6["tierEpic"], f"实际: {snap6}")
+        check("（epic）卡片可关闭", close_reveal_card(page))
         wait_add_settled(page, t6)
         heal = page.evaluate("""async () => {
             const state = await import('/js/state.js');
@@ -495,7 +555,9 @@ with sync_playwright() as p:
             if (!todo) return { error: '找不到待办' };
             // 模拟「本地状态滞后于数据库」：冷启动时 listStickers 还没回来的状态就是这样
             state.setStickers([]);
-            const sticker = await bb.onRollRarity({ id: todo.id, rarity: 'epic' }, todo.createdBy);
+            // 批次 3 起 onRollRarity 返回 {sticker, toastText, toastOpts}（卡片路径需要带回提示）
+            const res = await bb.onRollRarity({ id: todo.id, rarity: 'epic' }, todo.createdBy);
+            const sticker = res && res.sticker;
             const fresh = await db.listStickers();
             state.setStickers(fresh); // 还原本地状态，不影响后续断言
             return {
@@ -570,21 +632,68 @@ with sync_playwright() as p:
         force_rarity("epic")
         t7 = "E2E-测试-对方揭晓"
         check("（alpha）强制 epic 添加成功", add_todo(page, t7))
-        wait_until(page, lambda: "解锁" in toast_text(), desc="（alpha）自己的解锁提示")
+        snap7 = wait_reveal_card(page, desc="（alpha）自己的开出卡片")
+        check("（alpha）卡片显示 epic_3「钟情」",
+              snap7 is not None and snap7["name"] == "钟情" and snap7["tierEpic"], f"实际: {snap7}")
+        check("（alpha）卡片可关闭", close_reveal_card(page))
         wait_add_settled(page, t7)
 
         def toast2_text():
             el = page2.locator("#toast")
             return (el.text_content() or "") if el.count() > 0 else ""
 
-        revealed = wait_until(
+        # 【D7-②，批次 3】beta 端不再弹揭晓 Toast：red dot → 点图鉴入口 → 通知卡
+        # （无悬念无爆发、角标「ta 开出的」、无 NEW、翻面档案铭牌=开出方称呼）。
+        # 先等 stickers INSERT 到 beta 本地（pendingStickerOf 靠 todo_id 反查贴纸行），
+        # 否则入口点击会走「只清信号不弹卡」的兜底。
+        dot_on = wait_until(page2, lambda: page2.locator('#stickerBadge').is_visible(),
+                            timeout_ms=20000, desc="（beta）图鉴红点亮起")
+        check("对方端图鉴红点亮起（rarity_seen=false + 未看贴纸）", dot_on)
+        sticker_ready = wait_until(
             page2,
-            lambda: "开出的" in toast2_text() and "史诗" in toast2_text(),
+            lambda: page2.evaluate("""async () => {
+                const s = await import('/js/state.js');
+                const todo = s.getTodos().find((t) => t.text === 'E2E-测试-对方揭晓');
+                return !!todo && s.getStickers().some((x) => x.todoId === todo.id);
+            }"""),
             timeout_ms=20000,
-            desc="（beta）对方开出的揭晓提示",
+            desc="（beta）贴纸行与待办已对上",
         )
-        check("对方端收到揭晓提示（含归属，旧实现恒为 true 时这条永远是空的）",
-              revealed, f"（beta）实际提示: {toast2_text()}")
+        check("对方端本地已能反查到该贴纸（todo_id ↔ sticker）", sticker_ready)
+        page2.locator('#stickerEntry').click()
+        # 【积压队列】beta 冷启动扫描会把 t1-t6（全部 rarity_seen=false 的历史揭晓）一起入队，
+        # 点入口后按 createdAt 升序逐张弹卡 —— t7（钟情）是最后一张。逐张关完再进书架。
+        # （循环结构：先快照断言（钟情那张在关卡前翻面验铭牌）→ 再 dismiss 放行下一张）
+        expected_backlog = {"初心", "萌芽", "晨光", "清欢", "心动", "悸动", "钟情"}
+        seen_names = []
+        last_snap = None
+        snap_i = wait_reveal_card(page2, timeout_ms=20000, desc="（beta）首张通知卡弹出")
+        for _ in range(12):  # 上限兜底，实际 = 队列长度
+            if snap_i is None:
+                break
+            seen_names.append(snap_i["name"])
+            last_snap = snap_i
+            check(f"（beta）通知卡「{snap_i['name']}」为安静模式 + 角标 + 无 NEW",
+                  snap_i["modeQuiet"] and snap_i["notifyBadge"] == "ta 开出的" and not snap_i["newVisible"],
+                  f"实际: {snap_i}")
+            if snap_i["name"] == "钟情":
+                # t7 的通知卡（还在屏上）：翻面验档案铭牌（epic_3 → No.07/12）
+                page2.locator('#rvCard3d').click(position={"x": 120, "y": 300})
+                flipped8 = wait_until(page2, lambda: (reveal_card_snapshot(page2) or {}).get("flippedVisible"),
+                                      timeout_ms=5000, desc="（beta）翻面档案")
+                plaque8 = (reveal_card_snapshot(page2) or {}).get("plaqueText") or ""
+                check("（beta）翻面铭牌人称行 = 开出方称呼（「… 开出」+ No.07/12）",
+                      flipped8 and "开出" in plaque8 and "No.07/12" in plaque8, f"实际: {plaque8}")
+            dismiss_reveal_card(page2)  # 关掉当前张（下一张立即顶上；最后一张后队列放空进书架）
+            snap_i = wait_reveal_card(page2, timeout_ms=6000, desc="（beta）下一张通知卡")
+        check("（beta）积压通知卡逐张弹完（含 t7 的「钟情」在最后）",
+              last_snap is not None and last_snap["name"] == "钟情"
+              and set(seen_names) <= expected_backlog and len(seen_names) >= 2,
+              f"实际弹卡序列: {seen_names}")
+        check("（beta）通知卡看完书架打开", wait_until(
+            page2, lambda: page2.locator('#stickerModal').is_visible(), desc="（beta）书架打开"))
+        page2.locator('#stickerModalClose').click()
+        wait_until(page2, lambda: not page2.locator('#stickerModal').is_visible(), desc="（beta）书架收起")
         # 回标校验：beta 播完提示会把 rarity_seen 写回 true，落库可见
         seen_back = wait_until(
             page,
@@ -615,13 +724,15 @@ with sync_playwright() as p:
         print("=" * 60)
         # 此刻真实图鉴：rare 4/4（7.1-7.3）+ epic 3/4（7.5 自愈两条 + 8 的 t7）= 7/12。
         # 补 1 张 epic + 4 张 legendary 走**真实开奖链路**集齐；强制钩子只钉稀有度，
-        # 序号分配 / 进度文案 / 解锁提示仍由产品代码决定。
+        # 序号分配 / 卡面进度 / 解锁展示仍由产品代码决定（v1 解锁时刻 = 开出卡片）。
         force_rarity("epic")
         t8 = "E2E-测试-集齐8"
         check("第 8 条（补 epic_4）添加成功", add_todo(page, t8))
-        check("解锁「炽爱」· 进度 8/12",
-              wait_until(page, lambda: "解锁「炽爱」" in toast_text() and "8/12" in toast_text(), desc="epic_4 提示"),
-              f"实际: {toast_text()}")
+        snap_t8 = wait_reveal_card(page, desc="epic_4 开出卡片")
+        check("第 8 张解锁「炽爱」· 卡面进度 8/12",
+              snap_t8 is not None and snap_t8["name"] == "炽爱" and "8/12" in snap_t8["meta"],
+              f"实际: {snap_t8}")
+        check("第 8 张卡片可关闭", close_reveal_card(page))
         wait_add_settled(page, t8)
 
         leg_names = {1: "永恒", 2: "璀璨", 3: "至臻", 4: "神话"}
@@ -629,9 +740,12 @@ with sync_playwright() as p:
         for i in (1, 2, 3, 4):
             ti = f"E2E-测试-集齐{8 + i}"
             check(f"第 {8 + i} 条（legendary_{i}）添加成功", add_todo(page, ti))
-            ok = wait_until(page, lambda n=i: f"解锁「{leg_names[n]}」" in toast_text(), desc=f"解锁「{leg_names[i]}」提示")
-            check(f"第 {8 + i} 张解锁 · 进度 {8 + i}/12",
-                  ok and f"{8 + i}/12" in toast_text(), f"实际: {toast_text()}")
+            snap = wait_reveal_card(page, desc=f"legendary_{i} 开出卡片")
+            check(f"第 {8 + i} 张解锁「{leg_names[i]}」· 卡面进度 {8 + i}/12",
+                  snap is not None and snap["name"] == leg_names[i]
+                  and snap["tierLegendary"] and f"{8 + i}/12" in snap["meta"],
+                  f"实际: {snap}")
+            check(f"第 {8 + i} 张卡片可关闭", close_reveal_card(page))
             wait_add_settled(page, ti)
 
         # 12/12 → 打开图鉴：全屏纪念卡自动弹出（首次集齐仪式，替代旧的 Toast + 一次性撒花）
@@ -983,15 +1097,39 @@ with sync_playwright() as p:
               "升星机会" in (page.locator('#stickerHint').text_content() or ""),
               f"实际: {page.locator('#stickerHint').text_content()}")
         page.screenshot(path="/tmp/blindbox-star-grid.png", full_page=True)
-        # 点烫金格 → 故事卡出现「★★ 烫金」星级行
+        # 点烫金格（v1 rare_1）→【D7-③ 批次 3】v1 已解锁格子弹**复看卡**（星级信息在格子上，
+        # 不进卡面）；故事卡星级行只对无专属卡的 story 贴纸生效（下一段单独覆盖）
         page.locator('.sticker-cell--star2').first.click()
+        rv_star = wait_reveal_card(page, desc="烫金格复看卡弹出")
+        check("点 v1 烫金格弹出复看卡（D7-③：格子点击升级为复看卡）",
+              rv_star is not None and rv_star["name"] == "初心", f"实际: {rv_star}")
+        check("烫金格复看卡可关闭（书架仍在）",
+              close_reveal_card(page) and page.locator('#stickerModal').is_visible())
+        # 故事卡星级行（回落路径覆盖）：本地构造一张 1 星 story 贴纸 → story 格子出现星标
+        # → 点击弹故事卡 → 「★ 闪卡」星级行 → 断言后还原（不写库）
+        page.evaluate("""async () => {
+            const state = await import('/js/state.js');
+            window.__e2e_real_stickers2 = state.getStickers();
+            state.setStickers(state.getStickers().map((s) => s.stickerKey === 'story_rare_1'
+                ? { ...s, starLevel: 1 } : s));
+        }""")
+        wait_until(page, lambda: page.locator('.sticker-cell--star1').count() > 0, desc="story 星标格出现")
+        page.locator('#stickerBookTabs .sticker-book-tabs__tab', has_text="我们的故事").click()
+        wait_until(page, lambda: page.locator('.sticker-cell--star1').count() == 1, desc="story 星标格唯一")
+        page.locator('.sticker-cell--star1').first.click()
         star_card = wait_until(
             page,
-            lambda: "烫金" in (page.locator('#stickerFlavor').text_content() or ""),
+            lambda: "烫金" in (page.locator('#stickerFlavor').text_content() or "")
+            or "闪卡" in (page.locator('#stickerFlavor').text_content() or ""),
             desc="故事卡星级行",
         )
         star_line = page.locator('#stickerFlavor .sticker-modal__flavor-star').text_content() or ""
-        check("故事卡显示「★★ 烫金」星级行", star_card and "★★" in star_line, f"实际: {star_line}")
+        check("故事卡显示星级行（★ 闪卡，回落路径）", star_card and "★" in star_line, f"实际: {star_line}")
+        page.evaluate("""async () => {
+            const state = await import('/js/state.js');
+            state.setStickers(window.__e2e_real_stickers2 || []);
+            delete window.__e2e_real_stickers2;
+        }""")
         page.locator('#stickerModalClose').click()
         wait_until(page, lambda: not page.locator('#stickerModal').is_visible(), desc="书架收起")
 

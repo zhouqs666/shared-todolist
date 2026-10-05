@@ -191,8 +191,18 @@ def login(page, base, username, password, timeout_ms=30000):
     app 还差一个 await db.listProfiles() 才走到 bindEvents()，此时点 FAB / 图鉴入口
     会点在尚未绑定的处理器上 —— 本项目的 test_sticker_wiggle.mjs 就被这个竞态
     长期误诊为「CI flaky」（2026-09-14 定位，见 CODE-REVIEW F2）。
+
+    登录前统一打两个测试钩子（都在 localStorage，生产代码没有任何入口写它们，
+    行为与不加钩子一致；盲盒用例可自行覆盖）：
+      __e2e_force_rarity=common —— 把 15% 的随机开奖钉死为普通款。否则任何用例的
+        随机一次添加都可能开出隐藏款 → 弹开出卡片 + 解锁贴纸，把与用例无关的
+        全屏弹层/图鉴副作用带进断言（flaky 源，且污染共享图鉴计数）。
+      __e2e_fx_off=1 —— E2E 跑批默认走降级通道（技术方案 §12）：开出卡片退化为
+        静态精卡（信息全保留、立即可关）。fx 全开冒烟见 test_blindbox.py 7.0。
     """
     page.goto(f"{base}/login.html", wait_until="domcontentloaded")
+    page.evaluate("() => localStorage.setItem('__e2e_force_rarity', 'common')")
+    page.evaluate("() => localStorage.setItem('__e2e_fx_off', '1')")
     page.wait_for_selector("#username", timeout=timeout_ms)
     page.fill("#username", username)
     page.fill("#password", password)
@@ -200,6 +210,95 @@ def login(page, base, username, password, timeout_ms=30000):
     page.wait_for_selector(".topbar__avatar", timeout=timeout_ms)
     page.wait_for_selector("body[data-app-ready='1']", timeout=timeout_ms)
     return "login" not in page.url
+
+
+# ============================================================================
+# 开出卡片（reveal-card，2026-10-05 批次 3）助手
+# 断言迁移约定（技术方案 §12）：v1 解锁时刻的旧「合并提示 toast」断言 → 改断言卡片内容；
+# 第二册（story，暂无专属卡）与升星/集齐兜底仍走 toast，断言不变。
+# ============================================================================
+
+REVEAL_CARD_SEL = '[data-testid="reveal-card"]'
+
+
+def reveal_card_snapshot(page):
+    """读取开出卡片的关键内容（供断言）；卡片不在屏时返回 None。
+
+    name/tier/meta 来自卡面 data-testid 节点；noAnim/notifyBadge/newVisible/flippedVisible
+    是降级与模式断言的判据（fx off → no-anim；通知卡有角标无 NEW；翻面后档案铭牌可见）。
+    """
+    if page.locator(REVEAL_CARD_SEL).count() == 0:
+        return None
+    if not page.locator(REVEAL_CARD_SEL).is_visible():
+        return None
+    return page.evaluate("""() => {
+        const overlay = document.querySelector('[data-testid="reveal-card"]');
+        const txt = (sel) => { const n = overlay.querySelector(sel); return n ? n.textContent.trim() : ''; };
+        const visible = (sel) => {
+            const n = overlay.querySelector(sel);
+            if (!n) return false;
+            const style = getComputedStyle(n);
+            return style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity || '1') > 0.05;
+        };
+        return {
+            name: txt('[data-testid="reveal-card-name"]'),
+            tier: txt('.f-tier'),
+            meta: txt('[data-testid="reveal-card-meta"]'),
+            notifyBadge: txt('[data-testid="reveal-card-notify-badge"]'),
+            noAnim: overlay.classList.contains('no-anim'),
+            tierRare: overlay.classList.contains('tier-rare'),
+            tierEpic: overlay.classList.contains('tier-epic'),
+            tierLegendary: overlay.classList.contains('tier-legendary'),
+            modeNotify: overlay.classList.contains('mode-notify'),
+            modeQuiet: overlay.classList.contains('mode-quiet'),
+            phaseIdle: overlay.classList.contains('phase-idle'),
+            newVisible: visible('.f-new'),
+            flippedVisible: visible('[data-testid="reveal-card-plaque"]'),
+            plaqueText: txt('[data-testid="reveal-card-plaque"]'),
+        };
+    }""")
+
+
+def wait_reveal_card(page, timeout_ms=15000, desc="开出卡片弹出"):
+    """等开出卡片出现在屏上（解锁是网络往返，卡片在待办入列之后才弹）。返回快照或 None。"""
+    ok = wait_until(page, lambda: reveal_card_snapshot(page) is not None,
+                    timeout_ms=timeout_ms, desc=desc)
+    return reveal_card_snapshot(page) if ok else None
+
+
+def close_reveal_card(page, timeout_ms=10000):
+    """关闭屏上的开出卡片（✕ 按钮），并等它真的收起。返回是否成功收起。
+
+    ⚠️ 队列场景（通知卡逐张播）下，关闭一张后下一张立即顶上 —— "收起"判定会读到
+    新开的那张而返回 False；队列里请用 dismiss_reveal_card()。
+    """
+    if reveal_card_snapshot(page) is None:
+        return False
+    try:
+        page.locator('[data-testid="reveal-card-close"]').click(timeout=3000)
+    except Exception:  # noqa: BLE001 - 动画中被遮挡则等一拍再点
+        page.wait_for_timeout(400)
+        page.locator('[data-testid="reveal-card-close"]').click(timeout=3000)
+    return wait_until(page, lambda: reveal_card_snapshot(page) is None,
+                      timeout_ms=timeout_ms, desc="开出卡片收起")
+
+
+def dismiss_reveal_card(page, settle_ms=700):
+    """队列场景专用：点 ✕ 关掉当前这张（下一张会立即顶上，不判定"收起"）。
+
+    返回点击前的快照（调用方留作断言）；屏上无卡片则返回 None。
+    settle_ms 覆盖关闭动画（≤500ms）与队列放行下一张的间隙。
+    """
+    snap = reveal_card_snapshot(page)
+    if snap is None:
+        return None
+    try:
+        page.locator('[data-testid="reveal-card-close"]').click(timeout=3000)
+    except Exception:  # noqa: BLE001 - 动画中被遮挡则等一拍再点
+        page.wait_for_timeout(400)
+        page.locator('[data-testid="reveal-card-close"]').click(timeout=3000)
+    page.wait_for_timeout(settle_ms)
+    return snap
 
 
 def open_add_panel(page, timeout_ms=15000, attempts=3):

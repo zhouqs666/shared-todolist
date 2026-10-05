@@ -37,10 +37,13 @@ function check(name, ok, detail = '') {
   else { fail++; console.log(`❌ ${name}${detail ? ' — ' + detail : ''}`); }
 }
 
+// 【批次 3（D7-③）】mock 用第二册 story_* key：v1 已解锁格子的点击升级为「复看卡」
+// （全屏 reveal-card），故事卡回落只剩「无专属卡的 key」——第二册批次 4 上卡前就是它。
+// 本测试断言的正是故事卡回落路径 + 轻晃引导，与册无关（轻晃逻辑按 key 通用）。
 const MOCK_STICKERS = [
-  { id: 'e2e-1', sticker_key: 'rare_1', rarity: 'rare', unlocked_by: 'e2e', todo_id: null, unlocked_at: '2026-08-01T10:00:00+00:00' },
-  { id: 'e2e-2', sticker_key: 'epic_2', rarity: 'epic', unlocked_by: 'e2e', todo_id: null, unlocked_at: '2026-08-02T10:00:00+00:00' },
-  { id: 'e2e-3', sticker_key: 'legendary_3', rarity: 'legendary', unlocked_by: 'e2e', todo_id: null, unlocked_at: '2026-08-03T10:00:00+00:00' },
+  { id: 'e2e-1', sticker_key: 'story_rare_1', rarity: 'rare', unlocked_by: 'e2e', todo_id: null, unlocked_at: '2026-08-01T10:00:00+00:00' },
+  { id: 'e2e-2', sticker_key: 'story_epic_2', rarity: 'epic', unlocked_by: 'e2e', todo_id: null, unlocked_at: '2026-08-02T10:00:00+00:00' },
+  { id: 'e2e-3', sticker_key: 'story_legendary_3', rarity: 'legendary', unlocked_by: 'e2e', todo_id: null, unlocked_at: '2026-08-03T10:00:00+00:00' },
 ];
 
 /** 全局页面错误监听，确保登录/打开阶段抛出的 JS 错误也能被捕获 */
