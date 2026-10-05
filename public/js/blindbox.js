@@ -439,12 +439,11 @@ export function applyRarity(li, todo) {
 /**
  * 隐藏款特效：epic/legendary 撒花 + 震动（rare 保持克制，不放特效）。
  *
- * 【2026-09-16 改】本函数**不再自己弹提示**：提示统一由调用方给出，因为一次开奖
- * 「开奖文案 + 解锁贴纸结果」必须合成一条（两条会互相顶掉，且旧实现里完成待办时
- * 这条提示会覆盖掉带「撤销」按钮的完成提示）。
- *   - 添加待办开奖 → onRollRarity 给出合并提示
- *   - 对方开出揭晓 → handleRarityReveal 给出带归属的提示
- *   - 完成隐藏款 → celebrateCompletion 给出带图鉴进度/撤销的提示
+ * 【2026-10-05 批次 3（D1/D7）】惊喜预算集中到开出时刻，本函数只剩一个调用方：
+ * 开出卡片组件级异常时的**极端降级**（app.js 播卡失败 fallback → 老撒花 + 合并提示，D8）。
+ * 原有调用方均已移除/替代：完成路径的隐藏款分支按 D1 删除；对方端揭晓改走图鉴红点 +
+ * 通知卡（reveal-card.js，揭晓帧的爆发由卡片控制器自己的粒子承担）；添加路径的常规展示
+ * 也由卡片接管。函数保留是为 D8 降级通道兜底（代码不删）。
  * @param {string} rarity 'rare'|'epic'|'legendary'
  */
 export function celebrateRarity(rarity) {
@@ -495,12 +494,22 @@ export function celebrateRarity(rarity) {
  * 提示由本函数给出（把「开奖文案 + 解锁结果」合成一条）：两条独立提示会互相顶掉，
  * 旧实现里用户几乎只看得到后发的那条。
  *
+ * 【2026-10-05 批次 3】silent 模式：开出卡片（reveal-card）接管了成功解锁时刻的展示，
+ * 卡面已含档位/贴纸名/进度全部信息，Toast 不再同屏重复 —— 传 `{ silent: true }` 时
+ * 成功解锁的合并提示**不弹**、改为随返回值带回（`toastText/toastOpts`），由调用方在
+ * 卡片无法播放时（组件级异常的极端降级，D8）自行补弹。失败/集齐兜底/升星期的提示
+ * 不受 silent 影响（这些时刻没有卡片，Toast 是唯一通道）。
+ *
  * @param {Object} todo 刚开出的隐藏款 todo 对象（含 id）
  * @param {string} userId 当前用户 id（解锁人）
- * @returns {Promise<Object|null>} 新解锁/升星的贴纸；已集齐或失败则 null
+ * @param {Object} [opts]
+ * @param {boolean} [opts.silent] 成功解锁的合并提示不弹、随返回值带回（开出卡片路径用）
+ * @returns {Promise<{sticker: Object|null, toastText: string|null, toastOpts: Object|null}>}
+ *   sticker = **新解锁**的贴纸（集齐兜底/升星期/失败时 null —— 升星不是解锁，不弹卡）；
+ *   toastText 仅 silent 抑制成功解锁提示时非空
  */
-export async function onRollRarity(todo, userId) {
-  if (!isHidden(todo.rarity)) return null;
+export async function onRollRarity(todo, userId, opts = {}) {
+  if (!isHidden(todo.rarity)) return { sticker: null, toastText: null, toastOpts: null };
   const rarity = todo.rarity;
   const meta = RARITY_META[rarity];
 
@@ -508,8 +517,11 @@ export async function onRollRarity(todo, userId) {
   // 口径说明：isAllBooksComplete 看本地状态，而本地 ⊆ 数据库（贴纸只增不删，
   // 状态只来自 listStickers / Realtime / 解锁结果）——本地全齐 ⇒ 库里全齐，
   // 不会把该解锁的错升成星。星级本身可能滞后，由 onStarUpgrade 的乐观守卫自愈。
+  // ⚠️ 升星期没有"新贴纸本体"可展示（D12：升星提示 + 星芒照常，由 onStarUpgrade 内部给），
+  // sticker 恒为 null —— 开出卡片（D7-①）只服务"解锁新贴纸"时刻，升星不弹卡。
   if (isAllBooksComplete()) {
-    return onStarUpgrade(todo, rarity, meta);
+    await onStarUpgrade(todo, rarity, meta);
+    return { sticker: null, toastText: null, toastOpts: null };
   }
 
   // 解锁目标册 = 当前开启册（与 rollRarity 的抽选池同一来源，两处口径天然一致）。
@@ -532,9 +544,10 @@ export async function onRollRarity(todo, userId) {
       sticker = await db.unlockSticker(stickerKey, rarity, userId, todo.id);
     } catch (err) {
       // 解锁失败必须让用户看见：旧实现只 console.warn，界面上毫无痕迹
+      // （失败没有卡片可弹，Toast 是唯一通道，不受 silent 影响）
       console.warn('[blindbox] 解锁贴纸失败:', err.message);
       showToast(`${meta.toast} 图鉴解锁没成功，下次开出同档会自动补上`, rollToastOpts(rarity, null, series));
-      return null;
+      return { sticker: null, toastText: null, toastOpts: null };
     }
     if (!sticker) { staleLocal = true; continue; } // 该序号已被占用 → 试下一个
 
@@ -544,11 +557,12 @@ export async function onRollRarity(todo, userId) {
     // 只补这一张会让图鉴进度显示出偏小的数字（如 1/12 实际是 2/12），所以拉一次全量对齐。
     if (staleLocal) await syncStickersFromDb();
     const name = seriesMeta.stickerNames[n - 1] || `${meta.label}${n}`;
-    showToast(
-      `${meta.toast} 解锁「${name}」· ${seriesProgressLabel(series)}`,
-      rollToastOpts(rarity, stickerKey)
-    );
-    return sticker;
+    const toastText = `${meta.toast} 解锁「${name}」· ${seriesProgressLabel(series)}`;
+    const toastOpts = rollToastOpts(rarity, stickerKey);
+    // 开出卡片路径（silent）：提示带回不弹 —— 卡面已含同一信息，组件异常时由调用方补弹（D8）
+    if (opts.silent) return { sticker, toastText, toastOpts };
+    showToast(toastText, toastOpts);
+    return { sticker, toastText: null, toastOpts: null };
   }
 
   // 该册该档 4 张都已解锁：本次不再产生新贴纸（图鉴不会出现重复条目）。
@@ -562,7 +576,7 @@ export async function onRollRarity(todo, userId) {
       : `${meta.toast} ${bookTag}${meta.label}图鉴已集齐，继续探索其它稀有度吧`,
     rollToastOpts(rarity, null, series)
   );
-  return null;
+  return { sticker: null, toastText: null, toastOpts: null };
 }
 
 /**
