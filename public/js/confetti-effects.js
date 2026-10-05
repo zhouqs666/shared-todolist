@@ -1,25 +1,25 @@
 /**
- * 完成庆祝 / 撒花 / 卡片光环 / 远端反应脉冲
+ * 完成庆祝 / 撒花 / 远端反应脉冲
  *
  * 从 app.js 拆出（技术清单第8条：app.js 过长）。本模块负责：
- *   - celebrateCompletion：完成时的撒花 + 文案 + 音效 + 震动（普通款 / 隐藏款分支）
- *   - burstCardRing：隐藏款完成瞬间的卡片光环扩散
+ *   - celebrateCompletion：完成时的撒花 + 文案 + 音效 + 震动
  *   - onStickerUnlockedView：图鉴解锁的克制单束撒花
  *   - pulseTodoOnRemoteReaction：对方贴表情时给对应待办一个脉冲反馈
  *
+ * 【2026-10-05 批次 3（D1）】「完成时的隐藏款专属表现」已整体删除 —— 惊喜预算集中到
+ * 开出时刻（reveal-card.js）：RARITY_COMPLETE_TEXT 专属文案、celebrateRarity 叠加粒子、
+ * burstCardRing 卡片光环全部移除，完成隐藏款与普通款走同一条庆祝路径（完成时刻
+ * 所有待办一律平等；卡片稀有度身份靠常驻工艺边延续）。
+ *
  * 直接 import 依赖（与 app.js 共享 ES module 单例，无耦合放大）：
- *   - blindbox.js: isHidden, RARITY_META, celebrateRarity
+ *   - blindbox.js: RARITY_META
  *   - toast.js: showToast
  *   - theme.js: isFxEnabled
  *   - vendor/canvas-confetti
  *   - utils.js: playDing
- *
- * 行为零变化承诺：与原 app.js 内联实现完全等价（仅迁移），唯一改动是
- * pulseTodoOnRemoteReaction 把闭包变量 todoListEl 改为 document.querySelector('#todoList')，
- * 查询结果相同但解除了对 app.js 闭包的依赖。
  */
 
-import { isHidden, RARITY_META, celebrateRarity, getRollTargetSeries, BASE_SERIES, makeStickerKey, getStickerIcon, seriesProgressLabel } from './blindbox.js';
+import { RARITY_META } from './blindbox.js';
 import { showToast } from './toast.js';
 import { isFxEnabled } from './theme.js';
 import confetti from './vendor/canvas-confetti.esm.min.js';
@@ -59,13 +59,6 @@ const COMPLETE_PHRASES = [
   '这就去掉了心头一件事。',
 ];
 
-// 隐藏款完成：按稀有度的专属文案（替代普通鼓励池）
-const RARITY_COMPLETE_TEXT = {
-  rare: '✨ 稀有款，完成。',
-  epic: '🌟 史诗款达成了，不简单。',
-  legendary: '👑 传说款完成，这一刻值得记住。',
-};
-
 // 完成提示用的勾图标（白色，配 success 变体）
 const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
 
@@ -73,39 +66,15 @@ const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 
 /**
  * 完成时刻的庆祝：撒花 + 文案 toast + 音效 + 震动。
- * 普通款 / 隐藏款分支：隐藏款用专属文案 + rarity 粒子 + 卡片光环。
- * @param {Object|string} todo 待办对象（或早期字符串入参，向后兼容）
- * @param {boolean} [isRemote=false] 是否远端完成（对方完成）；远端不发光环
+ * 【D1，2026-10-05】不分稀有度：完成时刻所有待办一律平等，隐藏款的惊喜在开出时刻
+ * （reveal-card.js）。撤销按钮照常附带（撤销 Toast 不受影响）。
+ * @param {Object|string} todo 待办对象（或早期字符串入参，向后兼容；rarity 字段不再读）
+ * @param {boolean} [isRemote=false] 是否远端完成（对方完成）
  * @param {Function} [undoAction] 撤销完成回调（本端完成时传入，远端不传）
  */
 export function celebrateCompletion(todo, isRemote = false, undoAction = null) {
-  // 兼容旧的字符串入参（handleRemoteCompleted 早期传字符串）
-  const obj = typeof todo === 'string' ? { text: todo } : (todo || {});
-  const text = obj.text || '完成';
-  const rarity = obj.rarity;
-
-  if (isHidden(rarity)) {
-    // ===== 隐藏款完成：专属文案 + 配色 toast + rarity 粒子 + 卡片光环 =====
-    const meta = RARITY_META[rarity];
-    const basePhrase = RARITY_COMPLETE_TEXT[rarity] || meta.toast;
-    // 完成稀有款是「完成庆祝」，贴纸已在添加时解锁；本端附上**当前开启册**的图鉴进度
-    // （多册后全局计数会混进别册；单册期与旧行为逐字一致）。把「完成」与「解锁」区分开
-    const rollSeries = getRollTargetSeries() || BASE_SERIES;
-    const phrase = isRemote
-      ? `${basePhrase}（${text}）`
-      : `${basePhrase} ${seriesProgressLabel(rollSeries)}`;
-    // 贴纸图标作为 toast 图标（取当前开启册该稀有度第一张贴纸）
-    const icon = getStickerIcon(makeStickerKey(rollSeries, rarity, 1));
-    const toastOpts = { variant: 'rarity', accent: meta.colors[0], icon, duration: undoAction ? 4000 : 3000 };
-    if (undoAction) toastOpts.action = { label: '撤销', onClick: undoAction };
-    showToast(phrase, toastOpts);
-    // 叠加 rarity 专属粒子（复用开奖配色：rare 克制不撒花 / epic 玫红 / legendary 金）
-    // 注意：celebrateRarity 只放特效，不再弹提示 —— 上面这条带「撤销」的完成提示必须留在屏上
-    celebrateRarity(rarity);
-    // 卡片光环（仅本端完成时，卡片在视野内才发）
-    if (!isRemote && obj.id) burstCardRing(obj.id, rarity);
-    return;
-  }
+  // todo / isRemote 仅保留签名兼容（handleRemoteCompleted 仍传 todo 对象）——
+  // D1 后不再读 rarity，远端与本端完成走同一条庆祝路径（差异只有 undo 按钮的有无）
 
   // ===== 普通完成：随机鼓励文案 + 品牌色 toast =====
   const phrase = COMPLETE_PHRASES[Math.floor(Math.random() * COMPLETE_PHRASES.length)];
@@ -153,41 +122,6 @@ export function celebrateCompletion(todo, isRemote = false, undoAction = null) {
     try {
       navigator.vibrate([30, 20, 30]);
     } catch (_) {}
-  }
-}
-
-/**
- * 隐藏款完成瞬间：卡片光环扩散（完成专属动作，开奖没有）。
- * 定位到完成的卡片，叠加 rarity 配色光环：rare 单圈 / epic 双圈错时 / legendary 三圈+卡片金光爆发。
- * 卡片不在 DOM（远端完成/已滚动离开）则静默跳过。
- */
-export function burstCardRing(todoId, rarity) {
-  if (!todoId || !isHidden(rarity)) return;
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-  const li = document.querySelector(`.todo[data-id="${CSS.escape(todoId)}"]`);
-  if (!li) return; // 卡片不在视野，静默跳过
-
-  const color = (RARITY_META[rarity].colors || ['#fda4af'])[0];
-  const ringCount = rarity === 'legendary' ? 3 : (rarity === 'epic' ? 2 : 1);
-
-  for (let i = 0; i < ringCount; i++) {
-    setTimeout(() => {
-      const ring = document.createElement('span');
-      ring.className = 'todo__burst-ring';
-      ring.style.setProperty('--burst-color', color);
-      li.appendChild(ring);
-      // 下一帧启动动画（让浏览器先把元素画上）
-      requestAnimationFrame(() => ring.classList.add('todo__burst-ring--go'));
-      // 动画结束后清理
-      setTimeout(() => { if (ring.parentNode) ring.remove(); }, 800);
-    }, i * 150); // 错时扩散，层次感
-  }
-
-  // 传说款额外：卡片整体金光爆发
-  if (rarity === 'legendary') {
-    li.classList.add('todo--burst-legendary');
-    setTimeout(() => li.classList.remove('todo--burst-legendary'), 750);
   }
 }
 

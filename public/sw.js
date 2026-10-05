@@ -12,7 +12,7 @@
  *   - 跨域请求（Supabase API/Realtime/Storage）一律走网络，绝不缓存
  */
 
-const VERSION = 'v19'; // 热更新上线后递增，强制清理旧缓存
+const VERSION = 'v20'; // 热更新上线后递增，强制清理旧缓存（批次 3 开出卡片：app.js/style.css 均有变更）
 const CACHE = 'todo-shell-' + VERSION;
 
 // 预缓存的核心资源（与实际 public/ 目录对齐）
@@ -30,6 +30,8 @@ const PRECACHE_URLS = [
   '/js/theme.js',
   '/js/utils.js',
   '/js/update.js',
+  '/js/reveal-card.js',
+  '/js/reveal-card-data.js',
   '/js/vendor/supabase-js.esm.js',
   '/js/vendor/canvas-confetti.esm.min.js',
   '/favicon.svg',

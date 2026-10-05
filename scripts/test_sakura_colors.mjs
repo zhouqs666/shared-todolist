@@ -65,6 +65,7 @@ const RETIRED_PALETTE = [
  * （JS 侧 blindbox.js 的贴纸插画渐变、confetti 粒子配色是刻意的高饱和美术色，不在管辖内）
  */
 const OFF_BRAND_IN_CSS = ['#f472b6', '#fb7185', '#9f1239', '#ec4899', '#fecdd3'];
+// 豁免清单在下方 toRgb 定义之后构建（OFF_BRAND_ALLOWLIST / OFF_BRAND_ALLOWLIST_NOTE）
 
 /**
  * 暖色相漂移网的允许清单 —— 每条都必须写清「为什么刻意保留」。
@@ -72,6 +73,8 @@ const OFF_BRAND_IN_CSS = ['#f472b6', '#fb7185', '#9f1239', '#ec4899', '#fecdd3']
  */
 const WARM_HUE_ALLOWLIST = [
   { value: '#ea580c', reason: '留言字数接近上限的警示橙（style.css 原地注释已声明刻意）' },
+  { value: '#a08554', reason: '开出卡片传说款卡面短句文案色（#rvOverlay .f-flavor 的 --flavor，legendary 香槟金材质；设计真值 = reveal-card-lab.html，业主逐张确认定稿 2026-10-05）' },
+  { value: 'rgba(255,255,242,.96)', reason: '开出卡片揭晓帧白闪（#rvFlash rv-flashOut，legendary/epic 分镜；设计真值 = reveal-card-lab.html，业主确认定稿 2026-10-05）' },
 ];
 
 /**
@@ -127,6 +130,16 @@ function collectColors(text) {
 const toRgb = (hex) => [
   parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16),
 ];
+
+/**
+ * Tailwind 离线条的豁免清单（按 RGB 归一化比对，与 findForbidden 同构）。
+ * 开出卡片（reveal-card，批次 3）是**美术面**：档位配色是业主逐张确认的设计真值
+ * （reveal-card-lab.html），与 blindbox.js 贴纸插画/粒子配色同类（美术色，不属主题漂移管辖）。
+ * 豁免条目：#fb7185 = NEW 角标渐变、#f472b6 = 稀有款光晕 --halo（均为 lab 定稿值）。
+ */
+const OFF_BRAND_ALLOWLIST = new Set([
+  ...['#fb7185', '#f472b6'].map((h) => toRgb(h).join(',')),
+]);
 
 /** rgb → HSL（h 0-360, s/l 0-100） */
 function toHsl(r, g, b) {
@@ -326,9 +339,10 @@ try {
         retired.map(fmt).join('、'));
 
       if (css) {
-        const offBrand = findForbidden(colors, OFF_BRAND_IN_CSS);
+        const offBrand = findForbidden(colors, OFF_BRAND_IN_CSS)
+          .filter((c) => !OFF_BRAND_ALLOWLIST.has([c.r, c.g, c.b].join(',')));
         check(`${url} 无 Tailwind 离线条色值`, offBrand.length === 0,
-          offBrand.map(fmt).join('、'));
+          offBrand.map(fmt).join('、') + '（美术面豁免清单外的命中）');
 
         const drift = findWarmDrift(colors);
         check(`${url} 无未登记的暖色相漂移`, drift.length === 0,

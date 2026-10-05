@@ -23,6 +23,7 @@ from e2e_common import (
     wait_add_settled,
     wait_toast_gone,
     wait_until,
+    close_reveal_card,
 )
 
 BASE = resolve_base()
@@ -134,6 +135,8 @@ with sync_playwright() as p:
     # 被覆盖，而**恰恰是因为撞不到，当初才漏掉了这个缺陷**。
     print("\n== H1: toast 撤销 ==", flush=True)
 
+    from e2e_common import wait_reveal_card as _wrc, close_reveal_card as _crc  # 局部别名，便于阅读
+
     def h1_toast_undo(rarity, text):
         """完成待办 → 断言 toast 上有「撤销」→ 点它 → 断言真的恢复未完成。"""
         label = f"H1[{rarity}]"
@@ -142,6 +145,13 @@ with sync_playwright() as p:
         print(f"  2a. 添加测试待办（{rarity}）==", flush=True)
         check(f"{label} 测试待办已添加", add_todo(page, text))
         wait_add_settled(page, text)
+        # 批次 3（D7-①）：隐藏款添加会弹开出卡片（fx off = 静态精卡）——确定性等它出现再关，
+        # 否则解锁往返慢于 2.5s 安静窗口时卡片晚到、全屏遮罩挡住 .todo__check 的点击（flaky 源）
+        if rarity != 'common':
+            card_shown = _wrc(page, timeout_ms=15000, desc=f"{label} 开出卡片弹出")
+            check(f"{label} 开出卡片弹出（fx off 静态精卡）", card_shown is not None)
+            check(f"{label} 开出卡片可关闭", _crc(page))
+        close_reveal_card(page)
 
         print(f"  3a. 点击完成（{rarity}）==", flush=True)
         card = page.locator('.todo', has_text=text).first
@@ -149,7 +159,7 @@ with sync_playwright() as p:
 
         # 等条件而不是裸 wait_for_selector：裸等待超时会以 TimeoutError **中止整个脚本**，
         # 后面用例的结果全部丢失（只剩一个 traceback，现场也留不下来）。
-        # 超时给 15s：隐藏款在点击前还可能有开奖/解锁提示在排队，串行展示会把它推到后面。
+        # 超时给 15s：完成提示可能排在其他提示后面串行展示。
         toast_ok = wait_until(
             page,
             lambda: page.locator('.toast__action').count() > 0,
@@ -159,8 +169,9 @@ with sync_playwright() as p:
         if toast_ok:
             toast_text = page.locator('.toast').inner_text()
             check(f"{label} 完成toast包含撤销按钮", '撤销' in toast_text, f"toast内容: {toast_text}")
-            # 隐藏款完成文案自带「图鉴 N/12」，在宽度上限内有意占两行；普通款必须单行
-            check_toast_geometry(page, f"{label} 完成toast", max_lines=2 if rarity != 'common' else 1)
+            # 【D1，2026-10-05】完成不再区分稀有度：隐藏款完成回归普通路径（随机鼓励文案），
+            # 撤销条统一单行（旧的隐藏款「图鉴 N/12」双行形态已随 D1 删除）
+            check_toast_geometry(page, f"{label} 完成toast", max_lines=1)
         else:
             dump_dom_state(page, errors, tag=f"{label} 无撤销 toast")
             check(f"{label} 完成toast包含撤销按钮", False, "未出现撤销按钮（现场见上）")

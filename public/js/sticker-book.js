@@ -8,7 +8,9 @@
  *   - key 解析/构造统一走 blindbox.js 的 parseStickerKey / makeStickerKey
  *     （docs/sticker-book-roadmap.md §5.1 语义前缀方案）
  * 每册 12 格网格，按稀有/史诗/传说三档分区：
- *   - 已解锁：白色贴纸底板 + 彩色贴纸 + 名称 + 解锁日期，点击弹专属短句
+ *   - 已解锁：白色贴纸底板 + 彩色贴纸 + 名称 + 解锁日期，点击弹「开出卡片」复看
+ *     （D7-③，2026-10-05 批次 3——第一册 12 张有点开即展示的专属内容卡；无专属卡的
+ *      key（第二册，批次 4 前）回落原「专属短句」故事卡）
  *   - 未解锁：本尊图案的灰色剪影（雾显悬念）+ "???"
  * 顶部有分档图例（稀有 x/4 · 史诗 x/4 · 传说 x/4），底部进度条，
  * 集齐时该册面板进入金色完成态，并弹出全屏「集齐纪念卡」仪式（可从完成态重复查看，
@@ -22,6 +24,9 @@
  *   - 关闭图鉴时只把**当前激活册**的 key 标记已看 → 红点消失
  *     （多册时不会误清别册的新贴纸；单册期与全量标记等价）
  *   - 对方解锁新贴纸 → 新 key 不在已看集合 → 红点又亮（任一册有未看即亮）
+ *   - 【批次 3，D7-②】红点信号并入「对方开出的隐藏款待查看队列」
+ *     （rarity_seen=false 且非本人创建，setPendingReveals/addPendingReveal）：
+ *     点图鉴入口先逐张弹通知卡，看完回标 rarity_seen + 标记贴纸已看（一个动作清两个信号）
  *
  * 可点击性引导（轻晃演示，克制版）：
  *   已解锁贴纸可点出专属短句，但触屏上没有 hover/pointer 线索，用户发现不了。
@@ -40,6 +45,8 @@ import {
 import { showMemorialCard, initMemorialCard } from './memorial-card.js';
 import { db } from './db.js';
 import { setStickers } from './state.js';
+// 开出卡片（D7 三入口）：通知卡（②）+ 图鉴复看卡（③）
+import * as revealCard from './reveal-card.js';
 
 const TOTAL_STICKERS = STICKERS_PER_RARITY * 3; // 每册 12 张
 // 图鉴展示顺序：rare → epic → legendary（由低到高）
@@ -110,6 +117,69 @@ function markKeysSeen(keys) {
   try {
     localStorage.setItem(SEEN_KEY, JSON.stringify([...seen]));
   } catch { /* ignore */ }
+}
+
+// ===== 待查看的对方揭晓（D7-②，2026-10-05 批次 3）=====
+// rarity_seen=false 且非本人创建的隐藏款待办。旧实现是收到即弹 Toast（对方端揭晓提示，
+// 冷启动只补播最新一条），批次 3 改为「红点信号 + 待查看卡片」：点图鉴入口时逐张弹
+// 通知卡（无悬念无爆发，淡入即 idle），看完回标 rarity_seen + 同步标记对应 stickerKey
+// 已看 —— 一个动作清两个信号（技术方案 §11）。列表由 app.js 注入（currentUser 过滤在那边做）。
+let pendingReveals = [];
+// app.js 注入：userId → 称呼（通知卡/复看卡的档案铭牌人称行，D11「开出人写具体称呼」）
+let displayNameOf = null;
+
+/** 整表设置待查看队列（冷启动对账用：以服务端列表为准） */
+export function setPendingReveals(list) {
+  pendingReveals = (Array.isArray(list) ? list : []).slice();
+  updateBadge();
+}
+
+/** 追加一条待查看揭晓（Realtime INSERT/UPDATE 路径；按 id 幂等） */
+export function addPendingReveal(todo) {
+  if (!todo || !todo.id) return;
+  if (pendingReveals.some((t) => t.id === todo.id)) return;
+  pendingReveals.push(todo);
+  updateBadge();
+}
+
+function removePendingReveal(todoId) {
+  pendingReveals = pendingReveals.filter((t) => t.id !== todoId);
+}
+
+/** 该待办解锁的贴纸行（stickers.todo_id 反查；Realtime 滞后时可能还没有 → null） */
+function pendingStickerOf(todo) {
+  return getStickers().find((s) => s.todoId === todo.id) || null;
+}
+
+/** 看完一张通知卡：回标 rarity_seen + 同步标记该贴纸已看（失败静默，同旧 handleRarityReveal 口径） */
+function consumePendingReveal(todo, sticker) {
+  removePendingReveal(todo.id);
+  if (sticker) markKeysSeen([sticker.stickerKey]);
+  updateBadge();
+  db.markRaritySeen(todo.id).catch(() => {});
+}
+
+/**
+ * 点图鉴入口：有待查看揭晓时先逐张弹通知卡（先开先看），全部看完再进书架；
+ * 没有（或组件故障兜底）直接进书架。
+ */
+async function handleEntryTap() {
+  if (pendingReveals.length > 0) {
+    const queue = pendingReveals.slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    for (const todo of queue) {
+      const sticker = pendingStickerOf(todo);
+      // 贴纸行还没到本地（Realtime 滞后）或该册没有专属卡（第二册，批次 4 前）→
+      // 不弹卡，只清信号：书架里的「新」角标承接展示
+      if (sticker && revealCard.canRevealCard(sticker.stickerKey)) {
+        const res = await revealCard.playNotify(todo, sticker, {
+          byName: displayNameOf ? displayNameOf(todo.createdBy) : '对方',
+        }).catch(() => ({ played: false }));
+        if (!res.played) break; // 组件级故障：剩余排队保留（下次入口再试），先进书架
+      }
+      consumePendingReveal(todo, sticker);
+    }
+  }
+  openStickerBook();
 }
 
 /** 解锁时间 → 「M月d日」；无效时间返回空串 */
@@ -385,7 +455,7 @@ export function renderStickerBook(opts = {}) {
   }
 }
 
-/** 格子点击/回车：弹跳 + 专属短句（事件委托，绑定一次） */
+/** 格子点击/回车：第一册已解锁格子弹「复看卡」（D7-③）；无专属卡的 key 回落故事卡（事件委托，绑定一次） */
 function bindGridInteraction() {
   const grid = document.getElementById('stickerGrid');
   if (!grid) return;
@@ -433,18 +503,29 @@ function maybePlayWiggleAffordance() {
   }, 1200);
 }
 
-/** 弹跳动画 + 弹出「贴纸故事卡」（弹层内展示，不再走全局 Toast——会被弹层遮挡） */
+/** 弹出贴纸详情：复看卡（D7-③）或故事卡回落。 */
 let flavorTimer = null;
 function revealFlavor(cell) {
   // 用户戳了贴纸 → 轻晃演示永久退场（学会即不再出现）
   try { localStorage.setItem(TAP_EVER_KEY, '1'); } catch { /* ignore */ }
 
+  const key = cell.dataset.key || '';
+  const sticker = getStickers().find((s) => s.stickerKey === key);
+  // 图鉴复看（D7-③，批次 3）：第一册 12 张点开即展示该贴纸的专属内容卡——
+  // 日期=unlocked_at、无 NEW、无爆发、可翻面看档案（技术方案 §11「格子点击升级为复看卡」）
+  if (sticker && revealCard.canRevealCard(key)) {
+    revealCard.playReview(sticker, {
+      byName: displayNameOf ? displayNameOf(sticker.unlockedBy) : '对方',
+    });
+    return;
+  }
+
+  // —— 故事卡回落（第二册等暂无专属卡的 key；批次 4 上卡后自然消失）——
   cell.classList.remove('sticker-cell--pop', 'sticker-cell--wiggle');
   // 强制 reflow，保证连续点击也能重放动画
   void cell.offsetWidth;
   cell.classList.add('sticker-cell--pop');
 
-  const key = cell.dataset.key || '';
   const flavor = getStickerFlavor(key);
   const card = document.getElementById('stickerFlavor');
   if (!flavor || !card) return;
@@ -453,7 +534,6 @@ function revealFlavor(cell) {
   if (!parsed) return;
   const meta = RARITY_META[parsed.rarity];
   const name = meta.stickerNames[parsed.index - 1] || meta.label;
-  const sticker = getStickers().find((s) => s.stickerKey === key);
   const date = sticker ? formatDate(sticker.unlockedAt) : '';
   const starLevel = sticker ? (sticker.starLevel || 0) : 0;
 
@@ -561,16 +641,18 @@ export function closeStickerBook() {
 
 /**
  * 更新顶栏红点。
- * 红点逻辑：有贴纸的 key 不在已看集合里 → 亮红点（任一册有未看即亮——顶栏入口是
- * 全局的；已看集合按 key 存储，前缀天然区分各册的已看状态）。
- *   - 关闭过图鉴 → 当前册所有 key 已标记已看 → 无红点
- *   - 之后对方解锁新贴纸 → 新 key 不在已看集合 → 红点又亮
+ * 红点逻辑（两个信号取并集，任一存在即亮）：
+ *   ① 有贴纸的 key 不在已看集合里（对方解锁新贴纸 / 自己解锁后还没打开过图鉴）
+ *   ② 待查看的对方揭晓队列非空（rarity_seen=false 且非本人创建，D7-②）
+ *   - 关闭过图鉴 → 当前册所有 key 已标记已看 → 信号①消失
+ *   - 通知卡看完一张清一张 → 信号②消失（并回标 rarity_seen）
  */
 function updateBadge() {
   const badge = document.getElementById('stickerBadge');
   if (!badge) return;
   const seen = getSeenKeys();
-  const hasUnseen = getStickers().some((s) => !seen.has(s.stickerKey));
+  const hasUnseen = pendingReveals.length > 0
+    || getStickers().some((s) => !seen.has(s.stickerKey));
   if (hasUnseen) {
     badge.classList.remove('hidden');
   } else {
@@ -588,10 +670,12 @@ function updateBadge() {
  */
 export function initStickerBook(opts = {}) {
   opts_onUnlock = opts.onStickerUnlockedView || null;
+  displayNameOf = opts.displayNameOf || null;
 
   const entryBtn = document.getElementById('stickerEntry');
   if (entryBtn) {
-    entryBtn.addEventListener('click', openStickerBook);
+    // D7-②：有待查看揭晓时先弹通知卡再进书架（handleEntryTap 分派）
+    entryBtn.addEventListener('click', handleEntryTap);
   }
   const closeBtn = document.getElementById('stickerModalClose');
   if (closeBtn) closeBtn.addEventListener('click', closeStickerBook);
@@ -603,12 +687,13 @@ export function initStickerBook(opts = {}) {
     });
   }
   // ESC 关闭（与其他弹层一致的键盘出口）。
-  // 纪念卡叠在图鉴弹层之上：卡开着时 ESC 只关卡（纪念卡模块自己的监听负责），
-  // 不把背后的图鉴弹层一起关掉
+  // 纪念卡 / 开出卡片（复看卡、通知卡）叠在图鉴弹层之上：任一开着时 ESC 只关最上面那层
+  // （memorial-card / reveal-card 各自的监听负责），不把背后的图鉴弹层一起关掉
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     const mc = document.getElementById('memorialCard');
     if (mc && !mc.classList.contains('hidden')) return;
+    if (revealCard.isRevealCardOpen()) return;
     const m = document.getElementById('stickerModal');
     if (m && !m.classList.contains('hidden')) closeStickerBook();
   });

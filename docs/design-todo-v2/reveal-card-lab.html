@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>开出卡片工作台 · 第一册 legendary 4 张</title>
+<title>开出卡片工作台 · 第一册 12 张 + 通知模式示例卡</title>
 <!--
   开出卡片原型（技术方案见同目录 reveal-card-tech-design.md）
   · 自包含零依赖，浏览器/file:// 直接打开；无任何音效（决策 D4）
   · 结构 = 通用卡背 + 档位样式 + 贴纸专属内容卡（D10）
-  · 本页当前：第一册 legendary 4 张（永恒/璀璨/至臻/神话，永恒已按专属标准重做）待业主逐张确认；
-    rare 4 张与 epic 4 张已确认
+  · 本页当前：通知模式示例卡（D7-②，最后一个待确认设计件）——业主确认后参数写进
+    TIERS.notify 随批次 3 落地；第一册 12 张专属内容卡已全部定稿
   · 贴纸名称/短句/配色取自 blindbox.js RARITY_META 真实数据
 -->
 <style>
@@ -405,6 +405,30 @@
   .no-anim .back-sheen::before{ animation:none; }
   body.fx-off .f-body::after{ background:none; }
 
+  /* ===== 通知模式（D7-②，待业主确认）：无悬念/无爆发/无 NEW，卡片淡入即 idle =====
+     与档位样式正交：overlay 同挂 mode-notify + tier-xxx，档位材质/idle 流光/星芒/翻面照常 */
+  .f-notify{
+    position:absolute; top:48px; right:14px; display:none;
+    font-size:10px; font-weight:700; letter-spacing:.1em; white-space:nowrap;
+    color:#fde68a; padding:5px 10px; border-radius:9px;
+    background:rgba(26,10,32,.78); border:1px solid rgba(251,191,36,.42);
+    box-shadow:0 2px 10px rgba(0,0,0,.4); backdrop-filter:blur(3px);
+  }
+  .mode-notify .f-notify{
+    display:block; transform:rotate(4deg) scale(0);
+    animation:notifyPop .45s .5s cubic-bezier(.2,1.6,.4,1) forwards;
+  }
+  @keyframes notifyPop{ to{ transform:rotate(4deg) scale(1); } }
+  .mode-notify .f-new{ display:none; }
+  .no-anim .f-notify{ animation:none; transform:rotate(4deg) scale(1); }
+  #overlay.mode-notify{ animation:overlayIn .4s ease both; }
+  @keyframes overlayIn{ from{ opacity:0; } to{ opacity:1; } }
+  /* 卡片淡入上浮：挂在 shakeWrap（无既有 transform 规则），不与 .phase-idle #card3d 的翻面终态冲突 */
+  .mode-notify #shakeWrap{ animation:cardFadeIn .55s .12s ease-out both; }
+  @keyframes cardFadeIn{ from{ opacity:0; transform:translateY(16px) scale(.96); } to{ opacity:1; transform:none; } }
+  #overlay.no-anim.mode-notify{ animation:none; }
+  #overlay.no-anim.mode-notify #shakeWrap{ animation:none; }
+
   @media (prefers-reduced-motion: reduce){
     .f-body::after, .back-sheen::before, #beam, .f-sticker svg{ animation:none !important; }
   }
@@ -412,7 +436,7 @@
 </head>
 <body>
   <header class="lab-bar">
-    <div class="lab-title"><span class="lab-no">④</span>第一册 legendary 4 张 · 待逐张确认</div>
+    <div class="lab-title"><span class="lab-no">④</span>第一册 12 张已定稿 ＋ 通知模式示例卡 · 待确认</div>
     <div class="lab-actions">
       <button id="btnGyro" class="hidden">启用陀螺仪</button>
       <button id="btnFx" aria-pressed="true">特效：开</button>
@@ -428,6 +452,11 @@
       <button class="pk-tier active" data-tier="legendary">第一册 · 传说款</button>
     </div>
     <div class="pk-row" id="stickerRow"></div>
+    <div class="pk-row">
+      <span class="pk-label">模式</span>
+      <button class="pk-mode active" data-mode="reveal">开出仪式</button>
+      <button class="pk-mode" data-mode="notify">通知模式</button>
+    </div>
     <div class="pk-row">
       <span class="pk-label">铭牌</span>
       <button class="pk-plaque active" data-plaque="1">式样一 · 日期独立</button>
@@ -445,9 +474,9 @@
   <main id="stage">
     <div id="trigger">
       <div class="lab-note">
-        <b>本批确认项（legendary 4 张）</b>：每张贴纸的专属场景与精修主视觉 · 档位香槟金材质 · 完整悬念仪式<br/>
-        切换上方贴纸按钮逐张查看 · 桌面移动鼠标 = 流光跟手 ｜ 手机倾斜 = 流光跟动<br/>
-        legendary 完整仪式：金光渗出 → 顿帧 → 白闪 + 屏震 + 金系爆发 · 点按可跳过
+        <b>本批确认项（通知模式示例卡 · 最后一个设计件）</b>：无悬念段 · 无爆发 · 无 NEW 角标 · 卡片淡入即 idle<br/>
+        正面右上「ta 开出的」角标（D7）· 翻面档案铭牌人称行 = 开出方称呼（「大宝贝 开出」）· idle 流光/星芒/翻面保留<br/>
+        选「通知模式」后开卡；档位按钮 = 对方开出不同档位时通知卡的档位样式 · 桌面移动鼠标 = 流光跟手
       </div>
       <button id="btnStart">🎴 开一次卡</button>
       <div class="lab-decision">通用卡背（案C）+ 档位样式 + 贴纸专属内容卡（D10）· 无音效（D4）· 保留震动</div>
@@ -490,6 +519,7 @@
                 <div class="f-scene" id="fScene"></div>
                 <div class="f-tier" id="fTier">稀有款 · RARE</div>
                 <div class="f-new">NEW</div>
+                <div class="f-notify" id="fNotify">ta 开出的</div>
                 <div class="f-sticker" id="fSticker"></div>
                 <div class="f-info">
                   <div class="si1 f-name" id="fName">初心</div>
@@ -1127,11 +1157,21 @@
     },
   };
 
-  var cur = { tier:'legendary', idx:0 };
+  var cur = { tier:'legendary', idx:0, mode:'reveal' };
   var plaqueStyle = 1; /* 铭牌文案结构：1=日期独立（动词归人）2=藏签式（开出于…） */
   var avatarOn = true; /* 档案头像（方案 A：纹章位替换） */
   var spineOn = true;  /* 侧书脊（竖排册名+品牌印） */
   var AVATAR_FALLBACK = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="#e884a8"/><path d="M32 47s-13-7.8-13-16.6c0-4.3 3.4-7.5 7.4-7.5 2.7 0 4.9 1.4 5.6 3.3.7-1.9 2.9-3.3 5.6-3.3 4 0 7.4 3.2 7.4 7.5C45 39.2 32 47 32 47z" fill="#fff"/></svg>');
+
+  /* 通知模式（D7-②）模式参数：与档位样式正交——overlay 同挂 mode-notify + tier-xxx。
+     无悬念/无爆发/无 NEW/无震动；淡入即 idle，idle 循环流光/星芒/翻面档案照常；
+     正面角标 =「ta 开出的」（D7 原文，2026-10-05 业主未及确认按 D7 落地，改一词即可换称呼）；
+     翻面铭牌人称行 = 开出方称呼（产品里 = displayOf(unlocked_by).name +「 开出」） */
+  TIERS.notify = {
+    label:'通知模式', note:'对方开出 → 点图鉴红点弹卡：无悬念段 · 无爆发 · 无 NEW · 无震动 · 淡入即 idle · 角标=「ta 开出的」· 翻面看档案',
+    suspense:false, holdMs:0, burstN:0, shake:false, flash:false, vibrate:null,
+    badge:'ta 开出的',
+  };
 
   /* ---------- 特效开关 ---------- */
   function fxActive(){ return fxOn && !reducedMQ.matches; }
@@ -1152,7 +1192,9 @@
       return '<button class="pk-chip'+(i===cur.idx?' active':'')+'" data-idx="'+i+'">'+item.name+'</button>';
     }).join('');
     stickerRow.innerHTML = chips;
-    pkNote.textContent = TIERS[cur.tier].note + (SETS[cur.tier][cur.idx].note ? ' · ' + SETS[cur.tier][cur.idx].note : '');
+    pkNote.textContent = cur.mode === 'notify'
+      ? TIERS.notify.note
+      : TIERS[cur.tier].note + (SETS[cur.tier][cur.idx].note ? ' · ' + SETS[cur.tier][cur.idx].note : '');
     Array.prototype.forEach.call(stickerRow.querySelectorAll('.pk-chip'), function(btn){
       btn.addEventListener('click', function(){
         cur.idx = parseInt(btn.getAttribute('data-idx'), 10);
@@ -1200,6 +1242,16 @@
     });
   });
 
+  Array.prototype.forEach.call(document.querySelectorAll('.pk-mode'), function(btn){
+    btn.addEventListener('click', function(){
+      cur.mode = btn.getAttribute('data-mode');
+      Array.prototype.forEach.call(document.querySelectorAll('.pk-mode'), function(b){
+        b.classList.toggle('active', b === btn);
+      });
+      renderPicker(); applyCard();
+    });
+  });
+
   function applyCard(){
     var t = TIERS[cur.tier], item = SETS[cur.tier][cur.idx];
     overlay.classList.remove('tier-rare','tier-epic','tier-legendary');
@@ -1210,6 +1262,8 @@
     fName.textContent = item.name;
     fFlavor.textContent = item.flavor;
     fMeta.textContent = item.meta;
+    /* 通知模式角标（D7-②）：文案 = 「ta 开出的」；仅 mode-notify 下由 CSS 显示 */
+    $('fNotify').textContent = TIERS.notify.badge;
     card3d.style.setProperty('--prog', item.pct);
     /* 档案铭牌（背面，idle 翻面后可见）：日期取当天（产品里开出瞬间=当天，复看=unlocked_at） */
     var d = new Date();
@@ -1439,9 +1493,19 @@
     resizeFx(); sizeHolo();
     var t = TIERS[cur.tier];
     overlay.classList.remove('hidden'); /* reset 置 hidden 后必须摘掉，否则遮罩不出现 */
+    var id = runId;
+    if(cur.mode === 'notify'){
+      /* 通知模式（D7-②）：无悬念段、无爆发、无 NEW、无震动——淡入即 idle；
+         idle 循环流光/星芒/翻面档案照常（那些是"把玩"属性，不属于仪式） */
+      overlay.classList.add(t.cls, 'mode-notify', 'phase-idle');
+      if(!fxActive()) overlay.classList.add('no-anim');
+      phase = 'idle';
+      btnClose.classList.remove('hidden');
+      if(GL && t.webgl) renderHoloStatic();
+      return;
+    }
     overlay.classList.add('phase-suspense');
     phase = 'suspense';
-    var id = runId;
 
     if(!fxActive()){ toIdle(true); return; } /* 降级：静态精卡直达（信息全保留） */
 

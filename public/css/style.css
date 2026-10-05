@@ -3422,41 +3422,6 @@ body.cherish-stage-on .topbar {
 }
 
 /* ============================================================
-   隐藏款完成瞬间：卡片光环扩散（完成专属，开奖没有的动作）
-   从卡片中心向外扩散 rarity 配色的光环，稀有度越高环越多越绚。
-   ============================================================ */
-.todo { position: relative; }
-.todo__burst-ring {
-  position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  border: 2px solid var(--burst-color, #f3b9cd);
-  pointer-events: none;
-  opacity: 0;
-  z-index: 5;
-}
-.todo__burst-ring--go {
-  animation: burst-ring 0.7s var(--ease) forwards;
-}
-@keyframes burst-ring {
-  0%   { opacity: 0.9; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1.18); border-width: 0.5px; }
-}
-/* 传说款完成额外：卡片整体金光爆发（box-shadow 闪一下） */
-.todo--burst-legendary {
-  animation: legendary-burst-flash 0.7s var(--ease);
-}
-@keyframes legendary-burst-flash {
-  0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
-  40%  { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0.35), 0 0 40px rgba(251, 191, 36, 0.5); }
-  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .todo__burst-ring--go { animation: none; opacity: 0; }
-  .todo--burst-legendary { animation: none; }
-}
-
-/* ============================================================
    图鉴入口（顶栏礼物盒图标 + 柔和提醒点）
    ============================================================ */
 .sticker-entry {
@@ -4597,4 +4562,375 @@ body.cherish-stage-on .topbar {
 .trash-item__btn--armed {
   background: var(--rose-500);
   color: #fff;
+}
+
+/* ============================================================
+   开出卡片（抽卡式揭晓）reveal-card.js 的样式
+   设计真值：docs/design-todo-v2/reveal-card-lab.html（业主逐张确认，2026-10-05）。
+   选择器与原型 1:1 对应（id 加 rv 前缀）；档位变量默认值 = legendary（香槟金），
+   tier-rare / tier-epic 变量组必须带 #rvOverlay 提升特异性，否则被默认值压住。
+   层叠位：z-index 1200 = 高于图鉴弹层(1000)/纪念卡(1100)，低于 Toast(11000)
+   —— 卡片打开期间 toast 队列照常（D8 边缘提示仍走 toast）。
+   ============================================================ */
+#rvOverlay {
+  position: fixed; inset: 0; overflow: hidden; cursor: pointer; z-index: 1200;
+  background: radial-gradient(120% 90% at 50% 40%, rgba(26,10,32,.9), rgba(12,5,16,.96));
+  /* 档位变量默认值 = legendary（香槟金） */
+  --frame:linear-gradient(135deg,#f8e8b5,#e6b64e 28%,#faeebc 50%,#d99a33 74%,#f4dd90);
+  --paper:radial-gradient(125% 95% at 50% 6%, #fffaef 0%, #f9efd2 46%, #ecd8a4 100%);
+  --ribbon:linear-gradient(135deg,#fde68a,#f59e0b); --ribbon-ink:#5b3a00;
+  --name-hi:#8a5f10; --name-mid:#c8901c; --name-lo:#f2ce62;
+  --flavor:#a08554; --meta:#8a7040;
+  --bar-bg:rgba(120,84,20,.16); --bar:linear-gradient(90deg,#f59e0b,#fcd34d,#f59e0b);
+  --halo:rgba(251,191,36,.4); --crn:#b98a1f;
+  --sheen-a:rgba(255,255,255,.5); --sheen-b:rgba(255,238,190,.75);
+  --card-w: min(74vw, 300px);
+}
+#rvOverlay.hidden { display: none !important; }
+/* rare 档（樱粉·素雅克制） */
+#rvOverlay.tier-rare {
+  --frame:linear-gradient(135deg,#fbe3ec,#f3b9cd 30%,#fdeef3 52%,#eea1bd 76%,#f9d6e2);
+  --paper:radial-gradient(125% 95% at 50% 6%, #fffdfd 0%, #fdf0f5 48%, #f7dbe6 100%);
+  --ribbon:linear-gradient(135deg,#f9a8c4,#ec5f93); --ribbon-ink:#fff;
+  --name-hi:#a04a6e; --name-mid:#c96a92; --name-lo:#f0b7cb;
+  --flavor:#b98da0; --meta:#a3798d;
+  --bar-bg:rgba(194,86,132,.14); --bar:linear-gradient(90deg,#ec5f93,#f9a8c4,#ec5f93);
+  --halo:rgba(244,114,182,.28); --crn:#d98ba9;
+  --sheen-a:rgba(255,255,255,.55); --sheen-b:rgba(255,214,232,.8);
+}
+/* epic 档（浅紫·幻彩）——同选择器结构，防变量被 #rvOverlay 默认值（legendary）压住 */
+#rvOverlay.tier-epic {
+  --frame:linear-gradient(135deg,#e9e2fb,#c3aef2 28%,#f0eafc 50%,#a98ce8 74%,#d9c9f6);
+  --paper:radial-gradient(125% 95% at 50% 6%, #fefeff 0%, #f5f1fd 48%, #e6dcf7 100%);
+  --ribbon:linear-gradient(135deg,#a78bfa,#8b5cf6); --ribbon-ink:#fff;
+  --name-hi:#5b3fa8; --name-mid:#7c5cd6; --name-lo:#c4b5fd;
+  --flavor:#8d7ab5; --meta:#7a68a6;
+  --bar-bg:rgba(124,92,214,.14); --bar:linear-gradient(90deg,#8b5cf6,#c4b5fd,#8b5cf6);
+  --halo:rgba(167,139,250,.3); --crn:#a186d9;
+  --sheen-a:rgba(255,255,255,.5); --sheen-b:rgba(224,208,250,.85);
+}
+.tier-epic .f-body { box-shadow:inset 0 0 24px rgba(124,92,214,.15); }
+.tier-epic #rvBeam {
+  background:repeating-conic-gradient(from 0deg at 50% 46%,
+    rgba(167,139,250,.14) 0deg 6deg, transparent 6deg 13deg);
+}
+/* epic 弱白闪：峰值 .55（legendary .95）+ 紫白染色 */
+.tier-epic #rvFlash {
+  background:radial-gradient(circle at 50% 45%, rgba(244,240,255,.92), rgba(216,201,246,.3) 58%, transparent 76%);
+}
+.tier-epic.flashing #rvFlash { animation:rv-flashSoft .3s ease-out; }
+@keyframes rv-flashSoft{ 0%{opacity:0;} 16%{opacity:.55;} 100%{opacity:0;} }
+.tier-epic.phase-suspense .face.back { animation:rv-breatheEpic 1.5s .6s ease-in-out infinite; }
+@keyframes rv-breatheEpic{
+  0%,100%{ transform:rotateY(0) scale(1);    box-shadow:0 18px 50px rgba(0,0,0,.5), 0 0 0 rgba(167,139,250,0); }
+  50%    { transform:rotateY(0) scale(1.045); box-shadow:0 18px 50px rgba(0,0,0,.5), 0 0 42px rgba(167,139,250,.45); }
+}
+
+/* 光柱（悬念段）：旋转的光束扇面；rare 无悬念段 → 隐藏 */
+#rvBeam {
+  position:absolute; inset:-22%; z-index:1; opacity:0; pointer-events:none;
+  background:repeating-conic-gradient(from 0deg at 50% 46%,
+    rgba(251,191,36,.13) 0deg 6deg, transparent 6deg 13deg);
+  -webkit-mask-image:radial-gradient(circle at 50% 46%, #000 0%, transparent 60%);
+  mask-image:radial-gradient(circle at 50% 46%, #000 0%, transparent 60%);
+  animation:rv-beamSpin 9s linear infinite;
+  transition:opacity .6s ease;
+}
+@keyframes rv-beamSpin{ to{ transform:rotate(360deg); } }
+.phase-suspense #rvBeam{ opacity:.9; }
+.phase-reveal #rvBeam{ opacity:.35; }
+.phase-idle #rvBeam{ opacity:.14; }
+#rvOverlay.fx-off #rvBeam, .no-anim #rvBeam, .tier-rare #rvBeam{ display:none; }
+
+/* ===== 3D 层级：shake(屏震) → tilt(跟手) → card3d(翻面) ===== */
+#rvShakeWrap{ position:absolute; inset:0; z-index:10; display:flex; align-items:center; justify-content:center; }
+#rvTiltWrap{ perspective:1100px; will-change:transform; }
+#rvCard3d{
+  width:var(--card-w); aspect-ratio:5/7; position:relative;
+  transform-style:preserve-3d; will-change:transform;
+  --gx:50%; --gy:42%;
+}
+#rvOverlay .face{
+  position:absolute; inset:0; border-radius:16px;
+  backface-visibility:hidden; -webkit-backface-visibility:hidden;
+  box-shadow:0 18px 50px rgba(0,0,0,.5);
+}
+
+/* —— 卡背（案 C「缎纹卡背」：档位通用，前置信号由渗出粒子承载） —— */
+#rvOverlay .face.back{
+  background:radial-gradient(130% 105% at 50% 28%, var(--plum-hi, #3a1f44) 0%, var(--plum, #241030) 52%, var(--plum-deep, #150a1e) 100%);
+  transform:rotateY(0deg); overflow:hidden;
+}
+#rvOverlay .face.back .bf1{ position:absolute; inset:7px;  border:1.5px solid rgba(251,191,36,.6);  border-radius:11px; }
+#rvOverlay .face.back .bf2{ position:absolute; inset:13px; border:1px   solid rgba(251,191,36,.28); border-radius:8px; }
+#rvOverlay .back-emblem{
+  position:absolute; left:50%; top:50%; width:52%; aspect-ratio:1;
+  transform:translate(-50%,-50%); border-radius:50%;
+  border:1.5px solid rgba(251,191,36,.5);
+  display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(circle at 50% 42%, rgba(251,191,36,.14), transparent 68%);
+}
+#rvOverlay .back-emblem::before{
+  content:""; position:absolute; inset:7px; border-radius:50%;
+  border:1px solid rgba(251,191,36,.28);
+}
+#rvOverlay .back-emblem svg{ width:62%; filter:drop-shadow(0 0 8px rgba(251,191,36,.45)); }
+/* 档案头像（方案 A：翻面时纹章位替换为金环圆头像）。
+   ⚠️ 显隐必须挂在 #rvCard3d.flipped 上——只挂 avatar-on 会让照片在悬念段（翻面前）
+   就出现，破坏卡背中性（实测教训 2026-10-05：所有背面元素同此规则） */
+#rvOverlay .back-emblem img{
+  display:none; width:72%; height:72%; border-radius:50%; object-fit:cover;
+  box-shadow:0 0 0 2px rgba(251,191,36,.75), 0 0 14px rgba(251,191,36,.4);
+}
+#rvCard3d.flipped .back-emblem.avatar-on img{ display:block; }
+#rvCard3d.flipped .back-emblem.avatar-on svg{ display:none; }
+/* 翻面后重心上移：档案态「头像+铭牌」柱光学居中；悬念态纹章保持正中 */
+#rvCard3d.flipped .back-emblem{ transform:translate(-50%,-50%) translateY(-30px); }
+/* 侧书脊：竖排册名+品牌印；册名非档位信息，悬念态也可显示 */
+#rvOverlay .back-spine{
+  position:absolute; top:28px; right:22px;
+  writing-mode:vertical-rl; font-size:10px; letter-spacing:.34em;
+  color:rgba(251,191,36,.55);
+}
+#rvOverlay .back-sheen{ position:absolute; inset:0; overflow:hidden; border-radius:16px; }
+#rvOverlay .back-sheen::before{
+  content:""; position:absolute; inset:-40%;
+  background:linear-gradient(115deg, transparent 42%, rgba(255,236,180,.16) 50%, transparent 58%);
+  animation:rv-sheenSweep 3.2s ease-in-out infinite;
+}
+@keyframes rv-sheenSweep{ 0%{ transform:translateX(70%);} 55%,100%{ transform:translateX(-70%);} }
+
+/* —— 档案铭牌（idle 翻面后出现；悬念段卡背保持档位中性，不剧透） —— */
+#rvOverlay .back-archive{
+  position:absolute; left:14px; right:14px; bottom:44px;
+  text-align:center; opacity:0; transition:opacity .35s .18s ease;
+  pointer-events:none;
+}
+#rvOverlay .ba-date{ font-size:11px; letter-spacing:.18em; color:#fcd34d; }
+#rvOverlay .ba-by{
+  margin-top:6px; font-size:14px; font-weight:700; letter-spacing:.14em; color:#fde68a;
+  text-shadow:0 0 10px rgba(251,191,36,.35);
+}
+#rvOverlay .ba-book{ margin-top:6px; font-size:10px; letter-spacing:.22em; color:rgba(251,191,36,.62); }
+#rvOverlay .ba-line{
+  width:64%; height:1px; margin:9px auto 0;
+  background:linear-gradient(90deg,transparent,rgba(251,191,36,.55),transparent);
+}
+/* flipped 挂在 #rvCard3d 上，铭牌是其后代——用后代选择器 */
+#rvCard3d.flipped .back-archive{ opacity:1; }
+.no-anim .back-archive{ transition:none; }
+
+/* —— 卡面：档位框 + 纸底 + 专属内容卡（场景 + 精修主视觉） —— */
+#rvOverlay .face.front{
+  transform:rotateY(180deg); overflow:hidden;
+  background:var(--frame);
+}
+#rvOverlay .f-body{
+  position:absolute; inset:5px; border-radius:12px; overflow:hidden;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E"),
+    var(--paper);
+  box-shadow:inset 0 0 24px rgba(160,116,32,.18);
+}
+.tier-rare .f-body{ box-shadow:inset 0 0 24px rgba(194,86,132,.14); }
+/* 贴纸专属场景层（每张卡独立 SVG，D10） */
+#rvOverlay .f-scene{ position:absolute; inset:0; }
+#rvOverlay .f-scene svg{ width:100%; height:100%; display:block; }
+/* CSS 流光兜底层（rare 唯一的卡面流光；legendary/epic 与 WebGL 叠加） */
+#rvOverlay .f-body::after{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(115deg, transparent 34%, var(--sheen-a) 47%, var(--sheen-b) 50%, transparent 66%);
+  background-size:260% 260%; background-position:var(--gx) 0;
+  mix-blend-mode:screen; animation:rv-cardSheen 5s ease-in-out infinite;
+}
+@keyframes rv-cardSheen{ 0%{ background-position:130% 0; } 60%,100%{ background-position:-60% 0; } }
+
+#rvOverlay .f-tier{
+  position:absolute; top:14px; left:50%; transform:translateX(-50%);
+  font-size:11px; font-weight:700; letter-spacing:.32em; text-indent:.32em;
+  color:var(--ribbon-ink); padding:5px 14px; border-radius:999px; white-space:nowrap;
+  background:var(--ribbon);
+  box-shadow:0 2px 8px rgba(90,50,20,.35), inset 0 1px 0 rgba(255,255,255,.55);
+}
+#rvOverlay .f-new{
+  position:absolute; top:16px; right:14px; transform:rotate(8deg) scale(0);
+  font-size:10px; font-weight:800; color:#fff; letter-spacing:.08em;
+  padding:4px 9px; border-radius:8px;
+  background:linear-gradient(135deg,#fb7185,#f43f5e);
+  box-shadow:0 2px 8px rgba(244,63,94,.4);
+}
+.phase-idle .f-new{ animation:rv-newPop .45s 1.15s cubic-bezier(.2,1.6,.4,1) forwards; }
+.tier-rare .phase-idle .f-new{ animation-delay:.7s; }
+.no-anim .f-new{ animation:none; transform:rotate(8deg) scale(1); opacity:1; }
+@keyframes rv-newPop{ to{ transform:rotate(8deg) scale(1); } }
+
+/* 通知模式角标（D7-②）：仅 mode-notify 显示；位置在档位绶带下方（top:48px 不与绶带重叠） */
+#rvOverlay .f-notify{
+  position:absolute; top:48px; right:14px; display:none;
+  font-size:10px; font-weight:700; letter-spacing:.1em; white-space:nowrap;
+  color:#fde68a; padding:5px 10px; border-radius:9px;
+  background:rgba(26,10,32,.78); border:1px solid rgba(251,191,36,.42);
+  box-shadow:0 2px 10px rgba(0,0,0,.4); backdrop-filter:blur(3px);
+}
+#rvOverlay.mode-notify .f-notify{
+  display:block; transform:rotate(4deg) scale(0);
+  animation:rv-notifyPop .45s .5s cubic-bezier(.2,1.6,.4,1) forwards;
+}
+@keyframes rv-notifyPop{ to{ transform:rotate(4deg) scale(1); } }
+/* 通知/复看（mode-quiet）不显示 NEW——NEW 仅本端开出事件显示（D11 实施备注①） */
+#rvOverlay.mode-quiet .f-new{ display:none; }
+.no-anim .f-notify{ animation:none; transform:rotate(4deg) scale(1); }
+
+#rvOverlay .f-sticker{
+  position:absolute; left:50%; top:41%; width:52%; aspect-ratio:1;
+  transform:translate(-50%,-50%);
+}
+#rvOverlay .f-sticker::before{
+  content:""; position:absolute; inset:-26%; border-radius:50%;
+  background:radial-gradient(circle, var(--halo) 0%, transparent 70%);
+}
+#rvOverlay .f-sticker svg{ position:relative; width:100%; height:100%; filter:drop-shadow(0 6px 14px rgba(90,50,20,.35)); }
+#rvOverlay:not(.fx-off) .phase-idle .f-sticker svg{ animation:rv-floaty 3.6s ease-in-out infinite alternate; }
+@keyframes rv-floaty{ from{ transform:translateY(-4px);} to{ transform:translateY(5px);} }
+
+#rvOverlay .f-info{ position:absolute; left:0; right:0; bottom:0; padding:0 20px 18px; text-align:center; }
+#rvOverlay .f-info > div{ opacity:0; transform:translateY(10px); transition:opacity .5s ease, transform .5s ease; }
+.phase-idle .si1{ transition-delay:.45s; } .phase-idle .si2{ transition-delay:.68s; } .phase-idle .si3{ transition-delay:.9s; }
+.tier-rare .si1{ transition-delay:.25s !important; }
+.tier-rare .si2{ transition-delay:.42s !important; }
+.tier-rare .si3{ transition-delay:.58s !important; }
+.phase-idle .f-info > div{ opacity:1; transform:none; }
+.no-anim .f-info > div{ opacity:1; transform:none; transition:none; }
+#rvOverlay .f-name{
+  font-size:34px; font-weight:800; letter-spacing:.3em; text-indent:.3em; line-height:1.25;
+  background:linear-gradient(180deg,var(--name-hi),var(--name-mid) 45%,var(--name-lo));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  text-shadow:0 1px 0 rgba(255,255,255,.35);
+}
+#rvOverlay .f-flavor{ margin-top:4px; font-size:12px; color:var(--flavor); letter-spacing:.06em; }
+#rvOverlay .f-meta{ margin-top:12px; font-size:11.5px; color:var(--meta); letter-spacing:.1em; }
+#rvOverlay .bar{
+  display:block; margin:7px auto 0; width:72%; height:4px; border-radius:99px;
+  background:var(--bar-bg); overflow:hidden;
+}
+#rvOverlay .bar-fill{
+  display:block; height:100%; width:0; border-radius:99px;
+  background:var(--bar);
+  transition:width 1s .85s cubic-bezier(.3,.8,.3,1);
+}
+.tier-rare .bar-fill{ transition-delay:.5s; transition-duration:.7s; }
+.phase-idle .bar-fill{ width:var(--prog,25%); }
+.no-anim .bar-fill{ width:var(--prog,25%); transition:none; }
+
+/* 四角工艺线（两面共用，色随档位） */
+#rvOverlay .crn{ position:absolute; width:22px; height:22px; opacity:.75; pointer-events:none; }
+#rvOverlay .crn.tl{ top:9px; left:9px;  border-top:1.5px solid var(--crn); border-left:1.5px solid var(--crn); border-radius:3px 0 0 0; }
+#rvOverlay .crn.tr{ top:9px; right:9px; border-top:1.5px solid var(--crn); border-right:1.5px solid var(--crn); border-radius:0 3px 0 0; }
+#rvOverlay .crn.bl{ bottom:9px; left:9px;  border-bottom:1.5px solid var(--crn); border-left:1.5px solid var(--crn); border-radius:0 0 0 3px; }
+#rvOverlay .crn.br{ bottom:9px; right:9px; border-bottom:1.5px solid var(--crn); border-right:1.5px solid var(--crn); border-radius:0 0 3px 0; }
+
+/* WebGL 全息层：epic/legendary 专属；rare 隐藏（CSS sheen 兜底） */
+#rvHolo{
+  position:absolute; inset:0; width:100%; height:100%;
+  mix-blend-mode:screen; opacity:.74; pointer-events:none;
+}
+.tier-rare #rvHolo{ display:none; }
+
+/* ===== 分镜动效 ===== */
+.phase-suspense #rvCard3d{ animation:rv-flyIn .55s cubic-bezier(.22,1.15,.36,1) forwards; }
+@keyframes rv-flyIn{
+  from{ transform:translateY(56vh) scale(.7) rotate(-7deg); opacity:0; }
+  to{ transform:translateY(0) scale(1) rotate(0); opacity:1; }
+}
+.phase-suspense .face.back{ animation:rv-breathe 1.5s .6s ease-in-out infinite; }
+.tier-rare .face.back{ animation:none; }
+@keyframes rv-breathe{
+  0%,100%{ transform:rotateY(0) scale(1);    box-shadow:0 18px 50px rgba(0,0,0,.5), 0 0 0 rgba(251,191,36,0); }
+  50%    { transform:rotateY(0) scale(1.045); box-shadow:0 18px 50px rgba(0,0,0,.5), 0 0 42px rgba(251,191,36,.4); }
+}
+.phase-hold .face.back{ animation-play-state:paused; }
+.phase-hold #rvCard3d{ animation-play-state:paused; }
+
+.phase-reveal #rvCard3d{ animation:rv-flipIn .62s cubic-bezier(.33,.75,.35,1) forwards; }
+.tier-rare .phase-reveal #rvCard3d{ animation-duration:.5s; }
+@keyframes rv-flipIn{
+  0%  { transform:rotateY(0deg)   scale(1); }
+  38% { transform:rotateY(92deg)  scale(1.06,.94); }
+  62% { transform:rotateY(180deg) scale(1.07); }
+  76% { transform:rotateY(180deg) scale(.965); }
+  88% { transform:rotateY(180deg) scale(1.02); }
+  100%{ transform:rotateY(180deg) scale(1); }
+}
+.no-anim #rvCard3d{ animation:none !important; transform:rotateY(180deg) scale(1) !important; transition:none; }
+/* idle 态显式接住翻面终态：phase-reveal 移除后 rv-flipIn 的 forwards 填充随之失效，
+   不写这条卡片会翻回背面（实测教训 2026-10-04） */
+.phase-idle #rvCard3d{ animation:none; transform:rotateY(180deg) scale(1); }
+/* 翻面看档案（idle 点按卡片）：翻到 360° 重新露出卡背（带档案铭牌）。
+   必须排在 .phase-idle 规则之后——同特异性，后者胜 */
+#rvCard3d{ transition:transform .55s cubic-bezier(.34,.8,.35,1); }
+#rvCard3d.flipped{ transform:rotateY(360deg) scale(1); }
+.no-anim #rvCard3d.flipped{ transform:rotateY(360deg) scale(1) !important; }
+
+.shaking #rvShakeWrap{ animation:rv-shake .32s linear; }
+@keyframes rv-shake{
+  0%,100%{ transform:none; }
+  20%{ transform:translate(-7px,3px) rotate(-.6deg); }
+  40%{ transform:translate(6px,-4px) rotate(.5deg); }
+  60%{ transform:translate(-4px,2px); }
+  80%{ transform:translate(3px,-2px); }
+}
+#rvFlash{
+  position:absolute; inset:0; z-index:30; opacity:0; pointer-events:none;
+  background:radial-gradient(circle at 50% 45%, rgba(255,255,242,.96), rgba(255,255,255,.25) 58%, transparent 76%);
+}
+.flashing #rvFlash{ animation:rv-flashOut .3s ease-out; }
+@keyframes rv-flashOut{ 0%{opacity:0;} 16%{opacity:.95;} 100%{opacity:0;} }
+
+/* 粒子层（渗出/爆发/星芒共用一块画布） */
+#rvFx{ position:absolute; inset:0; z-index:20; pointer-events:none; }
+
+/* 关闭：卡片飞向图鉴入口方向（"回家"） */
+#rvCard3d.fly{
+  transition:transform .5s cubic-bezier(.55,-0.05,.7,.35), opacity .5s ease-in;
+  transform:rotateY(180deg) translate(32vw,-32vh) scale(.12) rotate(14deg) !important;
+  opacity:0;
+}
+
+#rvBtnClose{
+  position:absolute; top:calc(env(safe-area-inset-top, 0px) + 14px); right:14px; z-index:40;
+  width:38px; height:38px; border-radius:50%; border:none; cursor:pointer;
+  font-size:15px; color:rgba(255,244,214,.85);
+  background:rgba(255,255,255,.08); backdrop-filter:blur(4px);
+}
+#rvBtnClose.hidden { display: none; }
+#rvHint{
+  position:absolute; bottom:max(18px, env(safe-area-inset-bottom)); left:0; right:0; z-index:35;
+  text-align:center; font-size:11.5px; letter-spacing:.12em; color:rgba(255,244,214,.55);
+  pointer-events:none; transition:opacity .4s;
+}
+#rvHint .h2, #rvHint .h3{ display:none; }
+.phase-idle #rvHint .h1{ display:none; }
+.phase-idle #rvHint .h2{ display:inline; }
+#rvOverlay.fx-off #rvHint .h1, #rvOverlay.fx-off #rvHint .h2{ display:none; }
+#rvOverlay.fx-off #rvHint .h3{ display:inline; }
+
+#rvOverlay.fx-off .f-body::after,
+#rvOverlay.fx-off .back-sheen::before,
+.no-anim .f-body::after,
+.no-anim .back-sheen::before{ animation:none; }
+#rvOverlay.fx-off .f-body::after{ background:none; }
+
+/* ===== 通知/复看模式（D7-②③）：无悬念/无爆发，卡片淡入即 idle =====
+   与档位样式正交：overlay 同挂 mode-quiet(+mode-notify) + tier-xxx，
+   档位材质 / idle 流光 / 星芒 / 翻面照常（"把玩"属性不属于仪式） */
+#rvOverlay.mode-quiet{ animation:rv-overlayIn .4s ease both; }
+@keyframes rv-overlayIn{ from{ opacity:0; } to{ opacity:1; } }
+/* 卡片淡入上浮：挂在 shakeWrap（无既有 transform 规则），不与 .phase-idle #rvCard3d 的翻面终态冲突 */
+#rvOverlay.mode-quiet #rvShakeWrap{ animation:rv-cardFadeIn .55s .12s ease-out both; }
+@keyframes rv-cardFadeIn{ from{ opacity:0; transform:translateY(16px) scale(.96); } to{ opacity:1; transform:none; } }
+#rvOverlay.no-anim.mode-quiet{ animation:none; }
+#rvOverlay.no-anim.mode-quiet #rvShakeWrap{ animation:none; }
+
+@media (prefers-reduced-motion: reduce){
+  #rvOverlay .f-body::after, #rvOverlay .back-sheen::before, #rvBeam, #rvOverlay .f-sticker svg{ animation:none !important; }
 }

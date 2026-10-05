@@ -45,8 +45,8 @@ import { checkForUpdate, setUpdateSupabase, notifyAppReady, getCurrentBundleInfo
 import { checkNativeUpdate, showNativeUpdatePanel, setApkUpdateSupabase, bindForegroundCheck } from './apk-update.js';
 import { supabase } from './supabase.js';
 import { showToast } from './toast.js';
-import { rollRarity, isHidden, applyRarity, celebrateRarity, onRollRarity, RARITY_META, getStickerName, starLabel, isSelfStarEcho } from './blindbox.js';
-import { initStickerBook, handleStickerUnlocked } from './sticker-book.js';
+import { rollRarity, isHidden, applyRarity, celebrateRarity, onRollRarity, getStickerName, starLabel, isSelfStarEcho } from './blindbox.js';
+import { initStickerBook, handleStickerUnlocked, setPendingReveals, addPendingReveal } from './sticker-book.js';
 // 图片全屏预览（lightbox）已从本文件拆出到 ./lightbox.js（技术清单第8条：app.js 过长）
 // 通过 handlers 注入 attachImageToTodo / removeImageFromTodo，避免与 db/state 形成紧耦合
 import { openImageLightbox } from './lightbox.js';
@@ -66,14 +66,16 @@ import {
 import { initTrash, openTrash } from './trash.js';
 // 离线写入队列（MVP：仅 addTodo 离线暂存 + 联网重放）
 import { getOfflineQueue, removeOfflineOp, enqueueOffline, isOfflineError } from './offline-queue.js';
-// 完成庆祝特效（撒花/卡片光环/贴纸解锁/远端反应脉冲）已拆出到 ./confetti-effects.js（技术清单第8条）
+// 完成庆祝特效（撒花/贴纸解锁/远端反应脉冲）已拆出到 ./confetti-effects.js（技术清单第8条）
+// 【D1，2026-10-05】完成时隐藏款专属表现（专属文案/粒子叠加/卡片光环）已删除 —— 完成回归普通路径
 import {
   celebrateCompletion,
-  burstCardRing,
   onStickerUnlockedView,
   celebrateStarUpgradeView,
   pulseTodoOnRemoteReaction,
 } from './confetti-effects.js';
+// 开出卡片（抽卡式揭晓，D7 三入口之一：本端开出）：解锁完成后弹卡，惊喜集中到开出时刻
+import { playSelf as revealPlaySelf } from './reveal-card.js';
 
 let currentUser = null;
 /** @type {Object<string, string>} userId → displayName 映射（从 profiles 表拿） */
@@ -310,8 +312,9 @@ async function reconcileRemoteState() {
       onNoteUpdated,
       onReactionAdded,
       onReactionRemoved,
-      // 隐藏款揭晓：对方开出的隐藏款首次推来，本端播惊喜提示
-      onRarityReveal: handleRarityReveal,
+      // 隐藏款揭晓：对方开出的隐藏款首次推来 → 图鉴红点信号 + 待查看卡片（D7-②，
+      // 旧的直接弹 Toast 已在批次 3 移除——惊喜的展示移到通知卡里）
+      onRarityReveal: handlePartnerRevealPending,
       // 图鉴贴纸解锁：双端同步更新图鉴状态 + 红点 + 撒花
       onStickerUnlocked: handleStickerUnlockedFromRealtime,
       // 图鉴升星（批次 4）：stickers UPDATE（star_level 变化），双端同步 + 对方端提示
@@ -377,7 +380,11 @@ async function reconcileRemoteState() {
   // 修复（2026-09-07）：initStickerBook 原在 listStickers 之后，而 listStickers 冷启动慢（3~20s），
   // 导致图鉴入口在冷启动头几秒点不开。提前到 bindEvents 后（auth+profiles 一完成即可点）。
   // 红点/网格渲染不依赖此处时序：setStickers 异步到达后经 setStickersRenderFn 自动刷新。
-  initStickerBook({ onStickerUnlockedView: onStickerUnlockedView });
+  initStickerBook({
+    onStickerUnlockedView: onStickerUnlockedView,
+    // 通知卡/复看卡的档案铭牌人称行（D11「开出人写具体称呼」）
+    displayNameOf: (userId) => displayOf(userId).name,
+  });
 
   // 初始化本地通知（APP 内弹系统通知；网页降级为 no-op）
   // 必须 await：initNotify 内部加载 Capacitor 脚本并确定 isNative，
@@ -409,9 +416,13 @@ async function reconcileRemoteState() {
     const todos = await applyTodoListFetch(todosFetch);
     // todos 为 null = 本次被代闸丢弃（已有更新的一份落地了），此时用当前状态即可
     const list = todos || getTodos();
-    // 补播「本端不在线时对方开出的隐藏款」（Realtime 只在线的瞬间推一次）
+    // 【D7-②，批次 3】对方开出的隐藏款（raritySeen=false 且非本人创建）→ 图鉴红点 +
+    // 待查看通知卡（点图鉴入口时逐张弹卡）。旧的「冷启动补播 Toast（只播最新一条）」
+    // 已移除：卡片模式天然支持排队逐张看，不再需要"只补最新"的截断。
     if (list.some((t) => isHidden(t.rarity) && t.raritySeen === false && t.createdBy !== currentUser.id)) {
-      setTimeout(() => revealUnseenRarityFromPartner(getTodos()), 800);
+      setPendingReveals(getTodos().filter(
+        (t) => isHidden(t.rarity) && t.raritySeen === false && t.createdBy !== currentUser.id
+      ));
     }
   } catch (err) {
     handleError(toAppError(err), '加载列表失败');
@@ -771,15 +782,22 @@ async function addTodo() {
     }
     // Realtime 也会推回来（幂等去重），这里直接加上不等回声
     setTodos(sortTodos([...getTodos(), todo]));
-    // 隐藏款开奖：命中时叠庆祝特效（待办已渲染，特效叠在卡片上）。
-    // 提示不在这里给 —— onRollRarity 会把它和解锁结果合成一条，避免两条互相顶掉。
+    // 隐藏款开奖（2026-10-05 批次 3，D1/D7）：惊喜预算集中到开出时刻 ——
+    // 解锁完成后立即弹开出卡片（卡面要显示贴纸本体，§11），合并提示由 silent 模式带回、
+    // 仅在卡片无法播放（组件级异常的极端降级）时补弹；完成时刻的所有隐藏款专属表现已删除。
     if (isHidden(todo.rarity)) {
-      // 稍延迟让卡片先入场动画播完，再叠开奖特效
-      setTimeout(() => celebrateRarity(todo.rarity), 60);
-      // 开出即解锁图鉴贴纸（无需完成）。失败会自行提示，不再静默。
-      onRollRarity(todo, currentUser.id).catch((e) =>
-        console.warn('[app] 贴纸解锁失败:', e.message)
-      );
+      onRollRarity(todo, currentUser.id, { silent: true }).then(async (res) => {
+        if (!res || !res.sticker) return; // 无新贴纸（失败/集齐兜底/升星）：onRollRarity 内已提示
+        const r = await revealPlaySelf(todo, res.sticker, {
+          byName: displayOf(currentUser.id).name,
+        });
+        if (!r.played) {
+          // 回落路径（D8/§6）：组件级异常，或该册暂无专属卡（第二册，批次 4 前）→
+          // 老通道兜底：合并提示 + 开奖撒花（fx 关时 celebrateRarity 自行短路）
+          if (res.toastText) showToast(res.toastText, res.toastOpts || {});
+          celebrateRarity(todo.rarity);
+        }
+      }).catch((e) => console.warn('[app] 贴纸解锁失败:', e.message));
     }
     resetPendingImage(); // 提交成功才清预挂图（失败路径不清，保留以便重试）
     // 提交期间用户可能已经接着敲了下一条（网络慢 / 带图上传时这个窗口很大，
@@ -859,7 +877,9 @@ async function replayOfflineQueue() {
       try {
         const real = await db.createTodo(op.text, currentUser.id, null, op.rarity);
         // 离线时开出的隐藏款：补上在线路径会做的解锁（stashOfflineTodo 分支跳过了这一步，
-        // 旧实现里这些隐藏款永远不解锁贴纸 —— 开出了却白开）
+        // 旧实现里这些隐藏款永远不解锁贴纸 —— 开出了却白开）。
+        // 走非 silent 的 Toast 路径、不弹卡片：重放是联网瞬间的无人值守动作，
+        // 全屏卡片会打断用户手头的事（合并提示在此处是常规通道而非降级）。
         if (isHidden(real.rarity)) {
           await onRollRarity(real, currentUser.id).catch((e) =>
             console.warn('[app] 离线隐藏款补解锁失败:', e.message)
@@ -2238,54 +2258,24 @@ function updateOnlineUI(online) {
 
 /**
  * 远端完成回调：对方完成了任务，本端也庆祝
+ * （【D1，批次 3】完成不再区分稀有度 —— 对方完成隐藏款同样走普通庆祝路径 + 系统通知）
  */
 function handleRemoteCompleted(todo) {
   if (!todo || !todo.completed) return;
-  // 对方完成：传 todo 对象（读 rarity），但 isRemote=true 不发光环（卡片可能不在视野/避免重复打扰）
-  // 文案前缀加"对方完成了"，rarity 分支会在此基础上替换为隐藏款专属文案时保留对方语义
-  celebrateCompletion({ ...todo, text: '对方完成了「' + (todo.text || '') + '」' }, true);
+  celebrateCompletion(todo, true);
 }
 
 /**
- * 隐藏款揭晓回调：对方开出的隐藏款首次推来（raritySeen=false 且非自己创建）。
- * 本端播一次惊喜提示，然后回标 rarity_seen=true（避免重复提示）。
+ * 【D7-②，批次 3】对方开出的隐藏款首次推来（raritySeen=false 且非自己创建）
+ * → 记入「待查看揭晓」队列 + 图鉴红点亮起。不再直接弹 Toast/撒花（旧 handleRarityReveal
+ * 已移除）：点图鉴入口时由 sticker-book 逐张弹通知卡，看完回标 rarity_seen（§11）。
+ * 同一会话内按 id 幂等（Realtime INSERT/UPDATE 双路径 + 冷启动扫描可能指向同一条）。
  */
-/**
- * 隐藏款揭晓回调：对方开出的隐藏款首次推来（raritySeen=false 且非自己创建）。
- * 本端播一次惊喜提示，然后回标 rarity_seen=true（避免重复提示）。
- * 同一会话内按 id 去重：Realtime 推送与冷启动补播可能指向同一条（本端刚订阅上就补播）。
- */
-const revealedRarityIds = new Set();
-
-function handleRarityReveal(todo) {
+function handlePartnerRevealPending(todo) {
   if (!todo || !isHidden(todo.rarity)) return;
-  if (revealedRarityIds.has(todo.id)) return;
-  revealedRarityIds.add(todo.id);
-  const meta = RARITY_META[todo.rarity];
-  const name = displayOf(todo.createdBy).name || '对方';
-  showToast(`${meta.toast.replace(/[！]/g, '')}（${name} 开出的）`);
-  // 高稀有度也撒花（和开奖同等仪式感）。celebrateRarity 只放特效，不会再弹一条把上面这条顶掉
-  celebrateRarity(todo.rarity);
-  // 回标已看过，避免再次提示（失败静默）
-  db.markRaritySeen(todo.id).catch(() => {});
-}
-
-/**
- * 冷启动补播：Realtime 只在「本端当时在线且订阅已建立」时推送揭晓，
- * 对方开出的隐藏款若那一刻本端没开着，提示就永久错过了 —— 这里在首屏列表拿到后补一次。
- * 只播最新一条（避免一次冷启动连环弹），其余静默回标已看。
- */
-function revealUnseenRarityFromPartner(list) {
-  if (!currentUser || !Array.isArray(list)) return;
-  const unseen = list.filter(
-    (t) => isHidden(t.rarity) && t.raritySeen === false && t.createdBy !== currentUser.id
-  );
-  if (unseen.length === 0) return;
-  const newest = unseen.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-  for (const t of unseen) {
-    if (t.id !== newest.id) db.markRaritySeen(t.id).catch(() => {});
-  }
-  handleRarityReveal(newest);
+  if (todo.raritySeen !== false) return;
+  if (!currentUser || todo.createdBy === currentUser.id) return;
+  addPendingReveal(todo);
 }
 
 /**

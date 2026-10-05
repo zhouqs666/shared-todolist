@@ -36,7 +36,9 @@ import { toExternal, toNote, toReaction, toSticker } from './transforms.js';
  * @param {(note)=>void} [handlers.onNoteUpdated] 留言更新（daily_notes UPDATE，标记已读）
  * @param {(reaction)=>void} [handlers.onReactionAdded] 表情新增（reactions INSERT）
  * @param {(reactionId:string,todoId:string)=>void} [handlers.onReactionRemoved] 表情删除（reactions DELETE）
- * @param {(todo)=>void} [handlers.onRarityReveal] 对方开出的隐藏款首次推来（todos UPDATE，raritySeen=false 且非自己创建）
+ * @param {(todo)=>void} [handlers.onRarityReveal] 对方开出的隐藏款首次推来（todos UPDATE，raritySeen=false 且非自己创建）。
+ *        【批次 3，D7-②】语义 = 记入「待查看揭晓」队列 + 图鉴红点（由 app.js/sticker-book 处理）；
+ *        收到即弹 Toast 的旧语义已移除，展示移到通知卡（reveal-card.js）
  * @param {(sticker)=>void} [handlers.onStickerUnlocked] 图鉴贴纸解锁（stickers INSERT）
  * @param {(sticker)=>void} [handlers.onStickerUpdated] 图鉴贴纸更新（stickers UPDATE——升星改 star_level，批次 4；
  *        不订 UPDATE 则对方升星本端永远看不到）
@@ -118,7 +120,7 @@ export function initRealtime({ getTodos, setTodos, notifyCompleted, setOnline, g
     setTodos(sortTodos([...todos, todo]));
     // 通知：对方新增了待办
     maybeNotify('added', todo, todo.createdBy);
-    // 隐藏款揭晓：对方开出的隐藏款首次推来（raritySeen=false 且非自己创建）
+    // 隐藏款揭晓：对方开出的隐藏款首次推来（raritySeen=false 且非自己创建）→ 红点 + 待查看卡（D7-②）
     if (
       onRarityReveal &&
       todo.rarity && todo.rarity !== 'common' &&
@@ -169,7 +171,7 @@ export function initRealtime({ getTodos, setTodos, notifyCompleted, setOnline, g
     if (becameCompleted && notifyCompleted) notifyCompleted(todo);
     // 通知：对方完成了待办
     if (becameCompleted) maybeNotify('completed', todo, todo.completedBy);
-    // 隐藏款揭晓：对方开出的隐藏款首次推来（raritySeen=false 且非自己创建）→ 播惊喜提示
+    // 隐藏款揭晓：对方开出的隐藏款首次推来（raritySeen=false 且非自己创建）→ 红点 + 待查看卡（D7-②）
     if (
       onRarityReveal &&
       todo.rarity && todo.rarity !== 'common' &&
