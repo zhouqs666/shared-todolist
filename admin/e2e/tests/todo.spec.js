@@ -86,15 +86,28 @@ test.describe('待办管理', () => {
   });
 
   test('统计数字正确（全部 / 进行中 / 已完成）', async ({ page }) => {
-    // 前提：独立测试库纯净（仅本次 seed 的数据）
+    // 【2026-10-05 改增量断言】原实现断言绝对计数（2/1/1），前提是测试库纯净。
+    // 但测试库现在**合法承载真机人工测试数据**（业主用测试包在真机验证功能，
+    // 手工添加的待办不带 E2E 标记，cleanupE2EData 不会清它们）—— 共享库的
+    // 绝对计数必然被打破（实测 CI 连红 6 次，总数读到 25）。改为增量断言：
+    // 先读基线，断言 seed 后的**变化量** —— 与库里有几条人手数据无关。
+    const dashboard0 = new DashboardPage(page);
+    const readStat = async (stat) =>
+      Number((await stat.locator('.stat-value').textContent()) || '0');
+    const base = {
+      total: await readStat(dashboard0.statTotal),
+      active: await readStat(dashboard0.statActive),
+      completed: await readStat(dashboard0.statCompleted),
+    };
+
     await seedTodo(client, { userId, text: '统计-进行中', completed: false });
     await seedTodo(client, { userId, text: '统计-已完成', completed: true });
     await page.reload();
     await expect(page.getByTestId('dashboard')).toBeVisible();
 
     const dashboard = new DashboardPage(page);
-    await expect(dashboard.statTotal.locator('.stat-value')).toHaveText('2');
-    await expect(dashboard.statActive.locator('.stat-value')).toHaveText('1');
-    await expect(dashboard.statCompleted.locator('.stat-value')).toHaveText('1');
+    await expect(dashboard.statTotal.locator('.stat-value')).toHaveText(String(base.total + 2));
+    await expect(dashboard.statActive.locator('.stat-value')).toHaveText(String(base.active + 1));
+    await expect(dashboard.statCompleted.locator('.stat-value')).toHaveText(String(base.completed + 1));
   });
 });
