@@ -174,7 +174,7 @@ async function handleEntryTap() {
     const queue = pendingReveals.slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     for (const todo of queue) {
       const sticker = pendingStickerOf(todo);
-      // 贴纸行还没到本地（Realtime 滞后）或该册没有专属卡（第二册，批次 4 前）→
+      // 贴纸行还没到本地（Realtime 滞后）或该册没有专属卡（未来新册上线初期）→
       // 不弹卡，只清信号：书架里的「新」角标承接展示
       if (sticker && revealCard.canRevealCard(sticker.stickerKey)) {
         const res = await revealCard.playNotify(todo, sticker, {
@@ -528,7 +528,7 @@ function revealFlavor(cell) {
     return;
   }
 
-  // —— 故事卡回落（第二册等暂无专属卡的 key；批次 4 上卡后自然消失）——
+  // —— 故事卡回落（批次 4 起两册均有专属卡，此分支对已注册册不再可达；保留给未来无卡的新册）——
   // 强制 reflow，保证连续点击也能重放动画
   void cell.offsetWidth;
   cell.classList.add('sticker-cell--pop');

@@ -108,7 +108,8 @@ jobs:
             scripts/test_reminder_migration.mjs \
             scripts/test_update_count.mjs \
             scripts/test_timeline_grouping.mjs \
-            scripts/test_sticker_key.mjs; do
+            scripts/test_sticker_key.mjs \
+            scripts/test_reveal_card_data.mjs; do
             echo "================================================"
             echo "Running: $f"
             echo "================================================"
