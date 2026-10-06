@@ -11,14 +11,26 @@
  *
  * pending 待办的 id 用 "offline-<ts>-<rand>" 前缀，与真实 UUID 天然区分，
  * 重放成功后由 app.js 用真实 todo 替换（Realtime 回推也按真实 id 幂等去重，互不冲突）。
+ *
+ * 队列键按环境分（2026-10-06 双环境切换，见 supabase.js CURRENT_ENV）：
+ * 测试环境入队的草稿若与生产共用一个键，切回生产后联网重放会**把测试数据写进生产库**
+ * （铁律一事故形状）。生产沿用历史键（存量队列不丢），测试环境用 @test 后缀独立命名。
  */
 
+import { CURRENT_ENV } from './supabase.js';
+
 const KEY = 'youai_offline_queue';
+const KEY_TEST = 'youai_offline_queue@test';
+
+/** 当前环境的队列键 */
+function queueKey() {
+  return CURRENT_ENV === 'test' ? KEY_TEST : KEY;
+}
 
 /** 读取队列（localStorage 损坏时兜底返回空数组） */
 export function getOfflineQueue() {
   try {
-    const arr = JSON.parse(localStorage.getItem(KEY) || '[]');
+    const arr = JSON.parse(localStorage.getItem(queueKey()) || '[]');
     return Array.isArray(arr) ? arr : [];
   } catch (e) {
     console.warn('[offline] 读取队列失败（已重置）:', e.message);
@@ -29,7 +41,7 @@ export function getOfflineQueue() {
 /** 写入队列 */
 export function setOfflineQueue(queue) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(queue));
+    localStorage.setItem(queueKey(), JSON.stringify(queue));
   } catch (e) {
     console.warn('[offline] 写入队列失败:', e.message);
   }

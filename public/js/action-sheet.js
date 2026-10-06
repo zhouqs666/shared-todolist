@@ -294,7 +294,8 @@ let currentAccountSheet = null;
 
 /**
  * 显示账号菜单（头像长按触发，替代直接弹退出确认）。
- * @param {Object} handlers 回调：{ onOpenTrash, onLogout }
+ * @param {Object} handlers 回调：{ onOpenTrash, onSwitchEnv, onLogout }
+ *   onSwitchEnv（2026-10-06 双环境切换，env-switch.js 注入）：不传则不渲染该项
  */
 export function showAccountMenu(handlers = {}) {
   closeAccountMenu();
@@ -328,6 +329,23 @@ export function showAccountMenu(handlers = {}) {
     if (handlers.onOpenTrash) handlers.onOpenTrash();
   });
   list.appendChild(trashBtn);
+
+  // 切换环境（测试 ↔ 生产；由 env-switch.js 注入，避免模块环）
+  if (handlers.onSwitchEnv) {
+    const envBtn = document.createElement('button');
+    envBtn.type = 'button';
+    envBtn.className = 'account-menu__item';
+    envBtn.setAttribute('data-testid', 'switch-env');
+    envBtn.innerHTML = '<span class="account-menu__icon">'
+      + '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M21 7H8"/><path d="M7 21l-4-4 4-4"/><path d="M3 17h13"/></svg>'
+      + '</span><span class="account-menu__label">切换环境</span>';
+    envBtn.addEventListener('click', () => {
+      if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
+      closeAccountMenu();
+      handlers.onSwitchEnv();
+    });
+    list.appendChild(envBtn);
+  }
 
   // 退出登录
   const logoutBtn = document.createElement('button');

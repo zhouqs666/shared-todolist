@@ -4,6 +4,7 @@
  */
 
 import { auth } from './auth.js';
+import { applyEnvBadges } from './env-switch.js';
 
 (async function init() {
   const form = document.getElementById('loginForm');
@@ -11,6 +12,9 @@ import { auth } from './auth.js';
   const passwordInput = document.getElementById('password');
   const errorEl = document.getElementById('errorMsg');
   const submitBtn = document.getElementById('submitBtn');
+
+  // 环境角标（安全件）：测试环境登录页显示「测试环境」——登录前就知道自己在哪个库
+  applyEnvBadges();
 
   function showError(msg) {
     errorEl.textContent = msg;

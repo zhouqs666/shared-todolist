@@ -76,6 +76,8 @@ import {
 } from './confetti-effects.js';
 // 开出卡片（抽卡式揭晓，D7 三入口之一：本端开出）：解锁完成后弹卡，惊喜集中到开出时刻
 import { playSelf as revealPlaySelf } from './reveal-card.js';
+// 双环境切换（2026-10-06）：长按头像 → 账号菜单「切换环境」+ 测试环境角标
+import { requestEnvSwitch, applyEnvBadges } from './env-switch.js';
 
 let currentUser = null;
 /** @type {Object<string, string>} userId → displayName 映射（从 profiles 表拿） */
@@ -375,6 +377,10 @@ async function reconcileRemoteState() {
   // 会点在尚未绑定的处理器上（本项目 test_sticker_wiggle.mjs 被这个竞态坑过）。
   // 这行不改变任何行为，只是把「已经绑定完成」变成可观测的信号。
   document.body.dataset.appReady = '1';
+
+  // 环境角标（安全件）：测试环境在顶栏显示「测试」徽标——「以为在测试、其实在生产」
+  // 是双环境切换唯一危险形态，判据就是看角标（登录页同款，见 login.js）
+  applyEnvBadges();
 
   // 图鉴入口尽早绑定（只绑 DOM 事件，不依赖 auth/listTodos/通知/stickers 数据）。
   // 修复（2026-09-07）：initStickerBook 原在 listStickers 之后，而 listStickers 冷启动慢（3~20s），
@@ -1563,8 +1569,12 @@ function renderMe() {
     img.src = avatar;
     img.alt = currentUser ? currentUser.displayName : '';
     img.onerror = () => img.remove();
-    // 头像长按 → 账号菜单（回收站 + 退出登录）；退出仍走二次确认条
-    bindLongPressLogout(img, () => showAccountMenu({ onOpenTrash: openTrash, onLogout: () => showLogoutConfirm(logout) }));
+    // 头像长按 → 账号菜单（回收站 + 切换环境 + 退出登录）；退出仍走二次确认条
+    bindLongPressLogout(img, () => showAccountMenu({
+      onOpenTrash: openTrash,
+      onSwitchEnv: requestEnvSwitch,
+      onLogout: () => showLogoutConfirm(logout),
+    }));
     meEl.appendChild(img);
   }
 }
