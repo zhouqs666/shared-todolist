@@ -25,7 +25,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from playwright.sync_api import sync_playwright
-from e2e_common import (
+import re
+
+from e2e_common import(
     resolve_base,
     load_test_creds,
     make_checker,
@@ -107,6 +109,18 @@ def unpin(page, text):
     page.locator('.action-sheet__icon-btn[aria-label="取消置顶"]').click()
 
 
+def done_count(sum_text):
+    """day 章小计『已完成 N 件』→ N（格式外 -1）。
+
+    【2026-10-06 断言改增量】测试库现在**合法承载业主真机人工数据**（环境切换上线后
+    业主直接在测试环境长时间测试，24 条非 E2E 待办实测在场）——day 章小计与页面总
+    章节数都掺着人工数据，绝对值断言必然假红（与 admin 统计断言同构，PR#117 已修同款）。
+    改为「本用例基线（2 条）+ 差额提示方向」的增量判据，人工数据只增不减不影响。
+    """
+    m = re.match(r"已完成 (\d+) 件", sum_text or "")
+    return int(m.group(1)) if m else -1
+
+
 A = "E2E-测试-置顶甲"
 B = "E2E-测试-置顶乙"
 
@@ -134,8 +148,9 @@ with sync_playwright() as p:
         and (chapter_of(page, A)["key"] or "").startswith("day:"),
         desc="两条完成项归入同一个 day: 章",
     ))
-    check("今天章小计 = 已完成 2 件", (day_chapter(page) or {}).get("sum") == "已完成 2 件",
-          f"实际 {(day_chapter(page) or {}).get('sum')!r}")
+    _sum = (day_chapter(page) or {}).get("sum")
+    check("今天章小计 ≥ 已完成 2 件且无置顶差额", done_count(_sum) >= 2 and "在置顶" not in (_sum or ""),
+          f"实际 {_sum!r}")
     check("此时没有置顶章（无置顶项 ⇒ 整章不渲染）", pinned_chapter(page) is None)
 
     print("== 3. 置顶「甲」⇒ 搬到页首「置顶」章 ==", flush=True)
@@ -157,9 +172,10 @@ with sync_playwright() as p:
     check("甲只出现一次（不在时光章里重复出现）", card_count(page, A) == 1, f"实际 {card_count(page, A)} 次")
     check("乙仍在今天章", (chapter_of(page, B) or {}).get("key", "").startswith("day:"),
           f"实际 {(chapter_of(page, B) or {}).get('key')!r}")
+    _sum = (day_chapter(page) or {}).get("sum")
     check("今天章小计仍记那天的账，并把差额点出来",
-          (day_chapter(page) or {}).get("sum") == "已完成 2 件（1 件在置顶）",
-          f"实际 {(day_chapter(page) or {}).get('sum')!r}")
+          done_count(_sum) >= 2 and "（1 件在置顶）" in (_sum or ""),
+          f"实际 {_sum!r}")
     page.screenshot(path="/tmp/pin-e2e-pinned.png", full_page=True)
 
     print("== 4. 冷启动（持久化 + 冷启动渲染）==", flush=True)
@@ -178,9 +194,10 @@ with sync_playwright() as p:
     ))
     check("甲回到今天章", (chapter_of(page, A) or {}).get("key", "").startswith("day:"),
           f"实际 {(chapter_of(page, A) or {}).get('key')!r}")
-    check("今天章小计回到「已完成 2 件」（差额提示随之消失）",
-          (day_chapter(page) or {}).get("sum") == "已完成 2 件",
-          f"实际 {(day_chapter(page) or {}).get('sum')!r}")
+    _sum = (day_chapter(page) or {}).get("sum")
+    check("今天章小计回到「已完成 N 件」（差额提示随之消失）",
+          done_count(_sum) >= 2 and "在置顶" not in (_sum or ""),
+          f"实际 {_sum!r}")
 
     print("== 6. 名下条目全被置顶 ⇒ 不留空章头 ==", flush=True)
     page.locator(".todo", has_text=B).first.click(button="right")
@@ -196,7 +213,11 @@ with sync_playwright() as p:
         lambda: not any(k.startswith("day:") for k in keys(page)),
         desc="day: 章头消失",
     ))
-    check("此时页面上只剩置顶章", keys(page) == ["__pinned__"], f"实际 {keys(page)}")
+    # 「页面总 keys 恰好一个」依赖测试库纯净——该前提已被真机人工数据永久打破（见 done_count 注释）。
+    # 本用例不变量收窄为：甲在置顶章 + 页面无 day: 章（上一条已断言）+ 乙不在页面（上一条已断言）
+    check("此时甲在置顶章（页面唯一性不作断言）",
+          (chapter_of(page, A) or {}).get("key") == "__pinned__",
+          f"实际 keys={keys(page)} 甲章={(chapter_of(page, A) or {}).get('key')!r}")
 
     print("== 7. 取消置顶 ⇒ 该天章头回来 ==", flush=True)
     unpin(page, A)

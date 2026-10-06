@@ -1467,6 +1467,14 @@ input {
 }
 
 /* 待办文案预览（顶部，圆角卡片头）：与按钮组共同构成一张圆角卡片 */
+.action-sheet__hint {
+  font-size: 11.5px;
+  color: rgba(255, 244, 214, 0.6);
+  text-align: center;
+  padding: 0 18px 4px;
+  line-height: 1.6;
+}
+
 .action-sheet__preview {
   background: var(--color-surface);
   padding: 16px 18px;
@@ -3452,6 +3460,24 @@ body.cherish-stage-on .topbar {
 
 /* 柔和提醒点：有未看的新贴纸时显示。
    不用刺眼纯红，改用 rose-400 + 柔光，不脉冲（克制） */
+/* ===== 环境角标（双环境切换的安全件，env-switch.js）=====
+   测试环境才显示；「以为在测试、其实在生产」是切换功能唯一危险形态，判据即此角标 */
+.env-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #fff;
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+  padding: 2px 7px;
+  border-radius: 999px;
+  line-height: 1.5;
+  box-shadow: 0 1px 4px rgba(245, 158, 11, 0.4);
+  vertical-align: middle;
+}
+.env-badge[hidden] { display: none !important; }
+.topbar__env { margin-left: 6px; }
+
 .sticker-badge {
   position: absolute;
   top: 7px;

@@ -84,6 +84,12 @@
   color: var(--color-text);
 }
 
+.login__env {
+  display: block;
+  width: fit-content;
+  margin: 8px auto 0;
+}
+
 .login__subtitle {
   margin: 0 0 26px;
   color: var(--color-text-muted);

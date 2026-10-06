@@ -21,7 +21,9 @@
 
 **硬约束（脚本内置 fail-closed）**：
 - 目标 URL ≠ 生产库（铁律一物理隔离，启动即校验）
-- zip/APK 内 supabase.js 必须指向**测试库**且不得出现生产库 URL（真机热更后读写的是包内 supabase.js 指向的库——指向生产 = 测试设备变成生产客户端）
+- zip 内 supabase.js 主默认 URL 必须 == 测试库、且必须含 `app_env` 切换标记
+  （2026-10-06 双环境切换后的新语义：包内含两套 anon 配置是设计，隔离载体 = 环境标记 +
+  通道分离；主默认 = 清过数据/无标记设备的默认去向；老式单环境包上设备切环境无效 = 坏包）
 - 版本号在**测试项目的表内**唯一且语义化递增（含已下线；与生产版本序列相互独立，建议与"打算发的生产版本号"对齐）
 - 壳更新：versionName / versionCode 都必须 > 测试项目历史最高（改 `android/app/build.gradle` 后再跑）
 - 发布后回读：版本行 enabled + 签名 URL 下载 + 内容/SHA-256 校验（写成功 ≠ 客户端拿得到）
@@ -30,7 +32,11 @@
 `node scripts/apply-sql.mjs supabase/migration-test-release-channel.sql --project test --apply`
 —— 建 `app_versions` / `app_native_versions` / `app_updates` bucket。**严禁在生产项目执行**（生产写入走 service_role 的 release.mjs，不需要也不应该有这些表以外的通道）。
 
-**配套守卫**：`check-test-schema.mjs` 的安全断言已从「测试库不得有启用版本」改为「**启用包必须指向测试库**」——发布脚本同款校验的兜底，防绕过脚本手工塞行。
+**配套守卫**：`check-test-schema.mjs` 对**最新启用包**校验「主默认 URL == 测试库」+「包内 meta == 行版本」（硬，发布脚本同款校验的兜底，防手工塞行）；「含 app_env 切换标记」为警告项（老式包不判红，重发转正）。
+
+**环境切换与发版的关系**：设备端「长按头像 → 切换环境」决定它查哪张版本表——
+env=test 查测试通道（`release-test.mjs` 发的），env=prod 查生产通道。
+测试通道发的包无标记设备（清过数据）默认也进测试库（包主默认=测试库）。
 
 ## 通道 A：热更新
 

@@ -178,11 +178,14 @@ const missingFunctions = [];
   }
 }
 
-// ---------- 4. 安全断言：启用中的测试发版包必须指向测试库 ----------
-// 测试发版通道（release-test.mjs / build-test-apk --publish）上线后，测试库 app_versions
-// 会有 enabled 行（真机测试包会热更到它们）——危险形态从「表里有启用行」变为
-// 「启用包指向生产库」（真机测试包热更后读写生产数据，铁律一）。
-// 发布脚本对 zip 内容有同款 fail-closed 校验；这里兜底的是「绕过脚本手工塞进库的行」。
+// ---------- 4. 安全断言：启用中的测试发版包（只查最新一条——设备只拿最新） ----------
+// 双环境切换（2026-10-06）后的语义：包内含两套 anon 配置是设计，隔离载体 =
+// 「app_env 标记 + 双发版通道分离」。数据安全的硬判据是：
+//   ① 主默认 URL == 测试库 —— 清过数据/无标记的设备（app_env 缺省）靠它进对的库；
+//   ② 包内 meta == 行版本号 —— 错包防护（写成功 ≠ 客户端拿得到）。
+// 「含 app_env 切换标记」是质量项（老式包设备切不了环境）→ 警告不判红：
+// 当前线上最新 3.5.1 即老式包（本断言上线前发布的），重发即转正。
+// 发布脚本 release-test.mjs 对同两条+标记做 fail-closed 硬校验；这里兜底手工塞行。
 const safetyProblems = [];
 {
   const { data, error } = await client
@@ -190,35 +193,42 @@ const safetyProblems = [];
     .select('version, storage_path')
     .eq('enabled', true)
     .order('released_at', { ascending: false })
-    .limit(3);
+    .limit(1);
   // error（表不存在）属预期：未启用测试发版通道的测试库没有这张表
   if (!error && data && data.length > 0) {
+    const row = data[0];
     const testUrl = env.E2E_SUPABASE_URL;
-    // 生产库地址：本地 .env 或 CI 环境变量（缺席则只做正向校验）
-    const prodUrl = process.env.SUPABASE_URL || loadDotenv(join(ROOT, '.env')).SUPABASE_URL || null;
-    for (const row of data) {
-      try {
-        const { data: signed, error: signErr } = await client.storage
-          .from('app_updates').createSignedUrl(row.storage_path, 60);
-        if (signErr || !signed?.signedUrl) throw new Error(signErr?.message || '签名 URL 生成失败');
-        const dl = await fetch(signed.signedUrl);
-        if (!dl.ok) throw new Error(`HTTP ${dl.status}`);
-        const { writeFileSync, unlinkSync } = await import('node:fs');
-        const { execFileSync } = await import('node:child_process');
-        const { tmpdir } = await import('node:os');
-        const tmpZip = join(tmpdir(), `check-schema-${row.version}.zip`);
-        writeFileSync(tmpZip, Buffer.from(await dl.arrayBuffer()));
-        const sbJs = execFileSync('unzip', ['-p', tmpZip, 'js/supabase.js'],
-          { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
-        unlinkSync(tmpZip);
-        if (!sbJs.includes(testUrl)) {
-          safetyProblems.push(`app_versions 启用包 ${row.version} 的 supabase.js 未指向测试库 —— 真机热更后会打到别的库（铁律一），请下线该版本或重新用 release-test.mjs 发布`);
-        } else if (prodUrl && sbJs.includes(prodUrl)) {
-          safetyProblems.push(`app_versions 启用包 ${row.version} 的 supabase.js 出现生产库 URL（铁律一）——同上处置`);
-        }
-      } catch (e) {
-        safetyProblems.push(`app_versions 启用包 ${row.version} 无法校验（${e.message}）——无法证明它指向测试库，请下线或重发`);
+    try {
+      const { data: signed, error: signErr } = await client.storage
+        .from('app_updates').createSignedUrl(row.storage_path, 60);
+      if (signErr || !signed?.signedUrl) throw new Error(signErr?.message || '签名 URL 生成失败');
+      const dl = await fetch(signed.signedUrl);
+      if (!dl.ok) throw new Error(`HTTP ${dl.status}`);
+      const { writeFileSync, unlinkSync } = await import('node:fs');
+      const { execFileSync } = await import('node:child_process');
+      const { tmpdir } = await import('node:os');
+      const tmpZip = join(tmpdir(), `check-schema-${row.version}.zip`);
+      writeFileSync(tmpZip, Buffer.from(await dl.arrayBuffer()));
+      const idx = execFileSync('unzip', ['-p', tmpZip, 'index.html'],
+        { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+      const sbJs = execFileSync('unzip', ['-p', tmpZip, 'js/supabase.js'],
+        { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+      unlinkSync(tmpZip);
+      // 带分号尾巴：源文件头部注释里有同款正则字面，无分号会被它骗到（实测踩过）
+      const primaryUrl = (sbJs.match(/const SUPABASE_URL = '([^']*)';/) || [])[1];
+      if (primaryUrl !== testUrl) {
+        safetyProblems.push(
+          `app_versions 最新启用包 ${row.version} 的主默认 URL = ${primaryUrl || '(未解析到)'}，应为测试库 —— 无标记设备会连到别的库（铁律一），请下线或用 release-test.mjs 重发`
+        );
       }
+      if (!idx.includes(`<meta name="app-version" content="${row.version}" />`)) {
+        safetyProblems.push(`app_versions 启用包 ${row.version} 的包内 meta 与行版本不一致 —— 客户端下完会判定"还有新版本"循环下载，请重发`);
+      }
+      if (!sbJs.includes('app_env')) {
+        console.log(`  ⚠️  最新启用包 ${row.version} 不含 app_env 切换标记（老式包）：设备上切环境不会生效 —— 用 release-test.mjs 重发可转正`);
+      }
+    } catch (e) {
+      safetyProblems.push(`app_versions 启用包 ${row.version} 无法校验（${e.message}）——无法证明它默认指向测试库，请下线或重发`);
     }
   }
 }
