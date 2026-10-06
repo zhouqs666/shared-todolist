@@ -14,8 +14,9 @@
  *   - 认证：测试项目的 service_role key（E2E_SUPABASE_SERVICE_ROLE_KEY，同生产模式——
  *     release.mjs 用生产 service key）；测试库的表/bucket 由
  *     supabase/migration-test-release-channel.sql 建立（仅测试项目执行）
- *   - 内容护栏（铁律一）：zip 内 supabase.js 必须指向测试库、且不得出现生产库 URL ——
- *     否则真机测试包热更后会读写生产数据（check-test-schema 对启用包做同校验兜底）
+ *   - 内容护栏（铁律一，双环境切换后的新语义）：包内主默认 URL 必须 == 测试库
+ *     （无标记设备的默认去向）+ 必须含 app_env 标记逻辑（切换能力）——
+ *     check-test-schema 对启用包做同校验兜底
  *   - 无审批门/无 required checks/无设备冒烟仪式：测试发版面向业主本人，数据可随写随清
  *
  * 版本序列：独立于生产（各自的表各自唯一），建议与「打算发布的生产版本号」对齐。
@@ -74,6 +75,23 @@ if (fromGit === '') {
 }
 
 // ---------- 凭据（全部来自本地 env 文件，不入库） ----------
+/**
+ * 测试通道内容校验（铁律一，双环境切换后的新语义；发布前与发布后回读共用）：
+ *   ① 主默认 URL == 测试库 —— 无标记设备（app_env 缺省）的默认去向；
+ *   ② 含 app_env 标记逻辑 —— 老式单环境包上设备切换环境无效，属坏包。
+ * 失败抛 Error（调用方决定 exit 还是传播）。
+ */
+function assertTestChannelContent(sbJsSource) {
+  // 带分号尾巴：源文件头部注释里有同款正则字面，无分号会被它骗到（实测踩过）
+  const primaryUrl = (sbJsSource.match(/const SUPABASE_URL = '([^']*)';/) || [])[1];
+  if (primaryUrl !== TEST_URL) {
+    throw new Error(`主默认 URL = ${primaryUrl || '(未解析到)'}，应为测试库 ${TEST_URL}（测试通道的包无标记设备默认进测试库）`);
+  }
+  if (!sbJsSource.includes('app_env')) {
+    throw new Error('supabase.js 不含 app_env 环境标记逻辑（老式单环境包，设备上切换环境不会生效）');
+  }
+}
+
 function loadDotenv(filePath) {
   if (!existsSync(filePath)) return {};
   const out = {};
@@ -224,9 +242,7 @@ async function main() {
     }
     console.log(`  ✓ 回读校验：包内 meta = ${VERSION}`);
 
-    // 7.【铁律一内容护栏，fail-closed】zip 内 supabase.js 必须指向测试库、不得出现生产库。
-    //    这条是测试通道的命门：真机测试包热更后读写的是包里 supabase.js 指向的库——
-    //    指向生产 = 测试设备直接变成生产客户端（check-test-schema 对启用包做同校验兜底）。
+    // 7.【铁律一内容护栏，fail-closed】语义与判据见 assertTestChannelContent（发布后回读共用）
     let inZipSb = '';
     try {
       inZipSb = execFileSync('unzip', ['-p', ZIP_PATH, 'js/supabase.js'],
@@ -235,15 +251,13 @@ async function main() {
       console.error(`✗ 内容护栏校验失败：读不出 zip 内 js/supabase.js（${e.message}）`);
       process.exit(1);
     }
-    if (!inZipSb.includes(TEST_URL)) {
-      console.error(`✗ 内容护栏不过：包内 supabase.js 未指向测试库（${TEST_URL}），拒绝发布。`);
+    try {
+      assertTestChannelContent(inZipSb);
+    } catch (e) {
+      console.error(`✗ 内容护栏不过：${e.message}。拒绝发布。`);
       process.exit(1);
     }
-    if (PROD_URL && inZipSb.includes(PROD_URL)) {
-      console.error(`✗ 内容护栏不过：包内 supabase.js 出现生产库 URL，拒绝发布（铁律一）。`);
-      process.exit(1);
-    }
-    console.log('  ✓ 内容护栏：包内 supabase.js 指向测试库，无生产库 URL');
+    console.log('  ✓ 内容护栏：主默认=测试库 + 含环境切换标记（app_env）');
 
     if (dryRun) {
       console.log('\n🟡 --dry-run：跳过上传。zip 保留在 .release-tmp/ 供检查。');
@@ -293,10 +307,12 @@ async function main() {
     }
     const dlSb = execFileSync('unzip', ['-p', TMP_DL, 'js/supabase.js'],
       { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
-    if (!dlSb.includes(TEST_URL) || (PROD_URL && dlSb.includes(PROD_URL))) {
-      throw new Error('回读校验不过：下载到的包 supabase.js 指向不对（铁律一）');
+    try {
+      assertTestChannelContent(dlSb);
+    } catch (e) {
+      throw new Error(`回读校验不过：下载到的包 ${e.message}`);
     }
-    console.log(`  ✓ 回读校验通过：版本行 enabled、对象可下载（${(dlBuf.length / 1024).toFixed(1)} KB）、内容指向测试库`);
+    console.log(`  ✓ 回读校验通过：版本行 enabled、对象可下载（${(dlBuf.length / 1024).toFixed(1)} KB）、主默认=测试库 + 含切换标记`);
 
     console.log(`
 ✅ 测试通道发布成功！

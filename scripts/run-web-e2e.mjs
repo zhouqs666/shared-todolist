@@ -37,7 +37,7 @@ const BASE = process.env.E2E_BASE || 'http://localhost:3100';
 const PYTHON = process.env.PYTHON || 'python3';
 
 /** 全量清单（顺序刻意稳定：先不写库的完成撤销，再回收站，再离线，再置顶章节，再盲盒，再提醒，图片/相机，最后心里话仪式） */
-const ALL_FILES = ['test_undo_complete', 'test_trash', 'test_offline', 'test_pin', 'test_blindbox', 'test_reminder', 'test_camera_image', 'test_note_ceremony'];
+const ALL_FILES = ['test_undo_complete', 'test_trash', 'test_offline', 'test_pin', 'test_blindbox', 'test_reminder', 'test_camera_image', 'test_note_ceremony', 'test_env_switch'];
 
 const argv = process.argv.slice(2);
 const hasFlag = (f) => argv.includes(f);

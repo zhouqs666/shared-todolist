@@ -25,6 +25,9 @@ from e2e_common import (
 )
 
 BASE = resolve_base()
+# 【2026-10-06 双环境切换】队列键按环境分（public/js/offline-queue.js）：
+# 本用例固定跑测试服务器 3100 = 测试环境 → 键带 @test 后缀（生产环境沿用历史键不带后缀）。
+# ⚠️ 下面页面内表达式里的是**浏览器端**字符串字面量（Python 侧 QUEUE_KEY 常量够不着 evaluate 内部）。
 TEST_USER, TEST_PASSWORD = load_test_creds()
 errors = []
 check, results = make_checker()
@@ -42,7 +45,7 @@ with sync_playwright() as p:
     check("登录成功进入主页", login(page, BASE, TEST_USER, TEST_PASSWORD), page.url)
 
     # 清空离线队列（隔离上次残留），不影响登录态
-    page.evaluate("() => localStorage.removeItem('youai_offline_queue')")
+    page.evaluate("() => localStorage.removeItem('youai_offline_queue@test')")
 
     test_text = 'E2E-测试-离线待办'
 
@@ -77,7 +80,7 @@ with sync_playwright() as p:
     check("带 pending 态", page.locator(f'.todo--pending:has-text("{test_text}")').count() >= 1)
     check("显示「待同步」小标", page.locator('.todo__pending-badge', has_text='待同步').count() >= 1)
     check("已入队", page.evaluate(
-        "() => JSON.parse(localStorage.getItem('youai_offline_queue') || '[]').length === 1"))
+        "() => JSON.parse(localStorage.getItem('youai_offline_queue@test') || '[]').length === 1"))
 
     print("== 4. 恢复网络 → 自动补发 ==", flush=True)
     context.set_offline(False)
@@ -96,7 +99,7 @@ with sync_playwright() as p:
     check("「待同步」小标已移除", page.locator('.todo__pending-badge', has_text='待同步').count() == 0)
     check("队列已清空", wait_until(
         page,
-        lambda: page.evaluate("() => JSON.parse(localStorage.getItem('youai_offline_queue') || '[]').length === 0"),
+        lambda: page.evaluate("() => JSON.parse(localStorage.getItem('youai_offline_queue@test') || '[]').length === 0"),
         desc="离线队列清空",
     ))
 
@@ -142,9 +145,9 @@ with sync_playwright() as p:
     test_text2 = 'E2E-测试-离线冷启动'
     # 模拟上次离线会话残留的队列项（不入列表，只入队），不依赖 UI
     page.evaluate("""(text) => {
-      const q = JSON.parse(localStorage.getItem('youai_offline_queue') || '[]');
+      const q = JSON.parse(localStorage.getItem('youai_offline_queue@test') || '[]');
       q.push({ localId: 'offline-cold-' + Date.now(), text: text, rarity: 'common', ts: Date.now() });
-      localStorage.setItem('youai_offline_queue', JSON.stringify(q));
+      localStorage.setItem('youai_offline_queue@test', JSON.stringify(q));
     }""", test_text2)
     page.reload(wait_until='domcontentloaded')
     page.wait_for_selector('.topbar__avatar', timeout=30000)
@@ -152,7 +155,7 @@ with sync_playwright() as p:
     check("冷启动自动补发并显示", page.locator('.todo', has_text=test_text2).count() >= 1)
     check("冷启动后队列清空", wait_until(
         page,
-        lambda: page.evaluate("() => JSON.parse(localStorage.getItem('youai_offline_queue') || '[]').length === 0"),
+        lambda: page.evaluate("() => JSON.parse(localStorage.getItem('youai_offline_queue@test') || '[]').length === 0"),
         desc="冷启动补发后队列清空",
     ))
     # 清理冷启动场景的测试数据
