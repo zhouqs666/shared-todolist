@@ -86,28 +86,36 @@ test.describe('待办管理', () => {
   });
 
   test('统计数字正确（全部 / 进行中 / 已完成）', async ({ page }) => {
-    // 【2026-10-05 改增量断言】原实现断言绝对计数（2/1/1），前提是测试库纯净。
-    // 但测试库现在**合法承载真机人工测试数据**（业主用测试包在真机验证功能，
-    // 手工添加的待办不带 E2E 标记，cleanupE2EData 不会清它们）—— 共享库的
-    // 绝对计数必然被打破（实测 CI 连红 6 次，总数读到 25）。改为增量断言：
-    // 先读基线，断言 seed 后的**变化量** —— 与库里有几条人手数据无关。
-    const dashboard0 = new DashboardPage(page);
-    const readStat = async (stat) =>
-      Number((await stat.locator('.stat-value').textContent()) || '0');
-    const base = {
-      total: await readStat(dashboard0.statTotal),
-      active: await readStat(dashboard0.statActive),
-      completed: await readStat(dashboard0.statCompleted),
-    };
-
+    // 【2026-10-06 第二次修正】增量计数（基线 +2）仍有**窗口竞态**：测试库现在合法承载
+    // 业主真机人工测试（并行增删），读基线与断言之间数字就会动（实测期望 26 实得 25，
+    // 重试 3 次全红——窗口内业主正在操作）。计数断言在共享并发库上无解，改为**并发免疫**
+    // 的不变量：
+    //   ① 三数自洽：total == active + completed（同一渲染快照内读取——这正是
+    //      「统计数字正确」的实质：三个数来自同一份数据、不互相矛盾）
+    //   ② seed 数据可见：两条种子待办各自出现在列表（DOM 定位，与计数无关）
     await seedTodo(client, { userId, text: '统计-进行中', completed: false });
     await seedTodo(client, { userId, text: '统计-已完成', completed: true });
     await page.reload();
     await expect(page.getByTestId('dashboard')).toBeVisible();
 
     const dashboard = new DashboardPage(page);
-    await expect(dashboard.statTotal.locator('.stat-value')).toHaveText(String(base.total + 2));
-    await expect(dashboard.statActive.locator('.stat-value')).toHaveText(String(base.active + 1));
-    await expect(dashboard.statCompleted.locator('.stat-value')).toHaveText(String(base.completed + 1));
+    const readStat = async (stat) =>
+      Number((await stat.locator('.stat-value').textContent()) || '0');
+    // expect.poll 保留「等渲染就绪」的重试语义（老写法 toHaveText 自带重试，直接
+    // textContent 一次读会读到骨架期的 0——实测踩中）。条件 = 三数自洽且总数 > 0：
+    // 并发人工增删不影响同一渲染快照内的等式。
+    await expect.poll(async () => {
+      const total = await readStat(dashboard.statTotal);
+      const active = await readStat(dashboard.statActive);
+      const completed = await readStat(dashboard.statCompleted);
+      return total === active + completed && total > 0;
+    }, { timeout: 15000, intervals: [250], message: '统计三数自洽（total == active+completed）且总数>0' })
+      .toBe(true);
+    await expect(
+      dashboard.todoList.getByTestId('todo-text').filter({ hasText: '统计-进行中' })
+    ).toBeVisible();
+    await expect(
+      dashboard.todoList.getByTestId('todo-text').filter({ hasText: '统计-已完成' })
+    ).toBeVisible();
   });
 });
