@@ -345,8 +345,10 @@ cron 无人值守形态要格外小心（先只报告不删一段，真删时告
 - **打包**：Capacitor → Android APK（`com.love.todo`）；**PWA**：`manifest.webmanifest` + `sw.js`
   （仅浏览器环境生效，原生 bypass；版本号见文件内 `VERSION` 常量）
 - **发布通道**：A 热更新（`release.mjs` / `release-web.yml` 审批门）+ B APK（`release-apk.mjs` /
-  `release-apk.yml` 审批门）+ App 内自更新（`apk-update.js` + 自研 `ApkInstallerPlugin`）；回读校验
-  `verify-release.mjs` / `verify-apk-release.mjs`（只读、可当 CI 门禁）；`release-web.yml` publish 后顺带跑
+  `release-apk.yml` 审批门）+ App 内自更新（`apk-update.js` + 自研 `ApkInstallerPlugin`）+
+  测试通道（`release-test.mjs` 热更 / `build-test-apk.mjs --publish` 壳更新，只发【测试项目】——
+  真机测试包自动收到，不经审批门，内容护栏强制包内 supabase.js 指向测试库；详见 release-runbook）；
+  回读校验 `verify-release.mjs` / `verify-apk-release.mjs`（只读、可当 CI 门禁）；`release-web.yml` publish 后顺带跑
   `dora-metrics.mjs` 写进 Run Summary（`continue-on-error: true`——观测不该把已成功的发布变成红灯）
 - **Capacitor 插件（2026-10-03 核实）**：`@capacitor/app`（`App.getInfo()`）/ `LocalNotifications` /
   `SplashScreen` / `@capgo/capacitor-updater`（热更）/ 自研 `ApkInstallerPlugin`；**状态栏无独立插件**

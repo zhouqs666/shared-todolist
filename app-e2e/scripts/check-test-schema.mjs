@@ -178,20 +178,48 @@ const missingFunctions = [];
   }
 }
 
-// ---------- 4. 安全断言：测试库不得存在「启用」的已发布版本 ----------
-// 即使表是被手工建的，只要里面有启用行，App 就可能下载生产 bundle（铁律一）。
+// ---------- 4. 安全断言：启用中的测试发版包必须指向测试库 ----------
+// 测试发版通道（release-test.mjs / build-test-apk --publish）上线后，测试库 app_versions
+// 会有 enabled 行（真机测试包会热更到它们）——危险形态从「表里有启用行」变为
+// 「启用包指向生产库」（真机测试包热更后读写生产数据，铁律一）。
+// 发布脚本对 zip 内容有同款 fail-closed 校验；这里兜底的是「绕过脚本手工塞进库的行」。
 const safetyProblems = [];
 {
   const { data, error } = await client
     .from('app_versions')
-    .select('version')
+    .select('version, storage_path')
     .eq('enabled', true)
-    .limit(1);
-  // error（表不存在）属预期：测试库刻意不建热更新表，忽略
+    .order('released_at', { ascending: false })
+    .limit(3);
+  // error（表不存在）属预期：未启用测试发版通道的测试库没有这张表
   if (!error && data && data.length > 0) {
-    safetyProblems.push(
-      `app_versions 存在启用版本（如 ${data[0].version}）：App 冷启动可能下载已发布 bundle 覆盖测试配置，导致 E2E 打到生产数据`
-    );
+    const testUrl = env.E2E_SUPABASE_URL;
+    // 生产库地址：本地 .env 或 CI 环境变量（缺席则只做正向校验）
+    const prodUrl = process.env.SUPABASE_URL || loadDotenv(join(ROOT, '.env')).SUPABASE_URL || null;
+    for (const row of data) {
+      try {
+        const { data: signed, error: signErr } = await client.storage
+          .from('app_updates').createSignedUrl(row.storage_path, 60);
+        if (signErr || !signed?.signedUrl) throw new Error(signErr?.message || '签名 URL 生成失败');
+        const dl = await fetch(signed.signedUrl);
+        if (!dl.ok) throw new Error(`HTTP ${dl.status}`);
+        const { writeFileSync, unlinkSync } = await import('node:fs');
+        const { execFileSync } = await import('node:child_process');
+        const { tmpdir } = await import('node:os');
+        const tmpZip = join(tmpdir(), `check-schema-${row.version}.zip`);
+        writeFileSync(tmpZip, Buffer.from(await dl.arrayBuffer()));
+        const sbJs = execFileSync('unzip', ['-p', tmpZip, 'js/supabase.js'],
+          { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+        unlinkSync(tmpZip);
+        if (!sbJs.includes(testUrl)) {
+          safetyProblems.push(`app_versions 启用包 ${row.version} 的 supabase.js 未指向测试库 —— 真机热更后会打到别的库（铁律一），请下线该版本或重新用 release-test.mjs 发布`);
+        } else if (prodUrl && sbJs.includes(prodUrl)) {
+          safetyProblems.push(`app_versions 启用包 ${row.version} 的 supabase.js 出现生产库 URL（铁律一）——同上处置`);
+        }
+      } catch (e) {
+        safetyProblems.push(`app_versions 启用包 ${row.version} 无法校验（${e.message}）——无法证明它指向测试库，请下线或重发`);
+      }
+    }
   }
 }
 
