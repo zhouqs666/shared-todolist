@@ -3,14 +3,16 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>开出卡片工作台 · 第一册 12 张 + 通知模式示例卡</title>
+<title>开出卡片工作台 · 两册 24 张 + 通知模式示例卡</title>
 <!--
   开出卡片原型（技术方案见同目录 reveal-card-tech-design.md）
   · 自包含零依赖，浏览器/file:// 直接打开；无任何音效（决策 D4）
   · 结构 = 通用卡背 + 档位样式 + 贴纸专属内容卡（D10）
-  · 本页当前：通知模式示例卡（D7-②，最后一个待确认设计件）——业主确认后参数写进
-    TIERS.notify 随批次 3 落地；第一册 12 张专属内容卡已全部定稿
-  · 贴纸名称/短句/配色取自 blindbox.js RARITY_META 真实数据
+  · 第一册 12 张已定稿（2026-10-05，批次 3 落地）；通知模式参数已随 TIERS.notify 落地
+  · 批次 4（2026-10-06）：新增第二册「我们的故事」12 张（SETS2）——设计流程同第一册：
+    本页逐张确认后由 scripts/extract-reveal-card-story.mjs 机械提取进 reveal-card-data.js
+  · 贴纸名称/短句/配色：第一册取自 blindbox.js RARITY_META，第二册取自
+    sticker-series-story.js STORY_META（提取脚本断言两者逐字一致——单一来源约束）
 -->
 <style>
   :root{
@@ -47,11 +49,11 @@
   .pk-row{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   .pk-row + .pk-row{ margin-top:6px; }
   .pk-label{ font-size:11px; color:#b3a294; flex:none; }
-  .pk-tier, .pk-chip{
+  .pk-tier, .pk-chip, .pk-series{
     font-size:12px; padding:5px 11px; border-radius:999px; cursor:pointer;
     border:1px solid #e3d5c8; background:#fff; color:#6b574a;
   }
-  .pk-tier.active{ background:#c2527e; border-color:#c2527e; color:#fff; font-weight:700; }
+  .pk-tier.active, .pk-series.active{ background:#c2527e; border-color:#c2527e; color:#fff; font-weight:700; }
   .pk-chip.active{ background:#fdeef3; border-color:#e087ab; color:#b25679; font-weight:700; }
   .pk-note{ font-size:10.5px; color:#c9bbae; margin-top:5px; }
 
@@ -436,7 +438,7 @@
 </head>
 <body>
   <header class="lab-bar">
-    <div class="lab-title"><span class="lab-no">④</span>第一册 12 张已定稿 ＋ 通知模式示例卡 · 待确认</div>
+    <div class="lab-title"><span class="lab-no">④</span>第一册 12 张已定稿 ＋ 第二册 12 张 · 批次 4 设计中</div>
     <div class="lab-actions">
       <button id="btnGyro" class="hidden">启用陀螺仪</button>
       <button id="btnFx" aria-pressed="true">特效：开</button>
@@ -445,6 +447,11 @@
   </header>
 
   <div id="picker">
+    <div class="pk-row">
+      <span class="pk-label">册</span>
+      <button class="pk-series active" data-series="v1">第一册 · 怦然心动</button>
+      <button class="pk-series" data-series="story">第二册 · 我们的故事</button>
+    </div>
     <div class="pk-row">
       <span class="pk-label">档位</span>
       <button class="pk-tier" data-tier="epic">第一册 · 史诗款</button>
@@ -474,9 +481,9 @@
   <main id="stage">
     <div id="trigger">
       <div class="lab-note">
-        <b>本批确认项（通知模式示例卡 · 最后一个设计件）</b>：无悬念段 · 无爆发 · 无 NEW 角标 · 卡片淡入即 idle<br/>
-        正面右上「ta 开出的」角标（D7）· 翻面档案铭牌人称行 = 开出方称呼（「大宝贝 开出」）· idle 流光/星芒/翻面保留<br/>
-        选「通知模式」后开卡；档位按钮 = 对方开出不同档位时通知卡的档位样式 · 桌面移动鼠标 = 流光跟手
+        <b>批次 4 · 第二册「我们的故事」12 张专属内容卡</b>：先选册，再选档位逐张开卡确认<br/>
+        第一册 12 张已定稿（本页保留可复看）· 通知模式参数已随批次 3 落地 · 桌面移动鼠标 = 流光跟手<br/>
+        场景配色跟随贴纸意象氛围（第一册水滴卡先例），档位识别由固定卡框承载 · 特效关 = 静态精卡
       </div>
       <button id="btnStart">🎴 开一次卡</button>
       <div class="lab-decision">通用卡背（案C）+ 档位样式 + 贴纸专属内容卡（D10）· 无音效（D4）· 保留震动</div>
@@ -1041,9 +1048,6 @@
           '<circle cx="210" cy="84" r="110" fill="url(#sc11b)"/>'+
           '<path d="M52 0 L112 0 L-10 200 Z" fill="#ffffff" opacity=".18"/>'+
           '<path d="M118 0 L158 0 L36 182 Z" fill="#ffffff" opacity=".11"/>'+
-          '<path d="M36 200 C90 186 210 186 264 200" stroke="#f9a8d4" stroke-width="3" opacity=".3" fill="none" stroke-linecap="round"/>'+
-          '<path d="M36 208 C90 194 210 194 264 208" stroke="#dbeafe" stroke-width="3" opacity=".28" fill="none" stroke-linecap="round"/>'+
-          '<path d="M36 216 C90 202 210 202 264 216" stroke="#fde68a" stroke-width="3" opacity=".3" fill="none" stroke-linecap="round"/>'+
           '<g stroke="#ffffff" stroke-linecap="round" opacity=".7"><path d="M120 96v12M114 102h12"/></g>'+
           '<g stroke="#f2dfa8" stroke-linecap="round" opacity=".7"><path d="M232 154v9M227.5 158.5h9"/></g>'+
           '<g stroke="#ffffff" stroke-linecap="round" opacity=".6"><path d="M70 148v8M66 152h8"/></g>'+
@@ -1130,6 +1134,633 @@
     ]
   };
 
+  /* ================================================================
+     数据：第二册「我们的故事」贴纸专属内容卡（批次 4 · D10）
+     名称/短句 = sticker-series-story.js STORY_META 逐字一致（提取脚本断言）；
+     场景配色跟随贴纸意象氛围（第一册「水滴」卡先例），档位识别由卡框承载；
+     渐变 id 全文档唯一：场景 ss{n}{a-d} / 主视觉 sh{n}{a-c}，与第一册 sc、h 两族、
+     图鉴格子 story{n}* 均不冲突
+     ================================================================ */
+  var SETS2 = {
+    rare: [
+      { name:'便当', av:'dabaobei', by:'大宝贝', no:'01', flavor:'装的不只是饭，是怕它凉掉的用心', meta:'我们的故事 · 图鉴 1/12', pct:'8.3%',
+        scene:'<svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
+          '<defs>'+
+          '<linearGradient id="ss1a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fef5f4"/><stop offset="1" stop-color="#f8e8e9"/></linearGradient>'+
+          '<radialGradient id="ss1b" cx=".28" cy=".18" r=".55"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="ss1c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef6e4"/><stop offset="1" stop-color="#dfeecb"/></linearGradient>'+
+          '<linearGradient id="ss1d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffdfd" stop-opacity="0"/><stop offset="1" stop-color="#fffdfd" stop-opacity=".94"/></linearGradient>'+
+          '</defs>'+
+          '<rect width="300" height="420" fill="url(#ss1a)"/>'+
+          '<circle cx="84" cy="76" r="130" fill="url(#ss1b)"/>'+
+          '<path d="M40 0 L110 0 L-10 190 Z" fill="#ffffff" opacity=".22"/>'+
+          '<path d="M95 0 L140 0 L30 160 Z" fill="#ffffff" opacity=".14"/>'+
+          '<g stroke="#ffffff" stroke-width="4" stroke-linecap="round" fill="none" opacity=".4">'+
+          '<path d="M52 250c-7-12 7-19 0-31"/>'+
+          '<path d="M246 244c-6-10 6-16 0-26"/></g>'+
+          '<ellipse cx="150" cy="424" rx="240" ry="86" fill="url(#ss1c)"/>'+
+          '<ellipse cx="48" cy="436" rx="150" ry="62" fill="#d9ebc4" opacity=".8"/>'+
+          '<g transform="rotate(-5 150 386)">'+
+          '<rect x="66" y="362" width="172" height="50" rx="8" fill="#fff9ef" opacity=".92"/>'+
+          '<g stroke="#f3d9c2" stroke-width="2" opacity=".7">'+
+          '<path d="M96 362v50M130 362v50M164 362v50M198 362v50"/>'+
+          '<path d="M66 380h172M66 396h172"/></g></g>'+
+          '<g stroke="#b9d9a8" stroke-width="3" stroke-linecap="round" fill="none" opacity=".85">'+
+          '<path d="M52 396c-2-12 2-20 8-26"/>'+
+          '<path d="M64 400c1-10 6-16 12-19"/>'+
+          '<path d="M238 400c2-11-1-19-7-25"/>'+
+          '<path d="M252 404c0-9 4-15 10-18"/></g>'+
+          '<g fill="#ffffff" opacity=".6"><circle cx="222" cy="120" r="2.4"/><circle cx="242" cy="182" r="1.8"/><circle cx="66" cy="222" r="2"/><circle cx="190" cy="88" r="1.6"/></g>'+
+          '<g fill="#f9a8c4" opacity=".55"><circle cx="252" cy="232" r="1.8"/><circle cx="46" cy="152" r="1.6"/></g>'+
+          '<rect y="326" width="300" height="94" fill="url(#ss1d)"/></svg>',
+        hero:'<svg viewBox="0 0 120 120" aria-hidden="true">'+
+          '<defs>'+
+          '<radialGradient id="sh1c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="sh1a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3d3ae"/><stop offset="1" stop-color="#cf9668"/></linearGradient>'+
+          '<linearGradient id="sh1b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbcfe8"/><stop offset="1" stop-color="#f472a0"/></linearGradient>'+
+          '</defs>'+
+          '<circle cx="60" cy="60" r="52" fill="url(#sh1c)" opacity=".6"/>'+
+          '<g stroke="#ffffff" stroke-width="2.8" stroke-linecap="round" fill="none" opacity=".85">'+
+          '<path d="M50 36 C45 30 53 25 48 17.5"/>'+
+          '<path d="M73 34 C78 28 70 23 75 15.5"/></g>'+
+          '<path d="M61 32 C58 28.6 62.4 26.4 60 22.6" stroke="#f6c6d8" stroke-width="1.8" stroke-linecap="round" fill="none" opacity=".8"/>'+
+          '<rect x="26" y="50" width="68" height="44" rx="8" fill="url(#sh1a)"/>'+
+          '<rect x="26" y="50" width="68" height="9" rx="4.5" fill="#a86f45" opacity=".42"/>'+
+          '<rect x="31" y="57" width="10" height="33" rx="5" fill="#ffffff" opacity=".25"/>'+
+          '<path d="M42 88c6-1.4 13-1.4 19 0" stroke="#a86f45" stroke-width="1.5" opacity=".35" stroke-linecap="round" fill="none"/>'+
+          '<path d="M76 89c4-1 8-1 12 0" stroke="#a86f45" stroke-width="1.2" opacity=".3" stroke-linecap="round" fill="none"/>'+
+          '<path d="M60 50v44" stroke="url(#sh1b)" stroke-width="6.6"/>'+
+          '<path d="M26 71h68" stroke="url(#sh1b)" stroke-width="6.6"/>'+
+          '<path d="M60 52.5v39" stroke="#ffffff" stroke-width="1" stroke-dasharray="2.4 2.6" opacity=".75" fill="none"/>'+
+          '<path d="M28 71h64" stroke="#ffffff" stroke-width="1" stroke-dasharray="2.4 2.6" opacity=".75" fill="none"/>'+
+          '<path d="M51 42c-2.8 5.4-5.8 9-10 12.2" stroke="#f06fa0" stroke-width="2.3" stroke-linecap="round" fill="none" opacity=".95"/>'+
+          '<path d="M69 42c2.8 5.4 5.8 9 10 12.2" stroke="#f06fa0" stroke-width="2.3" stroke-linecap="round" fill="none" opacity=".95"/>'+
+          '<path d="M60 44 C50.5 35.5 40 35.5 35.5 42.5 C42 47 53 47 60 44 Z" fill="url(#sh1b)"/>'+
+          '<path d="M60 44 C69.5 35.5 80 35.5 84.5 42.5 C78 47 67 47 60 44 Z" fill="url(#sh1b)"/>'+
+          '<circle cx="60" cy="43" r="6" fill="#ec5f93"/>'+
+          '<circle cx="58.2" cy="41.2" r="1.7" fill="#ffffff" opacity=".78"/>'+
+          '<path d="M0-4Q1-1 4 0 1 1 0 4-1 1-4 0-1-1 0-4Z" fill="#fde68a" transform="translate(99 27)"/>'+
+          '<path d="M0-3Q.8-.8 3 0 .8.8 0 3-.8.8-3 0-.8-.8 0-3Z" fill="#f9a8d4" opacity=".85" transform="translate(22 84)"/>'+
+          '<circle cx="99" cy="70" r="1.6" fill="#ffffff" opacity=".8"/></svg>' },
+      { name:'满城', av:'xiaobaobao', by:'小宝宝', no:'02', flavor:'常去的地方写不下，干脆写了整座城', meta:'我们的故事 · 图鉴 2/12', pct:'16.7%',
+        scene:'<svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
+          '<defs>'+
+          '<linearGradient id="ss2a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3f8fb"/><stop offset="1" stop-color="#e6eef5"/></linearGradient>'+
+          '<linearGradient id="ss2c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dcebf3"/><stop offset="1" stop-color="#c9e0ee"/></linearGradient>'+
+          '<linearGradient id="ss2d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffdfd" stop-opacity="0"/><stop offset="1" stop-color="#fffdfd" stop-opacity=".94"/></linearGradient>'+
+          '</defs>'+
+          '<rect width="300" height="420" fill="url(#ss2a)"/>'+
+          '<circle cx="228" cy="80" r="110" fill="#ffffff" opacity=".5"/>'+
+          '<path d="M70 0 L126 0 L-6 205 Z" fill="#ffffff" opacity=".18"/>'+
+          '<path d="M128 0 L168 0 L40 180 Z" fill="#ffffff" opacity=".11"/>'+
+          '<g fill="#ffffff"><ellipse cx="90" cy="252" rx="80" ry="14" opacity=".55"/><ellipse cx="216" cy="286" rx="76" ry="12" opacity=".45"/><ellipse cx="146" cy="222" rx="58" ry="10" opacity=".4"/></g>'+
+          '<path d="M-8 306 C60 266 122 306 172 268 C222 232 262 256 308 224" stroke="#f472a0" stroke-width="3" stroke-dasharray="5.5 6.5" stroke-linecap="round" fill="none" opacity=".55"/>'+
+          '<path d="M170 276a4.6 4.6 0 0 1 9.2 0c0 3.5-4.6 7.3-4.6 7.3s-4.6-3.8-4.6-7.3z" fill="#e2548c" opacity=".8"/>'+
+          '<circle cx="174.6" cy="275.7" r="1.5" fill="#fff"/>'+
+          '<path d="M56 296a3.6 3.6 0 0 1 7.2 0c0 2.7-3.6 5.7-3.6 5.7s-3.6-3-3.6-5.7z" fill="#f9a8c4" opacity=".8"/>'+
+          '<ellipse cx="150" cy="426" rx="246" ry="86" fill="url(#ss2c)"/>'+
+          '<ellipse cx="244" cy="438" rx="150" ry="60" fill="#bcd7ec" opacity=".75"/>'+
+          '<g stroke="#a9cde0" stroke-width="2.6" fill="none" opacity=".55">'+
+          '<ellipse cx="84" cy="392" rx="44" ry="9"/>'+
+          '<ellipse cx="84" cy="392" rx="24" ry="4.6"/>'+
+          '<ellipse cx="216" cy="404" rx="34" ry="7"/>'+
+          '<ellipse cx="216" cy="404" rx="17" ry="3.4"/></g>'+
+          '<g fill="#bae6fd"><circle cx="150" cy="180" r="2.4" opacity=".9"/><circle cx="136" cy="196" r="1.6" opacity=".7"/><circle cx="163" cy="192" r="1.4" opacity=".7"/></g>'+
+          '<g fill="#ffffff" opacity=".7"><circle cx="64" cy="150" r="2.2"/><circle cx="238" cy="160" r="1.8"/><circle cx="190" cy="120" r="1.6"/></g>'+
+          '<rect y="326" width="300" height="94" fill="url(#ss2d)"/></svg>',
+        hero:'<svg viewBox="0 0 120 120" aria-hidden="true">'+
+          '<defs>'+
+          '<radialGradient id="sh2c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="sh2a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dbeafe"/><stop offset="1" stop-color="#bfd7f8"/></linearGradient>'+
+          '</defs>'+
+          '<circle cx="60" cy="60" r="52" fill="url(#sh2c)" opacity=".6"/>'+
+          '<path d="M14 44 L38 38 L62 44 L86 38 L106 44 L106 84 L82 90 L58 84 L34 90 L14 84 Z" fill="url(#sh2a)"/>'+
+          '<path d="M38 38 L34 90 L14 84 L14 44 Z" fill="#ffffff" opacity=".28"/>'+
+          '<path d="M86 38 L82 90 L106 84 L106 44 Z" fill="#ffffff" opacity=".22"/>'+
+          '<path d="M38 38 L34 90 M62 44 L58 84 M86 38 L82 90" stroke="#93c5fd" stroke-width="1.6" opacity=".7"/>'+
+          '<path d="M36 64 L34 88 L38 89.5 L40 63.5 Z" fill="#7fb3e8" opacity=".28"/>'+
+          '<path d="M84 39.5 L80 90 L82 90 L86 39.5 Z" fill="#7fb3e8" opacity=".28"/>'+
+          '<path d="M22 52 L56 47 M30 78 L68 73" stroke="#ffffff" stroke-width="1.4" opacity=".6" stroke-linecap="round"/>'+
+          '<path d="M20 76 C36 62 52 72 66 58 C74 50 80 48 87 44" stroke="#f472a0" stroke-width="2.2" stroke-dasharray="3.4 3.6" stroke-linecap="round" fill="none"/>'+
+          '<path d="M81.5 32a6.8 6.8 0 0 1 13.6 0c0 5.1-6.8 10.6-6.8 10.6s-6.8-5.5-6.8-10.6z" fill="#e2548c"/>'+
+          '<circle cx="88.3" cy="31.7" r="2.1" fill="#fff"/>'+
+          '<path d="M25.5 54a4.8 4.8 0 0 1 9.6 0c0 3.6-4.8 7.5-4.8 7.5s-4.8-3.9-4.8-7.5z" fill="#f9a8c4"/>'+
+          '<circle cx="30.3" cy="53.8" r="1.5" fill="#fff"/>'+
+          '<ellipse cx="46" cy="43" rx="3" ry="5" fill="#ffffff" opacity=".5" transform="rotate(-14 46 43)"/>'+
+          '<path d="M0-4Q1-1 4 0 1 1 0 4-1 1-4 0-1-1 0-4Z" fill="#fda4af" transform="translate(102 22)"/>'+
+          '<path d="M0-2.6Q.7-.7 2.6 0 .7.7 0 2.6-.7.7-2.6 0-.7-.7 0-2.6Z" fill="#bae6fd" opacity=".9" transform="translate(17 30)"/>'+
+          '<circle cx="101" cy="72" r="1.6" fill="#ffffff" opacity=".8"/></svg>' },
+      { name:'衣撑', av:'dabaobei', by:'大宝贝', no:'03', flavor:'你那些老派的词，说出来像一首小诗', meta:'我们的故事 · 图鉴 3/12', pct:'25%',
+        scene:'<svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
+          '<defs>'+
+          '<linearGradient id="ss3a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdf4f8"/><stop offset="1" stop-color="#f8e5ee"/></linearGradient>'+
+          '<radialGradient id="ss3b" cx=".3" cy=".16" r=".55"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="ss3c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef6e4"/><stop offset="1" stop-color="#dfeecb"/></linearGradient>'+
+          '<linearGradient id="ss3d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffdfd" stop-opacity="0"/><stop offset="1" stop-color="#fffdfd" stop-opacity=".94"/></linearGradient>'+
+          '</defs>'+
+          '<rect width="300" height="420" fill="url(#ss3a)"/>'+
+          '<circle cx="86" cy="72" r="130" fill="url(#ss3b)"/>'+
+          '<path d="M46 0 L114 0 L-8 192 Z" fill="#ffffff" opacity=".2"/>'+
+          '<path d="M100 0 L146 0 L34 164 Z" fill="#ffffff" opacity=".13"/>'+
+          '<path d="M-10 116 Q150 134 310 116" stroke="#d9a5b8" stroke-width="3.4" fill="none" stroke-linecap="round" opacity=".7"/>'+
+          '<rect x="58" y="108" width="7" height="14" rx="3" fill="#c08653" opacity=".85"/>'+
+          '<rect x="234" y="104" width="7" height="14" rx="3" fill="#c08653" opacity=".85"/>'+
+          '<g transform="rotate(-7 84 142)">'+
+          '<rect x="72" y="126" width="24" height="30" rx="5" fill="#fff7ed" opacity=".95"/>'+
+          '<path d="M72 136h24" stroke="#f3b9cd" stroke-width="2.4" opacity=".8"/>'+
+          '<path d="M78 156l-4 8 9-5z" fill="#fff7ed" opacity=".95"/></g>'+
+          '<ellipse cx="150" cy="424" rx="244" ry="86" fill="url(#ss3c)"/>'+
+          '<ellipse cx="52" cy="436" rx="150" ry="62" fill="#d9ebc4" opacity=".8"/>'+
+          '<g stroke="#b9d9a8" stroke-width="3" stroke-linecap="round" fill="none" opacity=".85">'+
+          '<path d="M52 396c-2-12 2-20 8-26"/>'+
+          '<path d="M64 400c1-10 6-16 12-19"/>'+
+          '<path d="M238 400c2-11-1-19-7-25"/>'+
+          '<path d="M252 404c0-9 4-15 10-18"/></g>'+
+          '<g fill="#ffffff" opacity=".6"><circle cx="226" cy="180" r="2.2"/><circle cx="58" cy="210" r="2"/><circle cx="252" cy="250" r="1.6"/></g>'+
+          '<g fill="#f9a8c4" opacity=".55"><circle cx="244" cy="140" r="1.8"/><circle cx="46" cy="260" r="1.6"/></g>'+
+          '<rect y="326" width="300" height="94" fill="url(#ss3d)"/></svg>',
+        hero:'<svg viewBox="0 0 120 120" aria-hidden="true">'+
+          '<defs>'+
+          '<radialGradient id="sh3c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="sh3a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e0b184"/><stop offset="1" stop-color="#c08653"/></linearGradient>'+
+          '<linearGradient id="sh3b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbcfe8"/><stop offset="1" stop-color="#f472a0"/></linearGradient>'+
+          '</defs>'+
+          '<circle cx="60" cy="60" r="52" fill="url(#sh3c)" opacity=".6"/>'+
+          '<g transform="translate(0 8)">'+
+          '<path d="M60 34c0-4.4-2.6-6.6-6-6.6a6 6 0 1 1 6-6" stroke="#a86f45" stroke-width="3.4" stroke-linecap="round" fill="none"/>'+
+          '<path d="M60 34.4c-.9 4-3.4 5.8-8.2 7.6L26 55.8c-4.6 2-3.8 8.6 2.2 8.6h63.6c6 0 6.8-6.6 2.2-8.6L68.2 42c-4.8-1.8-7.3-3.6-8.2-7.6z" fill="url(#sh3a)"/>'+
+          '<path d="M60 38.5c-1 3-3 4.4-6.8 5.8L33 55" stroke="#ffffff" stroke-width="2" opacity=".45" stroke-linecap="round" fill="none"/>'+
+          '<ellipse cx="38" cy="52" rx="2.4" ry="4" fill="#ffffff" opacity=".5" transform="rotate(-24 38 52)"/>'+
+          '<rect x="26" y="66" width="68" height="4.8" rx="2.4" fill="#c08653"/>'+
+          '<rect x="26" y="66" width="68" height="1.8" rx=".9" fill="#e0b184" opacity=".8"/>'+
+          '<path d="M34 68.5h20" stroke="#a86f45" stroke-width="1" opacity=".4" stroke-linecap="round"/>'+
+          '<rect x="66" y="8" width="36" height="25" rx="9.5" fill="url(#sh3b)"/>'+
+          '<path d="M74 31.5l-5 8.5 11.5-6.5z" fill="#f472a0"/>'+
+          '<path d="M79 17.5c1-1.7 3.7-1.5 4.4.5.7-2 3.4-2.2 4.4-.5.9 1.6-.5 3.5-4.4 6.1-3.9-2.6-5.3-4.5-4.4-6.1z" fill="#fff" opacity=".95"/>'+
+          '<path d="M0-3.4Q.85-.85 3.4 0 .85.85 0 3.4-.85.85-3.4 0-.85-.85 0-3.4Z" fill="#fde68a" transform="translate(20 24)"/>'+
+          '<path d="M0-2.6Q.7-.7 2.6 0 .7.7 0 2.6-.7.7-2.6 0-.7-.7 0-2.6Z" fill="#f9a8d4" opacity=".85" transform="translate(103 48)"/>'+
+          '<circle cx="18" cy="60" r="1.6" fill="#ffffff" opacity=".8"/></g></svg>' },
+      { name:'暗号', av:'xiaobaobao', by:'小宝宝', no:'04', flavor:'有些称呼只在我们之间流通，甜度不外传', meta:'我们的故事 · 图鉴 4/12', pct:'33.3%',
+        scene:'<svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
+          '<defs>'+
+          '<linearGradient id="ss4a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdf1f5"/><stop offset="1" stop-color="#f9e2ec"/></linearGradient>'+
+          '<radialGradient id="ss4b" cx=".3" cy=".16" r=".55"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="ss4c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef6e4"/><stop offset="1" stop-color="#dfeecb"/></linearGradient>'+
+          '<linearGradient id="ss4d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffdfd" stop-opacity="0"/><stop offset="1" stop-color="#fffdfd" stop-opacity=".94"/></linearGradient>'+
+          '</defs>'+
+          '<rect width="300" height="420" fill="url(#ss4a)"/>'+
+          '<circle cx="84" cy="76" r="130" fill="url(#ss4b)"/>'+
+          '<path d="M40 0 L110 0 L-10 190 Z" fill="#ffffff" opacity=".22"/>'+
+          '<path d="M95 0 L140 0 L30 160 Z" fill="#ffffff" opacity=".14"/>'+
+          '<g fill="#ffffff" opacity=".5">'+
+          '<rect x="30" y="146" width="30" height="21" rx="8"/><path d="M38 165l-5 8 9.5-5.5z"/>'+
+          '<rect x="238" y="188" width="24" height="17" rx="7"/><path d="M244 203.5l-4 6.5 8-4.5z"/>'+
+          '<rect x="196" y="96" width="18" height="13" rx="5.5"/><path d="M201 107.5l-3 5 6-3.5z"/></g>'+
+          '<path d="M0 0c.7-1.2 2.6-1 3.1.3.5-1.3 2.3-1.5 3.1-.3.5 1.1-.4 2.4-3.1 4.2C2.4 2.7 1.6 1.4 0 0z" fill="#f9a8c4" opacity=".7" transform="translate(78 190) scale(1.3)"/>'+
+          '<path d="M0-2.6Q.7-.7 2.6 0 .7.7 0 2.6-.7.7-2.6 0-.7-.7 0-2.6Z" fill="#f59e0b" opacity=".7" transform="translate(226 150)"/>'+
+          '<ellipse cx="150" cy="424" rx="240" ry="86" fill="url(#ss4c)"/>'+
+          '<ellipse cx="48" cy="436" rx="150" ry="62" fill="#d9ebc4" opacity=".8"/>'+
+          '<g stroke="#b9d9a8" stroke-width="3" stroke-linecap="round" fill="none" opacity=".85">'+
+          '<path d="M52 396c-2-12 2-20 8-26"/>'+
+          '<path d="M64 400c1-10 6-16 12-19"/>'+
+          '<path d="M238 400c2-11-1-19-7-25"/>'+
+          '<path d="M252 404c0-9 4-15 10-18"/></g>'+
+          '<g fill="#ffffff" opacity=".6"><circle cx="222" cy="120" r="2.4"/><circle cx="66" cy="222" r="2"/><circle cx="190" cy="88" r="1.6"/></g>'+
+          '<g fill="#f9a8c4" opacity=".55"><circle cx="252" cy="232" r="1.8"/><circle cx="46" cy="152" r="1.6"/></g>'+
+          '<rect y="326" width="300" height="94" fill="url(#ss4d)"/></svg>',
+        hero:'<svg viewBox="0 0 120 120" aria-hidden="true">'+
+          '<defs>'+
+          '<radialGradient id="sh4c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="sh4a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbcfe8"/><stop offset="1" stop-color="#f472a0"/></linearGradient>'+
+          '</defs>'+
+          '<circle cx="60" cy="60" r="52" fill="url(#sh4c)" opacity=".6"/>'+
+          '<g transform="rotate(-6 44 57)">'+
+          '<rect x="16" y="38" width="54" height="39" rx="13.5" fill="url(#sh4a)"/>'+
+          '<path d="M28 74.5l-7.5 12 15-8z" fill="#f472a0"/>'+
+          '<path d="M37.8 52.5c1.2-2 4.4-1.8 5.2.5.8-2.3 4-2.6 5.2-.5 1.2 2-.7 4.1-5.2 7-4.5-2.9-6.4-5-5.2-7z" fill="#fff" opacity=".95"/>'+
+          '<ellipse cx="26" cy="45" rx="2.2" ry="3.8" fill="#ffffff" opacity=".5" transform="rotate(-18 26 45)"/></g>'+
+          '<g transform="rotate(5 84 71)">'+
+          '<rect x="63" y="57" width="40" height="27" rx="10.5" fill="#fff7ed" stroke="#f3b9cd" stroke-width="1.6"/>'+
+          '<path d="M93 82.5l6.5 9.5-13-5.5z" fill="#fff7ed" stroke="#f3b9cd" stroke-width="1.6" stroke-linejoin="round"/>'+
+          '<path d="M83 64l1.2 3.2 3.2 1.2-3.2 1.2L83 72.8l-1.2-3.2-3.2-1.2 3.2-1.2z" fill="#f59e0b"/></g>'+
+          '<path d="M0-4.4Q1.1-1.1 4.4 0 1.1 1.1 0 4.4-1.1 1.1-4.4 0-1.1-1.1 0-4.4Z" fill="#ffffff" opacity=".95" transform="translate(64 52)"/>'+
+          '<circle cx="55" cy="41" r="1.8" fill="#fde68a"/>'+
+          '<circle cx="74" cy="88" r="1.6" fill="#f9a8d4"/>'+
+          '<path d="M0-3Q.8-.8 3 0 .8.8 0 3-.8.8-3 0-.8-.8 0-3Z" fill="#fde68a" transform="translate(103 30)"/>'+
+          '<path d="M0-2.4Q.65-.65 2.4 0 .65.65 0 2.4-.65.65-2.4 0-.65-.65 0-2.4Z" fill="#f9a8d4" opacity=".85" transform="translate(17 82)"/></svg>' },
+    ],
+    epic: [
+      { name:'初遇', av:'dabaobei', by:'大宝贝', no:'05', flavor:'第一句闲聊，比货架上的什么都先被记住', meta:'我们的故事 · 图鉴 5/12', pct:'41.7%',
+        scene:'<svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
+          '<defs>'+
+          '<linearGradient id="ss5a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7f3fd"/><stop offset="1" stop-color="#eae0f8"/></linearGradient>'+
+          '<radialGradient id="ss5b" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="ss5c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e7dbf7"/><stop offset="1" stop-color="#d7c7f1"/></linearGradient>'+
+          '<linearGradient id="ss5d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffdfd" stop-opacity="0"/><stop offset="1" stop-color="#fffdfd" stop-opacity=".94"/></linearGradient>'+
+          '</defs>'+
+          '<rect width="300" height="420" fill="url(#ss5a)"/>'+
+          '<circle cx="86" cy="74" r="130" fill="url(#ss5b)"/>'+
+          '<path d="M40 0 L106 0 L-14 195 Z" fill="#ffffff" opacity=".2"/>'+
+          '<path d="M94 0 L140 0 L30 165 Z" fill="#ffffff" opacity=".13"/>'+
+          '<path d="M-8 84 C90 112 210 112 308 84" stroke="#c4b5fd" stroke-width="2.4" fill="none" opacity=".55"/>'+
+          '<g opacity=".85">'+
+          '<path d="M30 92l7 15 10-15z" fill="#ddd6fe"/>'+
+          '<path d="M82 101l7 15 10-15z" fill="#ffffff"/>'+
+          '<path d="M138 106l7 15 10-15z" fill="#f9a8d4"/>'+
+          '<path d="M194 106l7 15 10-15z" fill="#ffffff"/>'+
+          '<path d="M250 100l7 15 10-15z" fill="#ddd6fe"/></g>'+
+          '<g fill="#c4b5fd" opacity=".5"><path d="M0 0c-4.6-3-7.6-5.8-7.6-9.2 0-2.6 2-4.4 4.3-4.4 1.5 0 2.6.8 3.3 2 .7-1.2 1.8-2 3.3-2 2.3 0 4.3 1.8 4.3 4.4 0 3.4-3 6.2-7.6 9.2z" transform="translate(216 170)"/>'+
+          '<path d="M0 0c-4.6-3-7.6-5.8-7.6-9.2 0-2.6 2-4.4 4.3-4.4 1.5 0 2.6.8 3.3 2 .7-1.2 1.8-2 3.3-2 2.3 0 4.3 1.8 4.3 4.4 0 3.4-3 6.2-7.6 9.2z" transform="translate(52 210) scale(.72)"/></g>'+
+          '<g fill="#f9a8d4" opacity=".45"><path d="M0 0c-4.6-3-7.6-5.8-7.6-9.2 0-2.6 2-4.4 4.3-4.4 1.5 0 2.6.8 3.3 2 .7-1.2 1.8-2 3.3-2 2.3 0 4.3 1.8 4.3 4.4 0 3.4-3 6.2-7.6 9.2z" transform="translate(248 240) scale(.6)"/></g>'+
+          '<g fill="#ffffff" opacity=".6"><circle cx="230" cy="62" r="2.4"/><circle cx="184" cy="132" r="1.8"/><circle cx="120" cy="98" r="2"/><circle cx="258" cy="142" r="1.6"/></g>'+
+          '<g fill="#f0abfc" opacity=".5"><circle cx="66" cy="228" r="1.8"/><circle cx="200" cy="246" r="1.6"/></g>'+
+          '<ellipse cx="150" cy="424" rx="240" ry="86" fill="url(#ss5c)"/>'+
+          '<ellipse cx="52" cy="436" rx="150" ry="62" fill="#cbbaf0" opacity=".8"/>'+
+          '<g stroke="#b7a3e2" stroke-width="3" stroke-linecap="round" fill="none" opacity=".85">'+
+          '<path d="M52 396c-2-12 2-20 8-26"/>'+
+          '<path d="M64 400c1-10 6-16 12-19"/>'+
+          '<path d="M238 400c2-11-1-19-7-25"/>'+
+          '<path d="M252 404c0-9 4-15 10-18"/></g>'+
+          '<rect y="326" width="300" height="94" fill="url(#ss5d)"/></svg>',
+        hero:'<svg viewBox="0 0 120 120" aria-hidden="true">'+
+          '<defs>'+
+          '<radialGradient id="sh5c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="sh5a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c4b5fd"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient>'+
+          '<linearGradient id="sh5b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f9a8d4"/><stop offset="1" stop-color="#ec4899"/></linearGradient>'+
+          '</defs>'+
+          '<circle cx="60" cy="60" r="52" fill="url(#sh5c)" opacity=".6"/>'+
+          '<ellipse cx="60" cy="95" rx="34" ry="5" fill="#8b5cf6" opacity=".16"/>'+
+          '<g transform="rotate(-4 44 64)">'+
+          '<path d="M34 42c0-6 4-10 10-10s10 4 10 10" stroke="#7c5cd6" stroke-width="3" fill="none" stroke-linecap="round"/>'+
+          '<path d="M26 42h36l-2.6 45c-.2 3.4-3 6-6.4 6H35c-3.4 0-6.2-2.6-6.4-6z" fill="url(#sh5a)"/>'+
+          '<path d="M28 46h32" stroke="#ffffff" stroke-width="2.2" opacity=".35" stroke-linecap="round"/>'+
+          '<path d="M30 50c1.4 14 1.4 26 0 38" stroke="#ffffff" stroke-width="3" opacity=".3" stroke-linecap="round" fill="none"/>'+
+          '<path d="M36 38l5-7 5 6-4.5 1.5z" fill="#fff7ed"/>'+
+          '<path d="M44 66c1.1-1.9 4-1.7 4.7.6.7-2.3 3.6-2.5 4.7-.6 1 1.8-.6 3.7-4.7 6.2-4.1-2.5-5.7-4.4-4.7-6.2z" fill="#fff" opacity=".9"/></g>'+
+          '<g transform="rotate(4 79 68)">'+
+          '<path d="M71 48c0-5 3.4-8.4 8.4-8.4S88 43 88 48" stroke="#d63384" stroke-width="2.8" fill="none" stroke-linecap="round"/>'+
+          '<path d="M62 48h34l-2.4 39c-.2 3-2.7 5.4-5.8 5.4h-17.6c-3.1 0-5.6-2.4-5.8-5.4z" fill="url(#sh5b)"/>'+
+          '<path d="M64 52h30" stroke="#ffffff" stroke-width="2" opacity=".4" stroke-linecap="round"/>'+
+          '<path d="M67 56c1.2 11 1.2 20 0 28" stroke="#ffffff" stroke-width="2.6" opacity=".32" stroke-linecap="round" fill="none"/>'+
+          '<path d="M76 70l1.3 3.4 3.4 1.3-3.4 1.3-1.3 3.4-1.3-3.4-3.4-1.3 3.4-1.3z" fill="#fff" opacity=".92"/></g>'+
+          '<path d="M0-4Q1-1 4 0 1 1 0 4-1 1-4 0-1-1 0-4Z" fill="#c4b5fd" transform="translate(100 30)"/>'+
+          '<path d="M0-3Q.8-.8 3 0 .8.8 0 3-.8.8-3 0-.8-.8 0-3Z" fill="#fde68a" transform="translate(18 36)"/>'+
+          '<path d="M0-2.4Q.65-.65 2.4 0 .65.65 0 2.4-.65.65-2.4 0-.65-.65 0-2.4Z" fill="#f0abfc" opacity=".9" transform="translate(102 78)"/>'+
+          '<circle cx="20" cy="82" r="1.6" fill="#ffffff" opacity=".8"/></svg>' },
+      { name:'深夜', av:'xiaobaobao', by:'小宝宝', no:'06', flavor:'吵着吵着，谁也不肯先说晚安', meta:'我们的故事 · 图鉴 6/12', pct:'50%',
+        scene:'<svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
+          '<defs>'+
+          '<linearGradient id="ss6a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4c5a94"/><stop offset=".62" stop-color="#3a487c"/><stop offset="1" stop-color="#2e3a68"/></linearGradient>'+
+          '<linearGradient id="ss6d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdf3dc" stop-opacity="0"/><stop offset=".2" stop-color="#fdf3dc" stop-opacity=".74"/><stop offset=".45" stop-color="#fdf3dc" stop-opacity=".95"/><stop offset="1" stop-color="#fdf3dc" stop-opacity=".97"/></linearGradient>'+
+          '</defs>'+
+          '<rect width="300" height="420" fill="url(#ss6a)"/>'+
+          '<circle cx="200" cy="70" r="46" fill="#fde68a" opacity=".09"/>'+
+          '<g transform="translate(178 50) scale(6.8)"><path d="M31.5 13.5a3.4 3.4 0 1 1-3-5 2.7 2.7 0 1 0 3 5z" fill="#fde68a"/></g>'+
+          '<g fill="#ffffff"><circle cx="60" cy="60" r="2.2" opacity=".9"/><circle cx="132" cy="44" r="1.6" opacity=".7"/><circle cx="252" cy="140" r="2" opacity=".8"/><circle cx="40" cy="180" r="1.6" opacity=".7"/><circle cx="94" cy="120" r="1.3" opacity=".6"/></g>'+
+          '<path d="M0-3Q.8-.8 3 0 .8.8 0 3-.8.8-3 0-.8-.8 0-3Z" fill="#fde68a" transform="translate(160 96)"/>'+
+          '<g stroke="#ffffff" stroke-linecap="round" opacity=".55"><path d="M228 108v9M223.5 112.5h9"/></g>'+
+          '<g fill="#fcd34d" opacity=".8"><circle cx="246" cy="220" r="2"/><circle cx="58" cy="240" r="1.8"/></g>'+
+          '<path d="M0 314 L0 282 L40 282 L40 268 L86 268 L86 284 L130 284 L130 274 L174 274 L174 286 L218 286 L218 266 L264 266 L264 282 L300 282 L300 314 Z" fill="#263156"/>'+
+          '<g fill="#fcd34d" opacity=".85"><rect x="50" y="292" width="6" height="8" rx="1"/><rect x="140" y="296" width="6" height="6" rx="1"/><rect x="228" y="290" width="6" height="8" rx="1"/><rect x="106" y="304" width="5" height="6" rx="1"/></g>'+
+          '<path d="M96 268V250" stroke="#263156" stroke-width="3" stroke-linecap="round"/><circle cx="96" cy="247" r="2.4" fill="#fcd34d" opacity=".8"/>'+
+          '<rect y="326" width="300" height="94" fill="url(#ss6d)"/></svg>',
+        hero:'<svg viewBox="0 0 120 120" aria-hidden="true">'+
+          '<defs>'+
+          '<radialGradient id="sh6c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".8"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="sh6a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5d6ca8"/><stop offset="1" stop-color="#39477c"/></linearGradient>'+
+          '<linearGradient id="sh6b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fef3c7"/><stop offset="1" stop-color="#fcd34d"/></linearGradient>'+
+          '</defs>'+
+          '<circle cx="44" cy="40" r="30" fill="#fcd34d" opacity=".16"/>'+
+          '<rect x="26" y="22" width="68" height="72" rx="4" fill="url(#sh6a)"/>'+
+          '<rect x="31" y="27" width="26" height="26" rx="1.5" fill="url(#sh6b)"/>'+
+          '<rect x="63" y="27" width="26" height="26" rx="1.5" fill="#243055"/>'+
+          '<rect x="31" y="59" width="26" height="30" rx="1.5" fill="#243055"/>'+
+          '<rect x="63" y="59" width="26" height="30" rx="1.5" fill="url(#sh6b)"/>'+
+          '<circle cx="70" cy="36" r="1.1" fill="#fde68a" opacity=".7"/>'+
+          '<circle cx="80" cy="42" r=".8" fill="#fde68a" opacity=".5"/>'+
+          '<circle cx="38" cy="70" r="1" fill="#fde68a" opacity=".55"/>'+
+          '<rect x="57" y="27" width="6" height="62" fill="#2e3a68"/>'+
+          '<rect x="31" y="52" width="58" height="6" fill="#2e3a68"/>'+
+          '<path d="M31 27h26v26h-26z" fill="#ffffff" opacity=".16"/>'+
+
+          '<rect x="21" y="94" width="78" height="8" rx="4" fill="#39477c"/>'+
+          '<rect x="21" y="94" width="78" height="2.6" rx="1.3" fill="#5d6ca8" opacity=".85"/>'+
+          '<g transform="rotate(8 82 86)">'+
+          '<path d="M76 88l2-6h9l2 6z" fill="#e0b184"/>'+
+          '<path d="M79 78c-.8-2.6-3-4.4-5.6-4.6M80 77c0-3 1-5.4 3-7M81.5 77.5c1.4-2.2 3.6-3.4 6.2-3.4" stroke="#6ee7a0" stroke-width="1.8" stroke-linecap="round" fill="none"/></g>'+
+          '<ellipse cx="60" cy="106" rx="34" ry="4" fill="#fcd34d" opacity=".2"/>'+
+          '<path d="M0-3Q.8-.8 3 0 .8.8 0 3-.8.8-3 0-.8-.8 0-3Z" fill="#fde68a" transform="translate(104 40)"/>'+
+          '<path d="M0-2.4Q.65-.65 2.4 0 .65.65 0 2.4-.65.65-2.4 0-.65-.65 0-2.4Z" fill="#ffffff" opacity=".85" transform="translate(16 30)"/></svg>' },
+      { name:'和好', av:'dabaobei', by:'大宝贝', no:'07', flavor:'最凶的一次，和好也最快', meta:'我们的故事 · 图鉴 7/12', pct:'58.3%',
+        scene:'<svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
+          '<defs>'+
+          '<linearGradient id="ss7a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f8f5fe"/><stop offset="1" stop-color="#ece3fa"/></linearGradient>'+
+          '<linearGradient id="ss7b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8dff8"/><stop offset="1" stop-color="#d8cbf3"/></linearGradient>'+
+          '<linearGradient id="ss7d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffdfd" stop-opacity="0"/><stop offset="1" stop-color="#fffdfd" stop-opacity=".94"/></linearGradient>'+
+          '</defs>'+
+          '<rect width="300" height="420" fill="url(#ss7a)"/>'+
+          '<circle cx="70" cy="82" r="120" fill="#ffffff" opacity=".5"/>'+
+          '<path d="M-12 128 C56 98 118 160 186 122 C238 92 278 118 312 100" stroke="#c4b5fd" stroke-width="5" fill="none" stroke-linecap="round" opacity=".5"/>'+
+          '<path d="M-12 168 C64 138 128 200 196 162 C246 134 282 158 312 142" stroke="#f9a8d4" stroke-width="4" fill="none" stroke-linecap="round" opacity=".45"/>'+
+          '<g fill="#f0abfc" opacity=".55"><rect x="118" y="86" width="5" height="5" rx="1.2" transform="rotate(24 120 88)"/><rect x="176" y="70" width="4.4" height="4.4" rx="1.1" transform="rotate(-18 178 72)"/><rect x="96" y="52" width="4" height="4" rx="1" transform="rotate(40 98 54)"/></g>'+
+          '<g fill="#c4b5fd" opacity=".6"><rect x="206" y="96" width="4.6" height="4.6" rx="1.1" transform="rotate(14 208 98)"/><rect x="146" y="104" width="4" height="4" rx="1" transform="rotate(-30 148 106)"/></g>'+
+          '<g fill="#ffffff" opacity=".6"><circle cx="252" cy="72" r="2.2"/><circle cx="180" cy="86" r="1.8"/><circle cx="64" cy="196" r="2"/><circle cx="270" cy="180" r="1.6"/></g>'+
+          '<g fill="#f0abfc" opacity=".5"><circle cx="212" cy="222" r="1.8"/><circle cx="96" cy="252" r="1.6"/></g>'+
+          '<ellipse cx="150" cy="424" rx="244" ry="86" fill="url(#ss7b)"/>'+
+          '<ellipse cx="54" cy="436" rx="150" ry="62" fill="#cbbaf1" opacity=".8"/>'+
+          '<g stroke="#b7a3e2" stroke-width="3" stroke-linecap="round" fill="none" opacity=".85">'+
+          '<path d="M52 396c-2-12 2-20 8-26"/>'+
+          '<path d="M64 400c1-10 6-16 12-19"/>'+
+          '<path d="M238 400c2-11-1-19-7-25"/>'+
+          '<path d="M252 404c0-9 4-15 10-18"/></g>'+
+          '<rect y="326" width="300" height="94" fill="url(#ss7d)"/></svg>',
+        hero:'<svg viewBox="0 0 120 120" aria-hidden="true">'+
+          '<defs>'+
+          '<radialGradient id="sh7c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="sh7a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c4b5fd"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient>'+
+          '<linearGradient id="sh7b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f9a8d4"/><stop offset="1" stop-color="#ec4899"/></linearGradient>'+
+          '</defs>'+
+          '<circle cx="60" cy="60" r="52" fill="url(#sh7c)" opacity=".6"/>'+
+          '<ellipse cx="60" cy="97" rx="38" ry="5.5" fill="#8b5cf6" opacity=".16"/>'+
+          '<g transform="rotate(-17 38 70)">'+
+          '<rect x="22" y="48" width="32" height="44" rx="11" fill="url(#sh7a)"/>'+
+          '<rect x="22" y="48" width="32" height="11" rx="5.5" fill="#ffffff" opacity=".38"/>'+
+          '<rect x="22" y="82" width="32" height="10" rx="5" fill="#7c3aed" opacity=".18"/>'+
+          '<ellipse cx="29" cy="56" rx="2.6" ry="4.4" fill="#ffffff" opacity=".55"/>'+
+          '<circle cx="32" cy="42" r="1.6" fill="#ffffff" opacity=".6"/>'+
+          '<circle cx="39" cy="37" r="1.2" fill="#ffffff" opacity=".45"/></g>'+
+          '<g transform="rotate(17 82 70)">'+
+          '<rect x="66" y="48" width="32" height="44" rx="11" fill="url(#sh7b)"/>'+
+          '<rect x="66" y="48" width="32" height="11" rx="5.5" fill="#ffffff" opacity=".38"/>'+
+          '<rect x="66" y="82" width="32" height="10" rx="5" fill="#be185d" opacity=".16"/>'+
+          '<ellipse cx="73" cy="56" rx="2.6" ry="4.4" fill="#ffffff" opacity=".55"/>'+
+          '<circle cx="86" cy="41" r="1.5" fill="#ffffff" opacity=".6"/></g>'+
+          '<path d="M0-4.6Q1.15-1.15 4.6 0 1.15 1.15 0 4.6-1.15 1.15-4.6 0-1.15-1.15 0-4.6Z" fill="#fde68a" transform="translate(60 32)"/>'+
+          '<path d="M0 0c.9-1.5 3.2-1.3 3.8.4.6-1.7 2.9-1.9 3.8-.4.7 1.4-.5 3-3.8 5.2-3.3-2.2-4.5-3.8-3.8-5.2z" fill="#f472a0" opacity=".95" transform="translate(56 41) scale(1.05)"/>'+
+          '<circle cx="52" cy="26" r="1.5" fill="#ffffff" opacity=".75"/>'+
+          '<circle cx="70" cy="24" r="1.3" fill="#fde68a" opacity=".8"/>'+
+          '<path d="M0-3Q.8-.8 3 0 .8.8 0 3-.8.8-3 0-.8-.8 0-3Z" fill="#c4b5fd" transform="translate(103 30)"/>'+
+          '<path d="M0-2.4Q.65-.65 2.4 0 .65.65 0 2.4-.65.65-2.4 0-.65-.65 0-2.4Z" fill="#f0abfc" opacity=".9" transform="translate(15 34)"/>'+
+          '<circle cx="102" cy="80" r="1.6" fill="#ffffff" opacity=".8"/></svg>' },
+      { name:'小心', av:'xiaobaobao', by:'小宝宝', no:'08', flavor:'一句「小心地滑」，成了泥泞里最好笑的认真', meta:'我们的故事 · 图鉴 8/12', pct:'66.7%',
+        scene:'<svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
+          '<defs>'+
+          '<linearGradient id="ss8a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f1f8"/><stop offset="1" stop-color="#e3e4f0"/></linearGradient>'+
+          '<radialGradient id="ss8b" cx=".3" cy=".16" r=".55"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="ss8c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dcdff0"/><stop offset="1" stop-color="#c9cfe6"/></linearGradient>'+
+          '<linearGradient id="ss8d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffdfd" stop-opacity="0"/><stop offset="1" stop-color="#fffdfd" stop-opacity=".94"/></linearGradient>'+
+          '</defs>'+
+          '<rect width="300" height="420" fill="url(#ss8a)"/>'+
+          '<circle cx="80" cy="70" r="120" fill="url(#ss8b)"/>'+
+          '<g stroke="#c7cdf0" stroke-width="2.2" stroke-linecap="round" opacity=".5">'+
+          '<path d="M52 60l-5 13"/><path d="M108 34l-5 13"/><path d="M170 52l-5 13"/><path d="M232 40l-5 13"/><path d="M268 96l-5 13"/><path d="M84 120l-5 13"/><path d="M210 140l-5 13"/><path d="M34 170l-5 13"/><path d="M262 176l-5 13"/><path d="M140 180l-5 13"/></g>'+
+          '<g fill="#ffffff" opacity=".7"><circle cx="120" cy="100" r="2"/><circle cx="250" cy="150" r="1.8"/><circle cx="60" cy="220" r="1.8"/></g>'+
+          '<g fill="#a78bfa" opacity=".5"><circle cx="200" cy="210" r="1.8"/><circle cx="90" cy="260" r="1.5"/></g>'+
+          '<ellipse cx="150" cy="424" rx="244" ry="86" fill="url(#ss8c)"/>'+
+          '<ellipse cx="60" cy="436" rx="150" ry="62" fill="#b6bfe4" opacity=".8"/>'+
+          '<g stroke="#aab3dd" stroke-width="2.4" fill="none" opacity=".6">'+
+          '<ellipse cx="84" cy="396" rx="40" ry="8"/><ellipse cx="84" cy="396" rx="21" ry="4"/>'+
+          '<ellipse cx="216" cy="406" rx="32" ry="6.4"/><ellipse cx="216" cy="406" rx="16" ry="3"/></g>'+
+          '<g stroke="#aab3dd" stroke-width="2" stroke-linecap="round" opacity=".5"><path d="M150 380c6-3 12-3 18 0"/><path d="M120 412c5-2.4 10-2.4 15 0"/></g>'+
+          '<rect y="326" width="300" height="94" fill="url(#ss8d)"/></svg>',
+        hero:'<svg viewBox="0 0 120 120" aria-hidden="true">'+
+          '<defs>'+
+          '<radialGradient id="sh8c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="sh8a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fde68a"/><stop offset="1" stop-color="#f0b429"/></linearGradient>'+
+          '</defs>'+
+          '<circle cx="60" cy="60" r="52" fill="url(#sh8c)" opacity=".6"/>'+
+          '<ellipse cx="60" cy="99" rx="26" ry="4.4" fill="#8b8fc0" opacity=".3"/>'+
+          '<g transform="rotate(-8 60 60)">'+
+          '<rect x="58" y="66" width="4.6" height="30" rx="2.3" fill="#d97706"/>'+
+          '<rect x="44" y="36" width="32" height="32" rx="5" transform="rotate(45 60 52)" fill="url(#sh8a)" stroke="#d97706" stroke-width="1.8"/>'+
+          '<path d="M52 50c2.4-2.7 4.8-2.7 7.2 0s4.8 2.7 7.2 0" stroke="#fff" stroke-width="2.8" stroke-linecap="round" fill="none"/>'+
+          '<path d="M54 58.5c1.9-2.1 3.8-2.1 5.7 0s3.8 2.1 5.7 0" stroke="#fff" stroke-width="2.4" stroke-linecap="round" fill="none" opacity=".9"/>'+
+          '<path d="M44 40c2-2.4 5-3.4 8-2.8" stroke="#ffffff" stroke-width="2" opacity=".6" stroke-linecap="round" fill="none"/>'+
+          '<path d="M40 30c1.4-1.7 3.6-2 5.3-.8" stroke="#bfdbfe" stroke-width="2.2" stroke-linecap="round" fill="none"/>'+
+          '<path d="M78 34c1.2-1.5 3.2-1.7 4.6-.6" stroke="#bfdbfe" stroke-width="1.9" stroke-linecap="round" fill="none" opacity=".85"/></g>'+
+          '<path d="M0-3.4Q.85-.85 3.4 0 .85.85 0 3.4-.85.85-3.4 0-.85-.85 0-3.4Z" fill="#a78bfa" transform="translate(95 22)"/>'+
+          '<path d="M0-2.6Q.7-.7 2.6 0 .7.7 0 2.6-.7.7-2.6 0-.7-.7 0-2.6Z" fill="#c4b5fd" opacity=".9" transform="translate(22 30)"/>'+
+          '<circle cx="100" cy="76" r="1.6" fill="#ffffff" opacity=".85"/>'+
+          '<circle cx="18" cy="70" r="1.4" fill="#ffffff" opacity=".7"/></svg>' },
+    ],
+    legendary: [
+      { name:'宝宝', av:'dabaobei', by:'大宝贝', no:'09', flavor:'小小的人一来，整个世界都变软了', meta:'我们的故事 · 图鉴 9/12', pct:'75%',
+        scene:'<svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
+          '<defs>'+
+          '<linearGradient id="ss9a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdf9ee"/><stop offset="1" stop-color="#f7ecd2"/></linearGradient>'+
+          '<radialGradient id="ss9b" cx=".28" cy=".18" r=".55"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="ss9c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f1e8cc"/><stop offset="1" stop-color="#e9dcaa"/></linearGradient>'+
+          '<linearGradient id="ss9d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffdfd" stop-opacity="0"/><stop offset="1" stop-color="#fffdfd" stop-opacity=".94"/></linearGradient>'+
+          '</defs>'+
+          '<rect width="300" height="420" fill="url(#ss9a)"/>'+
+          '<circle cx="82" cy="76" r="130" fill="url(#ss9b)"/>'+
+          '<path d="M52 0 L118 0 L-6 200 Z" fill="#ffffff" opacity=".24"/>'+
+          '<path d="M118 0 L162 0 L34 178 Z" fill="#ffffff" opacity=".15"/>'+
+          '<g fill="#ffffff" opacity=".75">'+
+          '<ellipse cx="48" cy="146" rx="34" ry="12"/><ellipse cx="72" cy="138" rx="24" ry="10"/><ellipse cx="28" cy="138" rx="18" ry="8"/>'+
+          '<ellipse cx="250" cy="196" rx="30" ry="10"/><ellipse cx="270" cy="188" rx="20" ry="8"/></g>'+
+          '<path d="M0 0c.8-1.4 2.9-1.2 3.5.4.6-1.6 2.6-1.8 3.5-.4.6 1.2-.4 2.6-3.5 4.6C3.1 3.2 2.2 1.9 0 0z" fill="#f9a8c4" opacity=".65" transform="translate(226 108) scale(1.4)"/>'+
+          '<path d="M0 0c.8-1.4 2.9-1.2 3.5.4.6-1.6 2.6-1.8 3.5-.4.6 1.2-.4 2.6-3.5 4.6C3.1 3.2 2.2 1.9 0 0z" fill="#f9a8c4" opacity=".55" transform="translate(96 236) scale(1.1)"/>'+
+          '<g fill="#e2b93f" opacity=".4"><path d="M-10 4 L-12 -6 -6 -1 0 -9 6 -1 12 -6 10 4 Z" transform="translate(224 118)"/></g>'+
+          '<g fill="#f2dfa8" opacity=".45"><circle cx="236" cy="150" r="8"/><circle cx="48" cy="180" r="7"/></g>'+
+          '<g fill="#ffffff" opacity=".5"><circle cx="210" cy="80" r="5"/><circle cx="120" cy="60" r="4"/><circle cx="180" cy="230" r="3.4"/><circle cx="256" cy="142" r="3"/></g>'+
+          '<ellipse cx="150" cy="428" rx="250" ry="88" fill="url(#ss9c)"/>'+
+          '<ellipse cx="48" cy="440" rx="150" ry="62" fill="#e3d49f" opacity=".8"/>'+
+          '<g stroke="#c9bd85" stroke-width="3" stroke-linecap="round" fill="none" opacity=".9">'+
+          '<path d="M60 400c-2-13 2-22 9-28"/>'+
+          '<path d="M74 404c1-11 6-17 13-20"/>'+
+          '<path d="M226 404c2-12-1-20-8-26"/>'+
+          '<path d="M242 408c0-10 4-16 11-19"/></g>'+
+          '<g fill="#fda4af" opacity=".5"><circle cx="252" cy="244" r="1.8"/><circle cx="46" cy="248" r="1.6"/></g>'+
+          '<rect y="326" width="300" height="94" fill="url(#ss9d)"/></svg>',
+        hero:'<svg viewBox="0 0 120 120" aria-hidden="true">'+
+          '<defs>'+
+          '<radialGradient id="sh9c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="sh9a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fde68a"/><stop offset="1" stop-color="#f0b429"/></linearGradient>'+
+          '</defs>'+
+          '<circle cx="60" cy="60" r="52" fill="url(#sh9c)" opacity=".6"/>'+
+          '<g transform="translate(13 16) scale(2.15)">'+
+          '<path d="M16 13.5H27.5V23.5C27.5 25 28 26.4 29 27.4L32.5 30.8C35.5 33.7 33.4 38.7 29.3 38.7C27.7 38.7 26.2 38.1 25 36.9L17.9 29.8C16.7 28.6 16 27 16 25.2Z" fill="url(#sh9a)"/>'+
+          '<path d="M27.5 23.5C27.5 25 28 26.4 29 27.4L32.5 30.8C35.5 33.7 33.4 38.7 29.3 38.7C27.7 38.7 26.2 38.1 25 36.9" fill="none" stroke="#d97706" stroke-width=".9" opacity=".4"/>'+
+          '<rect x="14.5" y="10.5" width="14.5" height="6.5" rx="3.2" fill="#f9a8d4"/>'+
+          '<path d="M15.5 15.8h12.5" stroke="#ec5f93" stroke-width="1" opacity=".5" stroke-linecap="round"/>'+
+          '<path d="M19.5 18.6c.7-1.2 2.6-1 3.1.3.5-1.3 2.4-1.5 3.1-.3.6 1-.4 2.2-3.1 4-2.7-1.8-3.7-3-3.1-4z" fill="#fff" opacity=".92"/>'+
+          '<ellipse cx="18.6" cy="16.8" rx="1.1" ry="1.9" fill="#fff" opacity=".55"/>'+
+          '<ellipse cx="31.2" cy="31.8" rx="1.5" ry="2.6" fill="#fff" opacity=".4" transform="rotate(38 31.2 31.8)"/></g>'+
+          '<path d="M0-4Q1-1 4 0 1 1 0 4-1 1-4 0-1-1 0-4Z" fill="#fbbf24" transform="translate(99 26)"/>'+
+          '<path d="M0-2.7Q.7-.7 2.7 0 .7.7 0 2.7-.7.7-2.7 0-.7-.7 0-2.7Z" fill="#fde68a" opacity=".95" transform="translate(19 36)"/>'+
+          '<path d="M0-2.1Q.6-.6 2.1 0 .6.6 0 2.1-.6.6-2.1 0-.6-.6 0-2.1Z" fill="#f9a8d4" opacity=".9" transform="translate(97 84)"/>'+
+          '<circle cx="17" cy="70" r="1.6" fill="#ffffff" opacity=".85"/></svg>' },
+      { name:'双生', av:'xiaobaobao', by:'小宝宝', no:'10', flavor:'「你们好像啊」——这句话是别人先发现的', meta:'我们的故事 · 图鉴 10/12', pct:'83.3%',
+        scene:'<svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
+          '<defs>'+
+          '<linearGradient id="ss10a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdfaf0"/><stop offset="1" stop-color="#f8efd8"/></linearGradient>'+
+          '<radialGradient id="ss10b" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="ss10c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f1e8cc"/><stop offset="1" stop-color="#eadfb4"/></linearGradient>'+
+          '<linearGradient id="ss10d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffdfd" stop-opacity="0"/><stop offset="1" stop-color="#fffdfd" stop-opacity=".94"/></linearGradient>'+
+          '</defs>'+
+          '<rect width="300" height="420" fill="url(#ss10a)"/>'+
+          '<circle cx="150" cy="132" r="100" fill="url(#ss10b)"/>'+
+          '<path d="M150 40 L150 224" stroke="#ffffff" stroke-width="2.4" opacity=".5" stroke-linecap="round"/>'+
+          '<path d="M60 132 L240 132" stroke="#ffffff" stroke-width="2.2" opacity=".4" stroke-linecap="round"/>'+
+          '<g opacity=".6">'+
+          '<circle cx="52" cy="306" r="7.5" fill="#eecd6a"/><circle cx="59" cy="300" r="5" fill="#eecd6a"/><circle cx="60" cy="309" r="4.2" fill="#eecd6a"/>'+
+          '<path d="M53 313c-.4 3.6-.4 7 0 10" stroke="#b45309" stroke-width="1.8" fill="none" stroke-linecap="round"/>'+
+          '<circle cx="76" cy="309" r="6" fill="#eecd6a"/><circle cx="82" cy="304" r="4" fill="#eecd6a"/>'+
+          '<path d="M76.5 315c.3 3 .3 5.8 0 8.4" stroke="#b45309" stroke-width="1.6" fill="none" stroke-linecap="round"/></g>'+
+          '<path d="M0-7L1.8-1.8 7 0 1.8 1.8 0 7-1.8 1.8-7 0-1.8-1.8Z" fill="#f2dfa8" opacity=".6" transform="translate(222 88)"/>'+
+          '<g fill="#f2dfa8" opacity=".5"><path d="M0-7L1.8-1.8 7 0 1.8 1.8 0 7-1.8 1.8-7 0-1.8-1.8Z" transform="translate(84 180) scale(.8)"/></g>'+
+          '<g fill="#ffffff" opacity=".55"><path d="M0-7L1.8-1.8 7 0 1.8 1.8 0 7-1.8 1.8-7 0-1.8-1.8Z" transform="translate(256 236) scale(.7)"/><path d="M0-7L1.8-1.8 7 0 1.8 1.8 0 7-1.8 1.8-7 0-1.8-1.8Z" transform="translate(44 236) scale(.6)"/></g>'+
+          '<g fill="#f2dfa8" opacity=".4"><circle cx="236" cy="150" r="7"/><circle cx="66" cy="120" r="5"/></g>'+
+          '<g fill="#ffffff" opacity=".5"><circle cx="196" cy="66" r="4"/><circle cx="120" cy="240" r="3.2"/></g>'+
+          '<path d="M0 0c.8-1.4 2.9-1.2 3.5.4.6-1.6 2.6-1.8 3.5-.4.6 1.2-.4 2.6-3.5 4.6C3.1 3.2 2.2 1.9 0 0z" fill="#f9a8c4" opacity=".55" transform="translate(238 118) scale(1.2)"/>'+
+          '<ellipse cx="150" cy="428" rx="248" ry="88" fill="url(#ss10c)"/>'+
+          '<ellipse cx="240" cy="440" rx="150" ry="60" fill="#e2d49e" opacity=".75"/>'+
+          '<g stroke="#c9bd85" stroke-width="3" stroke-linecap="round" fill="none" opacity=".9">'+
+          '<path d="M58 402c-2-13 2-22 9-28"/>'+
+          '<path d="M72 406c1-11 6-17 13-20"/>'+
+          '<path d="M228 404c2-12-1-20-8-26"/>'+
+          '<path d="M244 408c0-10 4-16 11-19"/></g>'+
+          '<g fill="#fda4af" opacity=".5"><circle cx="104" cy="284" r="1.8"/><circle cx="206" cy="290" r="1.6"/></g>'+
+          '<rect y="326" width="300" height="94" fill="url(#ss10d)"/></svg>',
+        hero:'<svg viewBox="0 0 120 120" aria-hidden="true">'+
+          '<defs>'+
+          '<radialGradient id="sh10c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="sh10a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fef3c7"/><stop offset="1" stop-color="#f0b429"/></linearGradient>'+
+          '</defs>'+
+          '<circle cx="60" cy="60" r="52" fill="url(#sh10c)" opacity=".6"/>'+
+          '<path d="M12 93h96" stroke="#d97706" stroke-width="2.4" stroke-linecap="round" opacity=".45"/>'+
+          '<path d="M46 90C44 78 44 68 45 58M74 90c2-12 2-22 1-32" stroke="#b45309" stroke-width="3.4" stroke-linecap="round" fill="none"/>'+
+          '<path d="M45.4 70c-2.8-1.2-5.2-3.2-6.8-6M74.6 70c2.8-1.2 5.2-3.2 6.8-6" stroke="#b45309" stroke-width="1.8" stroke-linecap="round" fill="none" opacity=".7"/>'+
+          '<g fill="url(#sh10a)">'+
+          '<circle cx="42" cy="44" r="14"/><circle cx="52" cy="33" r="10"/><circle cx="54" cy="47" r="9"/>'+
+          '<circle cx="78" cy="44" r="14"/><circle cx="68" cy="33" r="10"/><circle cx="66" cy="47" r="9"/></g>'+
+          '<g fill="#f59e0b" opacity=".16">'+
+          '<circle cx="42" cy="44" r="14"/><circle cx="78" cy="44" r="14"/></g>'+
+          '<g fill="#f59e0b" opacity=".7"><circle cx="40" cy="48" r="1.7"/><circle cx="52" cy="40" r="1.7"/><circle cx="80" cy="48" r="1.7"/><circle cx="68" cy="40" r="1.7"/></g>'+
+          '<ellipse cx="35" cy="36" rx="3.6" ry="6" fill="#ffffff" opacity=".5" transform="rotate(-32 35 36)"/>'+
+          '<ellipse cx="85" cy="36" rx="3.6" ry="6" fill="#ffffff" opacity=".5" transform="rotate(32 85 36)"/>'+
+          '<g stroke="#ffffff" stroke-width="1.3" opacity=".5" stroke-linecap="round" fill="none">'+
+          '<path d="M42 33v-6M36 38l-4.5-3.5"/>'+
+          '<path d="M78 33v-6M84 38l4.5-3.5"/></g>'+
+          '<path d="M0 0c.9-1.5 3.2-1.3 3.8.4.6-1.7 2.9-1.9 3.8-.4.7 1.4-.5 3-3.8 5.2-3.3-2.2-4.5-3.8-3.8-5.2z" fill="#fff" transform="translate(56.4 41) scale(1.05)"/>'+
+          '<path d="M0-3Q.8-.8 3 0 .8.8 0 3-.8.8-3 0-.8-.8 0-3Z" fill="#fbbf24" transform="translate(60 24)"/>'+
+          '<path d="M0-4Q1-1 4 0 1 1 0 4-1 1-4 0-1-1 0-4Z" fill="#fbbf24" transform="translate(102 58)"/>'+
+          '<path d="M0-2.4Q.65-.65 2.4 0 .65.65 0 2.4-.65.65-2.4 0-.65-.65 0-2.4Z" fill="#fde68a" opacity=".9" transform="translate(16 62)"/>'+
+          '<circle cx="103" cy="30" r="1.6" fill="#ffffff" opacity=".85"/></svg>' },
+      { name:'平常', av:'dabaobei', by:'大宝贝', no:'11', flavor:'最想回去的，是没有标题的普通一天', meta:'我们的故事 · 图鉴 11/12', pct:'91.7%',
+        scene:'<svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
+          '<defs>'+
+          '<linearGradient id="ss11a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdfbf4"/><stop offset="1" stop-color="#f6efdc"/></linearGradient>'+
+          '<radialGradient id="ss11b" cx=".28" cy=".18" r=".55"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="ss11c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0e8cd"/><stop offset="1" stop-color="#e8dca8"/></linearGradient>'+
+          '<linearGradient id="ss11d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffdfd" stop-opacity="0"/><stop offset="1" stop-color="#fffdfd" stop-opacity=".94"/></linearGradient>'+
+          '</defs>'+
+          '<rect width="300" height="420" fill="url(#ss11a)"/>'+
+          '<circle cx="210" cy="84" r="110" fill="url(#ss11b)"/>'+
+          '<path d="M52 0 L112 0 L-10 200 Z" fill="#ffffff" opacity=".18"/>'+
+          '<path d="M118 0 L158 0 L36 182 Z" fill="#ffffff" opacity=".11"/>'+
+          '<g stroke="#ffffff" stroke-linecap="round" opacity=".7"><path d="M120 96v12M114 102h12"/></g>'+
+          '<g stroke="#f2dfa8" stroke-linecap="round" opacity=".7"><path d="M232 154v9M227.5 158.5h9"/></g>'+
+          '<ellipse cx="150" cy="426" rx="248" ry="86" fill="url(#ss11c)"/>'+
+          '<ellipse cx="60" cy="438" rx="150" ry="60" fill="#e0d29c" opacity=".75"/>'+
+          '<g stroke="#c9bd85" stroke-width="2.2" opacity=".5">'+
+          '<path d="M-10 372 C60 364 240 364 310 372"/>'+
+          '<path d="M-10 396 C60 388 240 388 310 396"/>'+
+          '<path d="M-10 418 C60 410 240 410 310 418"/></g>'+
+          '<g fill="#fffbeb" opacity=".55">'+
+          '<path d="M40 352 L96 344 L118 402 L62 410 Z"/>'+
+          '<path d="M196 344 L240 350 L224 400 L180 394 Z"/></g>'+
+          '<g stroke="#c9bd85" stroke-width="3" stroke-linecap="round" fill="none" opacity=".9">'+
+          '<path d="M56 400c-2-13 2-22 9-28"/>'+
+          '<path d="M70 404c1-11 6-17 13-20"/>'+
+          '<path d="M230 402c2-12-1-20-8-26"/>'+
+          '<path d="M246 406c0-10 4-16 11-19"/></g>'+
+          '<g fill="#fda4af" opacity=".5"><circle cx="196" cy="270" r="1.8"/><circle cx="98" cy="286" r="1.6"/></g>'+
+          '<g fill="#ffffff" opacity=".5"><circle cx="150" cy="60" r="4"/><circle cx="252" cy="120" r="3"/></g>'+
+          '<rect y="326" width="300" height="94" fill="url(#ss11d)"/></svg>',
+        hero:'<svg viewBox="0 0 120 120" aria-hidden="true">'+
+          '<defs>'+
+          '<radialGradient id="sh11c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="sh11a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fde68a"/><stop offset="1" stop-color="#f0b429"/></linearGradient>'+
+          '</defs>'+
+          '<circle cx="60" cy="60" r="52" fill="url(#sh11c)" opacity=".6"/>'+
+          '<ellipse cx="26" cy="26" rx="8" ry="4" fill="#fde68a" opacity=".4"/>'+
+          '<ellipse cx="97" cy="30" rx="6" ry="3" fill="#fde68a" opacity=".35"/>'+
+          '<ellipse cx="40" cy="78" rx="19" ry="3.6" fill="#b45309" opacity=".16"/>'+
+			'<ellipse cx="38" cy="96" rx="22" ry="4" fill="#b45309" opacity=".18"/>'+
+			'<g transform="translate(58 30) scale(.85)">'+'<rect x="0" y="36" width="46" height="8.5" rx="4.2" fill="#eab308"/>'+
+			'<rect x="0" y="36" width="46" height="3" rx="1.5" fill="#fcd34d" opacity=".8"/>'+
+			'<rect x="14" y="16" width="18" height="26" rx="8" fill="#fdf6e0"/>'+
+			'<path d="M26 18c4-1.4 9-1 12 .8" stroke="#e0b184" stroke-width="1.2" fill="none" stroke-linecap="round" opacity=".7"/>'+
+			'<rect x="0" y="0" width="16" height="36.5" rx="8" fill="url(#sh11a)"/>'+
+			'<path d="M3.2 8c-1 4-1.4 12-1 22" stroke="#ffffff" stroke-width="2" opacity=".5" stroke-linecap="round" fill="none"/>'+
+			'<rect x="26" y="18" width="20" height="18.5" rx="8.5" fill="url(#sh11a)"/>'+
+			'<path d="M28.5 21c2.6-1.6 6-2 9-1.2" stroke="#ffffff" stroke-width="1.8" opacity=".5" stroke-linecap="round" fill="none"/>'+'</g>'+
+			'<g transform="translate(16 42)">'+'<rect x="0" y="36" width="46" height="8.5" rx="4.2" fill="#eab308"/>'+
+			'<rect x="0" y="36" width="46" height="3" rx="1.5" fill="#fcd34d" opacity=".8"/>'+
+			'<rect x="14" y="16" width="18" height="26" rx="8" fill="#fdf6e0"/>'+
+			'<path d="M26 18c4-1.4 9-1 12 .8" stroke="#e0b184" stroke-width="1.2" fill="none" stroke-linecap="round" opacity=".7"/>'+
+			'<rect x="0" y="0" width="16" height="36.5" rx="8" fill="url(#sh11a)"/>'+
+			'<path d="M3.2 8c-1 4-1.4 12-1 22" stroke="#ffffff" stroke-width="2" opacity=".5" stroke-linecap="round" fill="none"/>'+
+			'<rect x="26" y="18" width="20" height="18.5" rx="8.5" fill="url(#sh11a)"/>'+
+			'<path d="M28.5 21c2.6-1.6 6-2 9-1.2" stroke="#ffffff" stroke-width="1.8" opacity=".5" stroke-linecap="round" fill="none"/>'+'</g>'+
+'<path d="M0 0c.8-1.4 2.9-1.2 3.5.4.6-1.6 2.6-1.8 3.5-.4.6 1.2-.4 2.6-3.5 4.6C3.1 3.2 2.2 1.9 0 0z" fill="#f9a8d4" transform="translate(56 22) scale(1.5)"/>'+
+          '<path d="M0-4Q1-1 4 0 1 1 0 4-1 1-4 0-1-1 0-4Z" fill="#fbbf24" transform="translate(101 60)"/>'+
+          '<path d="M0-2.4Q.65-.65 2.4 0 .65.65 0 2.4-.65.65-2.4 0-.65-.65 0-2.4Z" fill="#fde68a" opacity=".9" transform="translate(15 34)"/>'+
+          '<circle cx="102" cy="88" r="1.6" fill="#ffffff" opacity=".85"/></svg>' },
+      { name:'一直', av:'xiaobaobao', by:'小宝宝', no:'12', flavor:'想对一年后的你说：一直有爱下去', meta:'我们的故事 · 图鉴 12/12', pct:'100%',
+        scene:'<svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'+
+          '<defs>'+
+          '<linearGradient id="ss12a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdf8ec"/><stop offset="1" stop-color="#f5ead0"/></linearGradient>'+
+          '<radialGradient id="ss12b" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="ss12c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0e6c8"/><stop offset="1" stop-color="#e8d9a8"/></linearGradient>'+
+          '<linearGradient id="ss12d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffdfd" stop-opacity="0"/><stop offset="1" stop-color="#fffdfd" stop-opacity=".94"/></linearGradient>'+
+          '</defs>'+
+          '<rect width="300" height="420" fill="url(#ss12a)"/>'+
+          '<circle cx="150" cy="90" r="110" fill="url(#ss12b)"/>'+
+          '<path d="M-20 260 C60 180 200 160 320 220" stroke="#f2dfa8" stroke-width="30" opacity=".38" fill="none" stroke-linecap="round"/>'+
+          '<path d="M-20 260 C60 180 200 160 320 220" stroke="#f9edc8" stroke-width="14" opacity=".6" fill="none" stroke-linecap="round"/>'+
+          '<g fill="#e8c04a" opacity=".55"><circle cx="60" cy="216" r="2.6"/><circle cx="120" cy="190" r="2.2"/><circle cx="190" cy="174" r="2.4"/><circle cx="250" cy="186" r="2"/></g>'+
+          '<g fill="#ffffff" opacity=".65"><circle cx="90" cy="202" r="1.6"/><circle cx="160" cy="180" r="1.5"/><circle cx="222" cy="180" r="1.6"/></g>'+
+          '<path d="M52 0 L104 0 L-16 192 Z" fill="#ffffff" opacity=".14"/>'+
+          '<path d="M186 0 L224 0 L108 172 Z" fill="#ffffff" opacity=".09"/>'+
+          '<path d="M266 54 L222 98" stroke="#e8c04a" stroke-width="2.4" opacity=".6" stroke-linecap="round"/>'+
+          '<path d="M0-7L1.8-1.8 7 0 1.8 1.8 0 7-1.8 1.8-7 0-1.8-1.8Z" fill="#e8c04a" opacity=".6" transform="translate(214 106) scale(.85)"/>'+
+          '<g fill="#f2dfa8" opacity=".55"><path d="M0-7L1.8-1.8 7 0 1.8 1.8 0 7-1.8 1.8-7 0-1.8-1.8Z" transform="translate(48 130) scale(.7)"/></g>'+
+          '<g fill="#ffffff" opacity=".55"><path d="M0-7L1.8-1.8 7 0 1.8 1.8 0 7-1.8 1.8-7 0-1.8-1.8Z" transform="translate(262 148) scale(.6)"/></g>'+
+          '<g fill="#f2dfa8" opacity=".4"><circle cx="240" cy="230" r="6"/><circle cx="52" cy="250" r="5"/></g>'+
+          '<ellipse cx="150" cy="428" rx="250" ry="88" fill="url(#ss12c)"/>'+
+          '<ellipse cx="52" cy="440" rx="150" ry="62" fill="#e0d098" opacity=".78"/>'+
+          '<g stroke="#c9bd85" stroke-width="3" stroke-linecap="round" fill="none" opacity=".9">'+
+          '<path d="M60 400c-2-13 2-22 9-28"/>'+
+          '<path d="M74 404c1-11 6-17 13-20"/>'+
+          '<path d="M226 404c2-12-1-20-8-26"/>'+
+          '<path d="M242 408c0-10 4-16 11-19"/></g>'+
+          '<g fill="#fda4af" opacity=".5"><circle cx="248" cy="252" r="1.8"/><circle cx="50" cy="262" r="1.6"/></g>'+
+          '<rect y="326" width="300" height="94" fill="url(#ss12d)"/></svg>',
+        hero:'<svg viewBox="0 0 120 120" aria-hidden="true">'+
+          '<defs>'+
+          '<radialGradient id="sh12c" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>'+
+          '<radialGradient id="sh12b" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fffbeb" stop-opacity=".95"/><stop offset=".55" stop-color="#fcd34d" stop-opacity=".45"/><stop offset="1" stop-color="#fcd34d" stop-opacity="0"/></radialGradient>'+
+          '<linearGradient id="sh12a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fef3c7"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>'+
+          '</defs>'+
+          '<circle cx="60" cy="60" r="52" fill="url(#sh12c)" opacity=".6"/>'+
+          '<path d="M110.5 14.5 L89 36" stroke="#fde68a" stroke-width="2" stroke-linecap="round" opacity=".65"/>'+
+          '<path d="M107 17.5 L92 32.5" stroke="#fffbeb" stroke-width=".9" stroke-linecap="round" opacity=".8"/>'+
+          '<path d="M89 30.5l1.5 4 4 1.5-4 1.5-1.5 4-1.5-4-4-1.5 4-1.5z" fill="#fcd34d"/>'+
+          '<path d="M60 94 C41 79 25 65 25 47 C25 34 34 27 44 27 C51 27 56.5 31 60 37 C63.5 31 69 27 76 27 C86 27 95 34 95 47 C95 65 79 79 60 94 Z" fill="none" stroke="url(#sh12a)" stroke-width="3.4" stroke-linecap="round" stroke-dasharray="0.1 7.2"/>'+
+          '<path d="M60 94 C41 79 25 65 25 47 C25 34 34 27 44 27 C51 27 56.5 31 60 37 C63.5 31 69 27 76 27 C86 27 95 34 95 47 C95 65 79 79 60 94 Z" fill="none" stroke="#fde68a" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="0.1 5.4" opacity=".8" transform="translate(60 59) scale(.8) translate(-60 -59)"/>'+
+          '<g fill="#fbbf24"><circle cx="44" cy="27" r="3.4"/><circle cx="76" cy="27" r="3.4"/><circle cx="25" cy="47" r="3"/><circle cx="95" cy="47" r="3"/></g>'+
+          '<g fill="#ffffff" opacity=".85"><circle cx="42.8" cy="25.8" r="1.2"/><circle cx="74.8" cy="25.8" r="1.2"/><circle cx="24" cy="46" r="1"/><circle cx="94" cy="46" r="1"/></g>'+
+          '<circle cx="60" cy="94" r="15" fill="url(#sh12b)"/>'+
+          '<path d="M0-6Q1.5-1.5 6 0 1.5 1.5 0 6-1.5 1.5-6 0-1.5-1.5 0-6Z" fill="#fbbf24" transform="translate(60 93)"/>'+
+          '<circle cx="60" cy="93" r="2" fill="#fffbeb"/>'+
+          '<path d="M0-3Q.8-.8 3 0 .8.8 0 3-.8.8-3 0-.8-.8 0-3Z" fill="#fde68a" transform="translate(17 78)"/>'+
+          '<path d="M0-2.4Q.65-.65 2.4 0 .65.65 0 2.4-.65.65-2.4 0-.65-.65 0-2.4Z" fill="#ffffff" opacity=".8" transform="translate(103 66)"/></svg>' },
+    ],
+  };
+
   /* 档位配置：分镜强度 / 特效开关（rare = 克制直出，详见技术方案 §4.2）
      suspenseMs/revealHold = 档位分镜时长（legendary 原值作默认）；holo = WebGL 调色盘（u_colA/u_colB/u_glint） */
   var TIERS = {
@@ -1157,7 +1788,13 @@
     },
   };
 
-  var cur = { tier:'legendary', idx:0, mode:'reveal' };
+  var cur = { series:'v1', tier:'legendary', idx:0, mode:'reveal' };
+  /* 册元数据（批次 4）：侧书脊题名与档位按钮文案按册切换；SETS = 第一册，SETS2 = 第二册 */
+  var SERIES_META = {
+    v1:    { title:'怦然心动', tierPrefix:'第一册' },
+    story: { title:'我们的故事', tierPrefix:'第二册' },
+  };
+  function curSets(){ return cur.series === 'story' ? SETS2 : SETS; }
   var plaqueStyle = 1; /* 铭牌文案结构：1=日期独立（动词归人）2=藏签式（开出于…） */
   var avatarOn = true; /* 档案头像（方案 A：纹章位替换） */
   var spineOn = true;  /* 侧书脊（竖排册名+品牌印） */
@@ -1188,13 +1825,20 @@
 
   /* ---------- 选择器 ---------- */
   function renderPicker(){
-    var chips = SETS[cur.tier].map(function(item, i){
+    var sets = curSets();
+    var chips = sets[cur.tier].map(function(item, i){
       return '<button class="pk-chip'+(i===cur.idx?' active':'')+'" data-idx="'+i+'">'+item.name+'</button>';
     }).join('');
     stickerRow.innerHTML = chips;
+    /* 档位按钮文案随册切换（第一册 · 稀有款 / 第二册 · 稀有款） */
+    var TIER_LABEL = { rare:'稀有款', epic:'史诗款', legendary:'传说款' };
+    Array.prototype.forEach.call(document.querySelectorAll('.pk-tier'), function(btn){
+      var k = btn.getAttribute('data-tier');
+      btn.textContent = SERIES_META[cur.series].tierPrefix + ' · ' + TIER_LABEL[k];
+    });
     pkNote.textContent = cur.mode === 'notify'
       ? TIERS.notify.note
-      : TIERS[cur.tier].note + (SETS[cur.tier][cur.idx].note ? ' · ' + SETS[cur.tier][cur.idx].note : '');
+      : TIERS[cur.tier].note + (sets[cur.tier][cur.idx].note ? ' · ' + sets[cur.tier][cur.idx].note : '');
     Array.prototype.forEach.call(stickerRow.querySelectorAll('.pk-chip'), function(btn){
       btn.addEventListener('click', function(){
         cur.idx = parseInt(btn.getAttribute('data-idx'), 10);
@@ -1202,6 +1846,15 @@
       });
     });
   }
+  Array.prototype.forEach.call(document.querySelectorAll('.pk-series'), function(btn){
+    btn.addEventListener('click', function(){
+      cur.series = btn.getAttribute('data-series'); cur.idx = 0;
+      Array.prototype.forEach.call(document.querySelectorAll('.pk-series'), function(b){
+        b.classList.toggle('active', b === btn);
+      });
+      renderPicker(); applyCard();
+    });
+  });
   Array.prototype.forEach.call(document.querySelectorAll('.pk-tier'), function(btn){
     btn.addEventListener('click', function(){
       cur.tier = btn.getAttribute('data-tier'); cur.idx = 0;
@@ -1253,7 +1906,7 @@
   });
 
   function applyCard(){
-    var t = TIERS[cur.tier], item = SETS[cur.tier][cur.idx];
+    var t = TIERS[cur.tier], item = curSets()[cur.tier][cur.idx];
     overlay.classList.remove('tier-rare','tier-epic','tier-legendary');
     overlay.classList.add(t.cls);
     fTier.textContent = t.label;
@@ -1288,6 +1941,7 @@
       avImg.onerror = function(){ avImg.onerror = null; avImg.src = AVATAR_FALLBACK; };
       avImg.src = 'av-' + item.av + '.jpg';
     }
+    $('backSpine').textContent = '有爱 · ' + SERIES_META[cur.series].title;
     $('backSpine').style.display = spineOn ? '' : 'none';
   }
 

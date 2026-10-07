@@ -5,8 +5,8 @@
  *   ② playNotify  对方端通知（图鉴红点 → 点入弹卡，无悬念无爆发，淡入即 idle，角标「ta 开出的」）
  *   ③ playReview  图鉴复看（点已解锁贴纸格，日期=unlocked_at，无 NEW 无爆发，可翻面看档案）
  *
- * 设计真值：docs/design-todo-v2/reveal-card-lab.html（业主逐张确认）；档位参数与 12 张
- * 专属内容卡在 ./reveal-card-data.js；贴纸名称/短句取 blindbox.js 单一来源。
+ * 设计真值：docs/design-todo-v2/reveal-card-lab.html（业主逐张确认）；档位参数与两册
+ * 24 张专属内容卡在 ./reveal-card-data.js；贴纸名称/短句取各册内容模块单一来源。
  *
  * 降级链（§9）：WebGL 不可用 → CSS sheen 兜底流光；特效关 / prefers-reduced-motion →
  * 静态精卡（no-anim，信息全保留）；组件级异常 → spec.fallback（调用方回落 Toast 路径，D8）。
@@ -16,23 +16,23 @@
 
 import { isFxEnabled } from './theme.js';
 import {
-  parseStickerKey, getStickerName, getStickerFlavor, getSeriesDef, BASE_SERIES,
+  parseStickerKey, getStickerName, getStickerFlavor, getSeriesDef,
 } from './blindbox.js';
 import { REVEAL_SETS, REVEAL_TIERS, cardPct } from './reveal-card-data.js';
 import { avatarForUsername } from './avatars.js';
 
 // ===== 数据访问 =====
 
-/** 该贴纸是否有专属内容卡（第一册 12 张有；第二册 story_* 尚无 → 调用方回落故事卡/Toast） */
+/** 该贴纸是否有专属内容卡（两册 24 张：v1 12 张 + story 12 张，批次 4 起 story 也有） */
 export function canRevealCard(stickerKey) {
   return !!getCardArt(stickerKey);
 }
 
-/** stickerKey → 卡面内容（scene/hero/no）；无专属卡的 key 返回 null */
+/** stickerKey → 卡面内容（scene/hero/no）；无专属卡的 key 返回 null（回落故事卡/Toast） */
 function getCardArt(stickerKey) {
   const parsed = parseStickerKey(stickerKey);
-  if (!parsed || parsed.series !== BASE_SERIES) return null;
-  const arr = REVEAL_SETS[BASE_SERIES] && REVEAL_SETS[BASE_SERIES][parsed.rarity];
+  if (!parsed) return null;
+  const arr = REVEAL_SETS[parsed.series] && REVEAL_SETS[parsed.series][parsed.rarity];
   return (arr && arr[parsed.index - 1]) || null;
 }
 

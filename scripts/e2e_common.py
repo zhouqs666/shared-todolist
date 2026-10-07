@@ -238,12 +238,18 @@ def reveal_card_snapshot(page):
             const n = overlay.querySelector(sel);
             if (!n) return false;
             const style = getComputedStyle(n);
-            return style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity || '1') > 0.05;
+            if (style.display === 'none' || style.visibility === 'hidden') return false;
+            if (parseFloat(style.opacity || '1') <= 0.05) return false;
+            // transform 也要查：被 scale(0) 缩没的元素 display/opacity 全正常但视觉不存在
+            const rect = n.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
         };
         return {
             name: txt('[data-testid="reveal-card-name"]'),
+            nameVisible: visible('[data-testid="reveal-card-name"]'),
             tier: txt('.f-tier'),
             meta: txt('[data-testid="reveal-card-meta"]'),
+            metaVisible: visible('[data-testid="reveal-card-meta"]'),
             notifyBadge: txt('[data-testid="reveal-card-notify-badge"]'),
             noAnim: overlay.classList.contains('no-anim'),
             tierRare: overlay.classList.contains('tier-rare'),
