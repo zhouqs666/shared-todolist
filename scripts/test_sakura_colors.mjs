@@ -75,6 +75,7 @@ const WARM_HUE_ALLOWLIST = [
   { value: '#ea580c', reason: '留言字数接近上限的警示橙（style.css 原地注释已声明刻意）' },
   { value: '#a08554', reason: '开出卡片传说款卡面短句文案色（#rvOverlay .f-flavor 的 --flavor，legendary 香槟金材质；设计真值 = reveal-card-lab.html，业主逐张确认定稿 2026-10-05）' },
   { value: 'rgba(255,255,242,.96)', reason: '开出卡片揭晓帧白闪（#rvFlash rv-flashOut，legendary/epic 分镜；设计真值 = reveal-card-lab.html，业主确认定稿 2026-10-05）' },
+  { value: '#f97316', reason: '测试环境角标渐变的深橙端（.env-badge，双环境切换的安全标识 2026-10-06——仅测试环境显示的警示徽标，非主题色）' },
 ];
 
 /**

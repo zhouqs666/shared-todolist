@@ -197,6 +197,31 @@ export function syncReminders(todos, myUserId) {
   }, SYNC_DEBOUNCE_MS);
 }
 
+/**
+ * 取消全部本机已调度的提醒（环境切换前调用，见 env-switch.js）。
+ *
+ * 不走 syncReminders 的防抖对账——切换会立即 reload，300ms 防抖窗口内的取消
+ * 会随页面销毁丢失，留下「属于另一环境的提醒继续弹」的脏状态。直接 getPending + cancel。
+ * await 的都是插件方法的返回值（铁律八合规）；网页非原生为 no-op（本就没有 OS 级提醒）。
+ */
+export async function cancelAllReminders() {
+  if (e2eMode) {
+    const ids = [...stubPending.keys()];
+    stubPending.clear();
+    testLog.canceled.push(...ids.map((id) => ({ id, todoId: null, viaSync: false })));
+    return;
+  }
+  if (!pluginInstance) return;
+  try {
+    const { notifications } = await pluginInstance.getPending();
+    if (notifications && notifications.length) {
+      await pluginInstance.cancel({ notifications: notifications.map((n) => ({ id: n.id })) });
+    }
+  } catch (err) {
+    console.warn('[reminder] 取消全部提醒失败（已忽略，切回后对账自愈）:', err && err.message);
+  }
+}
+
 /** 调度失败的用户提示只发一次（会话级去重，见 scheduleTodoReminder 的 catch） */
 let scheduleFailWarned = false;
 

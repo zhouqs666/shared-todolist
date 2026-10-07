@@ -29,6 +29,11 @@
 - 本律约束的是「为了验证而改生产数据」：测试、演示、截图、排查。**发布（铁律三）与回滚**本身就要写生产表
   （`app_versions` / Storage），属**产品业务动作**，不属本律禁止范围——但必须走审批门（见铁律三）
 - 判据一句话：**这个写操作是产品功能的一部分，还是为了「验证一下」？** 后者一律禁止
+- 双环境切换后的载体（2026-10-06）：真机侧的「测试隔离」从**包内容**变为
+  「`app_env` 标记（测试环境角标可见）+ 测试发版通道分离」——包内含两套 anon 配置是设计
+  （anon 本就公开，安全边界仍在 RLS）。配套硬闸：`release-test.mjs` 发布时校验包主默认=测试库
+  + 含切换标记（fail-closed）、`check-test-schema` 对最新启用包做同校验、离线队列按环境分键、
+  切环境取消提醒；E2E `test_env_switch.py` 断言切环境期间**生产请求零出网**
 - 为什么「测试已全面隔离」的今天这条仍然必要（2026-10-03 复评）：① 生产合法写通道仍常用
   （release / rollback / apply-sql / release-apk），上面那句判据是它们的边界定义；② `check-test-guards.mjs`
   等"漏挂守卫直接红"的基建，存在依据就是本条——规则删了，守卫就成了无动机的"死代码"；③ 隔离基建自身会漂移
@@ -49,7 +54,7 @@
   ```bash
   node scripts/serve-test.mjs      # 测试服务器，端口 3100，连独立测试库
   node scripts/reset-test-db.mjs   # 归零测试库（清 E2E 残留 + 贴纸）
-  node scripts/run-web-e2e.mjs     # 推荐：一次跑完 8 个用例（逐个归零 + 失败重试一次 + flaky 显式标记 + 汇总表）
+  node scripts/run-web-e2e.mjs     # 推荐：一次跑完 9 个用例（逐个归零 + 失败重试一次 + flaky 显式标记 + 汇总表）
   python3 scripts/test_undo_complete.py   # 也可单跑某个：脚本自动连 3100 + 自证隔离
   ```
   单跑用例记得自己先归零；`run-web-e2e.mjs` 会在每个用例前自动归零（用例之间不留隐含依赖）
@@ -76,8 +81,8 @@
 **⚠️ 例外/边界：**
 - **门禁覆盖 ≠ 测试全覆盖**，这是有意的分层（2026-09-14 定型）：PR 门禁要「快而稳」（Node 回归 + admin
   Playwright E2E + workflow 静态检查——跑得慢拖住合并、跑得不稳让人无视红灯）；全量回归要「慢而全」——
-  8 个双账号 E2E（blindbox / offline / trash / undo_complete / pin / reminder / camera_image /
-  note_ceremony）走 `e2e-web-full.yml`，**每晚 02:17（北京）**定时 + 手动。该工作流**不设 required check**
+  9 个双账号 E2E（blindbox / offline / trash / undo_complete / pin / reminder / camera_image /
+  note_ceremony / env_switch）走 `e2e-web-full.yml`，**每晚 02:17（北京）**定时 + 手动。该工作流**不设 required check**
   （不在 PR 上跑，设了会让 check 停在 "Expected" 卡死 PR）；夜里会跑，但**改动等待期内**要自己先跑一遍
 - **CI 绿灯 ≠ 交付物可用**——制品/发布结果单独回读验证（铁律三 `verify-release.mjs`）
 - 有硬限制无法验证的功能点：交付时明确列出 + 标注原因（如"无法模拟真机震动"、"无法测试 FCM 推送"）
@@ -195,7 +200,7 @@
   | 层 | 何时跑 | 耗时（实测） | 角色 |
   |---|---|---|---|
   | `ci.yml`（3 job） | 每次 push / PR | 约 70 秒 | 必需门禁：Node 回归 + admin E2E + actionlint |
-  | `e2e-web-full.yml` | 每晚 02:17 + 手动 | 约 4–7 分钟 | 全量业务回归（8 个双账号 E2E）+ 三项 preflight |
+  | `e2e-web-full.yml` | 每晚 02:17 + 手动 | 约 4–7 分钟 | 全量业务回归（9 个双账号 E2E）+ 三项 preflight |
 
 - **设备侧（模拟器）不进 CI**（2026-09-17 删除 e2e-app.yml，#78）：四条理由与明确接受的代价见
   [docs/lessons/2026-09-17-device-ci-removal.md](docs/lessons/2026-09-17-device-ci-removal.md)。
@@ -345,8 +350,10 @@ cron 无人值守形态要格外小心（先只报告不删一段，真删时告
 - **打包**：Capacitor → Android APK（`com.love.todo`）；**PWA**：`manifest.webmanifest` + `sw.js`
   （仅浏览器环境生效，原生 bypass；版本号见文件内 `VERSION` 常量）
 - **发布通道**：A 热更新（`release.mjs` / `release-web.yml` 审批门）+ B APK（`release-apk.mjs` /
-  `release-apk.yml` 审批门）+ App 内自更新（`apk-update.js` + 自研 `ApkInstallerPlugin`）；回读校验
-  `verify-release.mjs` / `verify-apk-release.mjs`（只读、可当 CI 门禁）；`release-web.yml` publish 后顺带跑
+  `release-apk.yml` 审批门）+ App 内自更新（`apk-update.js` + 自研 `ApkInstallerPlugin`）+
+  测试通道（`release-test.mjs` 热更 / `build-test-apk.mjs --publish` 壳更新，只发【测试项目】——
+  真机测试包自动收到，不经审批门，内容护栏强制包内 supabase.js 指向测试库；详见 release-runbook）；
+  回读校验 `verify-release.mjs` / `verify-apk-release.mjs`（只读、可当 CI 门禁）；`release-web.yml` publish 后顺带跑
   `dora-metrics.mjs` 写进 Run Summary（`continue-on-error: true`——观测不该把已成功的发布变成红灯）
 - **Capacitor 插件（2026-10-03 核实）**：`@capacitor/app`（`App.getInfo()`）/ `LocalNotifications` /
   `SplashScreen` / `@capgo/capacitor-updater`（热更）/ 自研 `ApkInstallerPlugin`；**状态栏无独立插件**
@@ -354,7 +361,7 @@ cron 无人值守形态要格外小心（先只报告不删一段，真删时告
 - **Storage bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更 zip + APK）
 - **CI/CD（5 个 workflow）**：`ci.yml`（Node 回归 + admin Playwright E2E + actionlint + 三个结构性检查）、
   `release-web.yml`（仅手动）、`release-apk.yml`（仅手动）、`e2e-web-full.yml`（每晚 02:17 北京，
-  8 个双账号 E2E）、`codeql.yml`（静态扫描）。两个写生产的工作流共用 `production` 审批门但**各有
+  9 个双账号 E2E）、`codeql.yml`（静态扫描）。两个写生产的工作流共用 `production` 审批门但**各有
   concurrency 组**（`release-web` / `release-apk`），写不同的表/对象，互不需串行。
   ⚠️ `schedule` cron **按 UTC 解释**（本项目 `17 18 * * *` = 北京 02:17，分钟位不要写 0——整点是调度器
   负载高峰），且定时任务只在**默认分支**运行
@@ -364,6 +371,10 @@ cron 无人值守形态要格外小心（先只报告不删一段，真删时告
   `.github/dependabot.yml` 驱动）、
   `SECURITY.md` 私密上报；Dependabot **刻意不含 gradle**（`android/` 是生成工程，CVE 已由 alerts 覆盖）；
   取 SHA：`gh api repos/<owner>/<repo>/git/ref/tags/<tag>`（`type=tag` 再解一层）
+- **双环境切换（2026-10-06）**：一个包测试/生产可切（`env-switch.js`，长按头像 → 账号菜单
+  「切换环境」→ 确认 → 写 `app_env` + reload）；测试环境角标在登录页与顶栏；`supabase.js`
+  内含两套 anon 配置（主默认 + 显式对）——渠道身份决定无标记设备的默认环境；离线队列
+  `@test` 分键、切环境取消提醒（铁律一例外段有完整护栏清单）
 - **本地服务**：`serve.mjs`（端口 3000，生产库，仅手动自测）／`serve-test.mjs`（端口 3100，测试库，跑 E2E 必用）
 - **测试库维护**：`reset-test-db.mjs`（归零）/ `check-test-env.mjs`（隔离）/ `check-test-schema.mjs`（契约）/
   `check-rls.mjs`（RLS 探针）
