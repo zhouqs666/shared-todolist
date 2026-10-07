@@ -28,13 +28,11 @@
  *     （rarity_seen=false 且非本人创建，setPendingReveals/addPendingReveal）：
  *     点图鉴入口先逐张弹通知卡，看完回标 rarity_seen + 标记贴纸已看（一个动作清两个信号）
  *
- * 可点击性引导（轻晃演示，克制版）：
- *   已解锁贴纸可点出「复看卡」（批次 3 前 = 专属短句故事卡），但触屏上没有 hover/pointer
- *   线索，用户发现不了。只教不纠缠：仅当用户从未点过任何贴纸且演示展示次数未达上限
- *   （localStorage，按**引导代际**记 key——新交互上线 bump TEACH_VERSION 让老用户重学，
- *   见 TAP_EVER_KEY 处注释）时，打开图鉴约 1.2s 后第一张已解锁贴纸轻晃一次做"可以戳"的
- *   暗示；点过任意一张后本代际内永久退场。全程零文案、零新 UI 元素；
- *   prefers-reduced-motion 下由 CSS 禁用动画。
+ * 可点击性提示（常驻微文案，2026-10-07 起替代上线一天的轻晃演示）：
+ *   已解锁贴纸可点出「复看卡」，但触屏上没有 hover/pointer 线索。轻晃演示按"学会即
+ *   退场"设计，退场后书架重新变回零线索——业主拍板改为常驻兜底：进度条下一行
+ *   11px 微文案「戳戳贴纸，重温开出那天 ✨」，该册有已解锁贴纸才显示
+ *   （0 张时无可点对象；切换见 renderStickerBook / #stickerTapHint）。
  */
 
 import { getStickers, setStickersRenderFn } from './state.js';
@@ -66,17 +64,6 @@ const CELEBRATED_KEY = 'stickerBookCelebrated';
 function celebratedKeyFor(series) {
   return series === BASE_SERIES ? CELEBRATED_KEY : `${CELEBRATED_KEY}_${series}`;
 }
-// localStorage key：轻晃演示的持久化——
-//   TAP_EVER_KEY：用户点过任意贴纸 → 演示永久退场
-//   WIGGLE_OPENS_KEY：演示已展示的打开次数（达 WIGGLE_MAX_OPENS 后不再出现）
-// 【引导代际（2026-10-05）】"点贴纸"从弹小故事卡升级为弹复看卡（D7-③），且复看卡是
-// 收集玩法的核心入口之一 —— "学会即退场"的语义改为**跟随交互代际**：TEACH_VERSION bump
-// 后，旧代际的已学会/计数标记全部失效，老用户重新被教一轮（仍是最多 3 次、点过即退场）。
-// 将来再有可教学的新交互上线，bump 这个常量即可。
-const TEACH_VERSION = 'reveal-card';
-export const TAP_EVER_KEY = `stickerTapEver@${TEACH_VERSION}`;
-export const WIGGLE_OPENS_KEY = `stickerWiggleOpens@${TEACH_VERSION}`;
-const WIGGLE_MAX_OPENS = 3;
 
 // 是否已庆祝过集齐全集（当前激活册口径，从持久化恢复；清空重集后会重新庆祝。
 // 切册 / 打开书架时经 syncCelebratedFlag() 按激活册重读）
@@ -441,6 +428,9 @@ export function renderStickerBook(opts = {}) {
     barEl.style.width = `${(unlockedCount / TOTAL_STICKERS) * 100}%`;
     barEl.classList.toggle('sticker-modal__progress-fill--complete', unlockedCount === TOTAL_STICKERS);
   }
+  // 常驻可点提示：该册有已解锁贴纸才显示（0 张时无可点对象）
+  const tapHintEl = document.getElementById('stickerTapHint');
+  if (tapHintEl) tapHintEl.classList.toggle('hidden', unlockedCount === 0);
 
   // 集齐状态：面板金色完成态 + 徽章 + 纪念卡重看入口
   const complete = unlockedCount === TOTAL_STICKERS;
@@ -480,42 +470,16 @@ function bindGridInteraction() {
 }
 
 /**
- * "贴纸可以戳"的轻晃演示：触屏上没有 hover 线索，靠"会动"暗示可点。
- * 触发条件（同时满足）：本次打开有已解锁贴纸 + 用户从未点过任何贴纸 + 展示次数未达上限。
- * 时机：入场动画（首格 ≈0.38s）播完后约 1.2s，轻晃一次即摘掉类。
- * 每次打开最多演示一次；点过任意贴纸后永久退场。
+ * "贴纸可以戳"的常驻微文案（#stickerTapHint）：2026-10-07 起替代轻晃演示。
+ * 逻辑收在 renderStickerBook（unlockedCount === 0 → hidden），
+ * 轻晃演示的持久化/退场机制已随该交互一并移除。
  */
-function maybePlayWiggleAffordance() {
-  let everTapped = false;
-  try { everTapped = localStorage.getItem(TAP_EVER_KEY) === '1'; } catch { /* ignore */ }
-  if (everTapped) return;
-
-  const grid = document.getElementById('stickerGrid');
-  const modal = document.getElementById('stickerModal');
-  const firstUnlocked = grid ? grid.querySelector('.sticker-cell--unlocked') : null;
-  if (!firstUnlocked || !modal || modal.classList.contains('hidden')) return;
-
-  let opensShown = 0;
-  try { opensShown = parseInt(localStorage.getItem(WIGGLE_OPENS_KEY) || '0', 10) || 0; } catch { /* ignore */ }
-  if (opensShown >= WIGGLE_MAX_OPENS) return;
-  try { localStorage.setItem(WIGGLE_OPENS_KEY, String(opensShown + 1)); } catch { /* ignore */ }
-
-  setTimeout(() => {
-    // 等待期间弹层被关掉 / 网格被实时刷新重绘 → 跳过这次演示
-    if (!modal || modal.classList.contains('hidden')) return;
-    if (!grid.contains(firstUnlocked)) return;
-    firstUnlocked.classList.add('sticker-cell--wiggle');
-    setTimeout(() => firstUnlocked.classList.remove('sticker-cell--wiggle'), 800);
-  }, 1200);
-}
 
 /** 弹出贴纸详情：复看卡（D7-③）或故事卡回落。 */
 let flavorTimer = null;
 function revealFlavor(cell) {
-  // 用户戳了贴纸 → 轻晃演示永久退场（学会即不再出现）
-  try { localStorage.setItem(TAP_EVER_KEY, '1'); } catch { /* ignore */ }
-  // 点击瞬间摘掉轻晃类（暗示已完成使命，不与后续动画叠着）
-  cell.classList.remove('sticker-cell--pop', 'sticker-cell--wiggle');
+  // 点击瞬间摘掉点击弹跳类（配合下方 reflow，保证连续点击也能重放动画）
+  cell.classList.remove('sticker-cell--pop');
 
   const key = cell.dataset.key || '';
   const sticker = getStickers().find((s) => s.stickerKey === key);
@@ -625,8 +589,6 @@ async function openStickerBook() {
   }
   // 渲染（用最新数据 + 入场节奏）
   renderStickerBook({ animate: true });
-  // "贴纸可以戳"的轻晃演示（从未点过贴纸的用户才触发，详见函数注释）
-  maybePlayWiggleAffordance();
 }
 
 /** 关闭图鉴弹层。此刻才把**当前激活册**的贴纸标记为已看 → 清红点。 */

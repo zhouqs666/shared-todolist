@@ -265,6 +265,8 @@ with sync_playwright() as p:
         check("贴纸格子数=12", cells_rendered and cell_count == 12, f"实际 {cell_count}")
         progress_text = page.locator('#stickerProgress').text_content()
         check("进度条显示 X/12", "/ 12" in progress_text or "/12" in progress_text, f"实际: {progress_text}")
+        # 常驻可点提示（2026-10-07 替代轻晃演示）：0 解锁时必须不显示（无可点对象）
+        check("（0 解锁）常驻可点提示不显示", not page.locator('#stickerTapHint').is_visible())
 
         # 批次 3：story 册已注册 → 册 tab 栏出现（多册书架上线）
         tab_count = page.locator('#stickerBookTabs .sticker-book-tabs__tab').count()
@@ -360,8 +362,11 @@ with sync_playwright() as p:
         idle1 = wait_until(page, lambda: (reveal_card_snapshot(page) or {}).get("phaseIdle"),
                            timeout_ms=8000, desc="仪式播到 idle")
         check("（fx on）仪式播完进入 idle", idle1)
+        # NEW 角标入场带 0.7s 延迟 + 0.45s 动画（rare 档），scale(0) 起步——
+        # 可见性断言（含 rect 检查）要等动画落地，不能在 phaseIdle 当刻瞬测
         check("（fx on）NEW 角标显示（本端开出事件专属）",
-              (reveal_card_snapshot(page) or {}).get("newVisible") is True)
+              wait_until(page, lambda: (reveal_card_snapshot(page) or {}).get("newVisible") is True,
+                         timeout_ms=4000, desc="NEW 角标入场"))
         # 防回流（2026-10-07 修）：卡面信息行曾被 CSS 特异性压住——DOM 文字在（textContent
         # 断言全绿）但 opacity 恒 0，视觉永远不出现。可见性必须独立断言。
         check("（fx on）卡面贴纸名视觉可见",
@@ -397,6 +402,9 @@ with sync_playwright() as p:
         check("复看：图鉴弹层打开", wait_until(
             page, lambda: page.locator('#stickerModal').is_visible(), desc="图鉴弹层可见"))
         wait_until(page, lambda: page.locator('.sticker-cell--unlocked').count() > 0, desc="格子渲染")
+        # 常驻可点提示（2026-10-07 替代轻晃演示）：该册有已解锁贴纸 → 显示
+        check("常驻可点提示显示（该册有已解锁贴纸）",
+              page.locator('#stickerTapHint').is_visible())
         page.locator('.sticker-cell--unlocked').first.click()
         rv = wait_reveal_card(page, desc="复看卡弹出")
         check("点已解锁格子弹出复看卡", rv is not None, f"实际: {rv}")
@@ -469,6 +477,15 @@ with sync_playwright() as p:
         # 才走「不写库」的终局分支（getStarTargetSeries 为空，在任何 DB 调用前短路）。
         check("文案断言前提示已清空",
               wait_until(page, lambda: page.locator(".toast--show").count() == 0, desc="无提示在显示"))
+        # 前置守卫：t5 必须还在本地 state——全量重拉竞态会把刚加的待办冲掉（2026-10-08
+        # 实测踩到一次：直接进下面的 eval 会 todo.id crash 掉整份报告、后续 ~150 条结果全丢）。
+        # 等不到 = 明确的 check 失败，比 crash 保留证据。
+        check("t5 在本地 state（7.3c 前置）", wait_until(
+            page,
+            lambda: page.evaluate("async () => "
+                                  "(await import('/js/state.js')).getTodos()"
+                                  ".some(t => t.text === 'E2E-测试-强制稀有5')"),
+            timeout_ms=5000, desc="t5 在 getTodos() 中"))
         book_done = page.evaluate("""async () => {
             const state = await import('/js/state.js');
             const bb = await import('/js/blindbox.js');
@@ -480,6 +497,7 @@ with sync_playwright() as p:
             });
             const book = (series, star) => [...fake(series, 'rare', 4, star), ...fake(series, 'epic', 4, star), ...fake(series, 'legendary', 4, star)];
             const todo = state.getTodos().find((t) => t.text === 'E2E-测试-强制稀有5');
+            if (!todo) return { todoMissing: true, allComplete: null, target: null, starTarget: null };
             try {
                 state.setStickers([...book('v1', 2), ...book('story', 2)]);
                 await bb.onRollRarity({ id: todo.id, rarity: 'rare' }, todo.createdBy);
@@ -514,6 +532,7 @@ with sync_playwright() as p:
             });
             const book = (series) => [...fake(series, 'rare', 4), ...fake(series, 'epic', 4), ...fake(series, 'legendary', 4)];
             const todo = state.getTodos().find((t) => t.text === 'E2E-测试-强制稀有5');
+            if (!todo) return { todoMissing: true, upgraded: null, starTarget: null };
             try {
                 state.setStickers([...book('v1'), ...book('story')]);
                 const r = await bb.onRollRarity({ id: todo.id, rarity: 'rare' }, todo.createdBy);

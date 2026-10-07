@@ -3688,19 +3688,6 @@ body.cherish-stage-on .topbar {
   }
 }
 
-/* "贴纸可以戳"的轻晃演示：触屏上没有 hover/pointer 线索，靠"会动"暗示可点。
-   JS 只在用户从未点过任何贴纸时给第一张已解锁贴纸加这个类（晃一次就摘掉）。
-   放在 --pop 之前：万一两个类同时存在，点击弹跳的动画优先。 */
-.sticker-cell--wiggle {
-  animation: sticker-cell-wiggle 0.75s var(--ease);
-}
-@keyframes sticker-cell-wiggle {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-5deg) scale(1.05); }
-  55% { transform: rotate(4deg) scale(1.03); }
-  80% { transform: rotate(-2deg); }
-}
-
 /* 已解锁：白色裁切底板模拟实体贴纸（Die-cut） */
 .sticker-cell__plate {
   width: 44px;
@@ -3931,6 +3918,18 @@ body.cherish-stage-on .topbar {
   align-items: center;
   gap: 12px;
 }
+
+/* 常驻可点提示（2026-10-07 替代轻晃演示）：淡樱粉小字收尾，能被忽略但找得到；
+   显隐由 sticker-book.js 按当前册解锁数切换（0 张不显示）
+   （.hidden 各元素自声明——本项目没有通用 .hidden 规则，漏了 = 永远可见） */
+.sticker-modal__tap-hint {
+  margin: 10px 0 2px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-align: center;
+  color: rgba(194, 82, 126, 0.5);
+}
+.sticker-modal__tap-hint.hidden { display: none; }
 .sticker-modal__progress-bar {
   flex: 1;
   height: 8px;
@@ -3963,8 +3962,7 @@ body.cherish-stage-on .topbar {
     animation: none !important;
   }
   .sticker-cell--in,
-  .sticker-cell--pop,
-  .sticker-cell--wiggle {
+  .sticker-cell--pop {
     animation: none !important;
   }
 }
