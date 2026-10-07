@@ -362,6 +362,11 @@ with sync_playwright() as p:
         check("（fx on）仪式播完进入 idle", idle1)
         check("（fx on）NEW 角标显示（本端开出事件专属）",
               (reveal_card_snapshot(page) or {}).get("newVisible") is True)
+        # 防回流（2026-10-07 修）：卡面信息行曾被 CSS 特异性压住——DOM 文字在（textContent
+        # 断言全绿）但 opacity 恒 0，视觉永远不出现。可见性必须独立断言。
+        check("（fx on）卡面贴纸名视觉可见",
+              wait_until(page, lambda: (reveal_card_snapshot(page) or {}).get("nameVisible") is True,
+                         timeout_ms=4000, desc="卡面名字淡入"))
         check("开出卡片可关闭", close_reveal_card(page))
         page.evaluate("() => localStorage.setItem('__e2e_fx_off', '1')")  # 装回降级钩子（跑批默认）
         wait_add_settled(page, t1)
@@ -379,6 +384,8 @@ with sync_playwright() as p:
               snap2 is not None and snap2["noAnim"] and snap2["phaseIdle"], f"实际: {snap2}")
         check("（fx off）NEW 角标立显（self 事件专属；no-anim 全信息静态卡不隐藏内容）",
               snap2 is not None and snap2["newVisible"], f"实际: {snap2}")
+        check("（fx off）卡面名字/进度视觉可见（no-anim 全信息，防特异性压住复发）",
+              snap2 is not None and snap2["nameVisible"] and snap2["metaVisible"], f"实际: {snap2}")
         check("开出卡片可关闭（7.1b）", close_reveal_card(page))
         wait_add_settled(page, t2)
         check("第二条解锁的是 rare_2（序号递增、未重复同一张）",

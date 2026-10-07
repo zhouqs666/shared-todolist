@@ -4718,7 +4718,7 @@ body.cherish-stage-on .topbar {
 }
 /* flipped 挂在 #rvCard3d 上，铭牌是其后代——用后代选择器 */
 #rvCard3d.flipped .back-archive{ opacity:1; }
-.no-anim .back-archive{ transition:none; }
+#rvOverlay.no-anim .back-archive{ transition:none; }
 
 /* —— 卡面：档位框 + 纸底 + 专属内容卡（场景 + 精修主视觉） —— */
 #rvOverlay .face.front{
@@ -4732,7 +4732,7 @@ body.cherish-stage-on .topbar {
     var(--paper);
   box-shadow:inset 0 0 24px rgba(160,116,32,.18);
 }
-.tier-rare .f-body{ box-shadow:inset 0 0 24px rgba(194,86,132,.14); }
+#rvOverlay.tier-rare .f-body{ box-shadow:inset 0 0 24px rgba(194,86,132,.14); }
 /* 贴纸专属场景层（每张卡独立 SVG，D10） */
 #rvOverlay .f-scene{ position:absolute; inset:0; }
 #rvOverlay .f-scene svg{ width:100%; height:100%; display:block; }
@@ -4761,7 +4761,7 @@ body.cherish-stage-on .topbar {
 }
 .phase-idle .f-new{ animation:rv-newPop .45s 1.15s cubic-bezier(.2,1.6,.4,1) forwards; }
 .tier-rare .phase-idle .f-new{ animation-delay:.7s; }
-.no-anim .f-new{ animation:none; transform:rotate(8deg) scale(1); opacity:1; }
+#rvOverlay.no-anim .f-new{ animation:none; transform:rotate(8deg) scale(1); opacity:1; }
 @keyframes rv-newPop{ to{ transform:rotate(8deg) scale(1); } }
 
 /* 通知模式角标（D7-②）：仅 mode-notify 显示；位置在档位绶带下方（top:48px 不与绶带重叠） */
@@ -4779,7 +4779,7 @@ body.cherish-stage-on .topbar {
 @keyframes rv-notifyPop{ to{ transform:rotate(4deg) scale(1); } }
 /* 通知/复看（mode-quiet）不显示 NEW——NEW 仅本端开出事件显示（D11 实施备注①） */
 #rvOverlay.mode-quiet .f-new{ display:none; }
-.no-anim .f-notify{ animation:none; transform:rotate(4deg) scale(1); }
+#rvOverlay.no-anim .f-notify{ animation:none; transform:rotate(4deg) scale(1); }
 
 #rvOverlay .f-sticker{
   position:absolute; left:50%; top:41%; width:52%; aspect-ratio:1;
@@ -4795,12 +4795,14 @@ body.cherish-stage-on .topbar {
 
 #rvOverlay .f-info{ position:absolute; left:0; right:0; bottom:0; padding:0 20px 18px; text-align:center; }
 #rvOverlay .f-info > div{ opacity:0; transform:translateY(10px); transition:opacity .5s ease, transform .5s ease; }
-.phase-idle .si1{ transition-delay:.45s; } .phase-idle .si2{ transition-delay:.68s; } .phase-idle .si3{ transition-delay:.9s; }
-.tier-rare .si1{ transition-delay:.25s !important; }
-.tier-rare .si2{ transition-delay:.42s !important; }
-.tier-rare .si3{ transition-delay:.58s !important; }
-.phase-idle .f-info > div{ opacity:1; transform:none; }
-.no-anim .f-info > div{ opacity:1; transform:none; transition:none; }
+/* 显现规则必须与 .f-info > div 同带 #rvOverlay 前缀（压过上面的隐藏规则靠的是这颗 ID）；
+   漏前缀 = 卡面名字/短句/进度永远淡不进来（2026-10-07 修，E2E 曾因只断言 textContent 而漏掉） */
+#rvOverlay.phase-idle .si1{ transition-delay:.45s; } #rvOverlay.phase-idle .si2{ transition-delay:.68s; } #rvOverlay.phase-idle .si3{ transition-delay:.9s; }
+#rvOverlay.tier-rare .si1{ transition-delay:.25s !important; }
+#rvOverlay.tier-rare .si2{ transition-delay:.42s !important; }
+#rvOverlay.tier-rare .si3{ transition-delay:.58s !important; }
+#rvOverlay.phase-idle .f-info > div{ opacity:1; transform:none; }
+#rvOverlay.no-anim .f-info > div{ opacity:1; transform:none; transition:none; }
 #rvOverlay .f-name{
   font-size:34px; font-weight:800; letter-spacing:.3em; text-indent:.3em; line-height:1.25;
   background:linear-gradient(180deg,var(--name-hi),var(--name-mid) 45%,var(--name-lo));
@@ -4818,9 +4820,9 @@ body.cherish-stage-on .topbar {
   background:var(--bar);
   transition:width 1s .85s cubic-bezier(.3,.8,.3,1);
 }
-.tier-rare .bar-fill{ transition-delay:.5s; transition-duration:.7s; }
-.phase-idle .bar-fill{ width:var(--prog,25%); }
-.no-anim .bar-fill{ width:var(--prog,25%); transition:none; }
+#rvOverlay.tier-rare .bar-fill{ transition-delay:.5s; transition-duration:.7s; }
+#rvOverlay.phase-idle .bar-fill{ width:var(--prog,25%); }
+#rvOverlay.no-anim .bar-fill{ width:var(--prog,25%); transition:none; }
 
 /* 四角工艺线（两面共用，色随档位） */
 #rvOverlay .crn{ position:absolute; width:22px; height:22px; opacity:.75; pointer-events:none; }
@@ -4916,8 +4918,8 @@ body.cherish-stage-on .topbar {
 
 #rvOverlay.fx-off .f-body::after,
 #rvOverlay.fx-off .back-sheen::before,
-.no-anim .f-body::after,
-.no-anim .back-sheen::before{ animation:none; }
+#rvOverlay.no-anim .f-body::after,
+#rvOverlay.no-anim .back-sheen::before{ animation:none; }
 #rvOverlay.fx-off .f-body::after{ background:none; }
 
 /* ===== 通知/复看模式（D7-②③）：无悬念/无爆发，卡片淡入即 idle =====
