@@ -109,7 +109,7 @@
   - **有格式假设、必须适配**：`blindbox.js:129` / `:143`（两处裸正则）、`blindbox.js:319`（key 构造——本批次保持 v1 行为不变，批次 3 时改为带前缀）
   - **无格式假设、不用动**：`state.js:216`（按 key 幂等）、`transforms.js:74`（字段映射）、
     `db.js:499-516`（upsert `onConflict: 'sticker_key'`）、sticker-book.js 其余查找 / 已看集合（前缀天然区分两册）
-  - **测试脚本**：`test_sticker_wiggle.mjs:41-43` 与 `test_blindbox.py:150` / `:349` 构造无前缀 key——批次 2 **不改**（v1 行为零变化）；批次 3 增加 story key 用例
+  - **测试脚本**：`test_sticker_wiggle.mjs:41-43`（⚠️ 2026-10-08 轻晃引导整体移除、该脚本已随常驻提示上线而删除，此行为批次 2 当时的快照）与 `test_blindbox.py:150` / `:349` 构造无前缀 key——批次 2 **不改**（v1 行为零变化）；批次 3 增加 story key 用例
   - `reset-test-db.mjs` 硬删 stickers 全表，不依赖 key 格式
 
 ### 5.2 图鉴书架骨架
