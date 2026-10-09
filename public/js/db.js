@@ -12,7 +12,7 @@
 
 import { supabase } from './supabase.js';
 import { avatarForUsername } from './avatars.js';
-import { toExternal, toNote, toSticker } from './transforms.js';
+import { toExternal, toNote, toSticker, toTodoComment, toCommentLike } from './transforms.js';
 import { storagePathFromUrl } from './storage-utils.js';
 
 // toExternal 已抽到 ./transforms.js（消除与 realtime.js 的双份维护，技术优化清单第6条）
@@ -104,21 +104,6 @@ export const db = {
       .maybeSingle();
     if (error) throw wrapError(error);
     if (!data) throw wrapError({ message: 'NOT_FOUND', code: 'NOT_FOUND' });
-    return toExternal(data);
-  },
-
-  /**
-   * 设置完成备注（覆盖语义：新值替换旧值，传 null/空串=清除备注）。
-   * 独立于 setCompleted：备注是"已完成后"的追加/修改，completed 状态不变。
-   */
-  async setCompletedNote(id, note) {
-    const { data, error } = await supabase
-      .from('todos')
-      .update({ completed_note: note || null })
-      .eq('id', id)
-      .select()
-      .maybeSingle();
-    if (error) throw wrapError(error);
     return toExternal(data);
   },
 
@@ -487,6 +472,90 @@ export const db = {
       .eq('todo_id', todoId)
       .eq('user_id', userId)
       .in('emoji', emojis);
+    if (error) throw wrapError(error);
+  },
+
+  // ===== 待办留言板（todo_comments + comment_likes）=====
+  // 语义：同一待办下两人各自的留言逐条保留（不覆盖），可回复某条。删除=软删除（铁律九）。
+
+  /**
+   * 拉取全部留言，**含软删除行**：
+   *   · 软删行要用来解析「回复 @昵称」的前缀（父留言被删后回复仍要显示是谁说的）
+   *   · 渲染与计数由 comment-logic 过滤，调用方不必再筛
+   * 表数据量级 = 两人份的短句，整表拉取（与 listTodos / listNotes 同策略）。
+   */
+  async listComments() {
+    const { data, error } = await supabase
+      .from('todo_comments')
+      .select('id, todo_id, author_id, parent_id, content, edited_at, deleted_at, created_at')
+      .order('created_at', { ascending: true });
+    if (error) throw wrapError(error);
+    return (data || []).map(toTodoComment);
+  },
+
+  /** 发一条留言（parentId 非空 = 回复某条） */
+  async createComment(todoId, content, userId, parentId) {
+    const { data, error } = await supabase
+      .from('todo_comments')
+      .insert({ todo_id: todoId, author_id: userId, content, parent_id: parentId || null })
+      .select('id, todo_id, author_id, parent_id, content, edited_at, deleted_at, created_at')
+      .single();
+    if (error) throw wrapError(error, 'INVALID_INPUT');
+    return toTodoComment(data);
+  },
+
+  /** 改自己的留言（RLS 层面只允许动 author_id = 自己的行） */
+  async updateComment(id, content) {
+    const { data, error } = await supabase
+      .from('todo_comments')
+      .update({ content, edited_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('id, todo_id, author_id, parent_id, content, edited_at, deleted_at, created_at')
+      .maybeSingle();
+    if (error) throw wrapError(error);
+    if (!data) throw wrapError({ message: 'NOT_FOUND', code: 'NOT_FOUND' });
+    return toTodoComment(data);
+  },
+
+  /** 软删除自己的一条留言（不物理移除，回收站不展示留言） */
+  async deleteComment(id) {
+    const { error } = await supabase
+      .from('todo_comments')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw wrapError(error);
+  },
+
+  /** 拉取全部留言爱心（commentId 分桶由调用方做） */
+  async listCommentLikes() {
+    const { data, error } = await supabase
+      .from('comment_likes')
+      .select('id, comment_id, user_id, created_at');
+    if (error) throw wrapError(error);
+    return (data || []).map(toCommentLike);
+  },
+
+  /** 贴爱心（UNIQUE(comment_id, user_id) 保证幂等，重复插入被忽略） */
+  async addCommentLike(commentId, userId) {
+    const { data, error } = await supabase
+      .from('comment_likes')
+      .insert({ comment_id: commentId, user_id: userId })
+      .select('id, comment_id, user_id, created_at')
+      .single();
+    if (error) {
+      if (error.code === '23505') return null; // 已贴过，视为成功
+      throw wrapError(error);
+    }
+    return toCommentLike(data);
+  },
+
+  /** 取消爱心 */
+  async removeCommentLike(commentId, userId) {
+    const { error } = await supabase
+      .from('comment_likes')
+      .delete()
+      .eq('comment_id', commentId)
+      .eq('user_id', userId);
     if (error) throw wrapError(error);
   },
 

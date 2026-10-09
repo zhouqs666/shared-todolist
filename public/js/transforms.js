@@ -79,3 +79,33 @@ export function toSticker(row) {
     unlockedAt: row.unlocked_at,
   };
 }
+
+/**
+ * todo_comments 行 → 前端 comment（待办留言板）
+ * ⚠️ deletedAt 必须映射（与 toNote 不同）：软删行仍要留在缓存里，
+ *    因为回复的前缀「回复 @昵称」需要解析已被删除的父留言是谁写的。
+ */
+export function toTodoComment(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    todoId: row.todo_id,
+    authorId: row.author_id,
+    parentId: row.parent_id || null, // 回复目标（null=主留言）
+    content: row.content,
+    editedAt: row.edited_at || null, // 改过 → UI 显示「已编辑」
+    deletedAt: row.deleted_at || null, // 软删除（铁律九：只打时间戳）
+    createdAt: row.created_at,
+  };
+}
+
+/** comment_likes 行 → 前端 like */
+export function toCommentLike(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    commentId: row.comment_id,
+    userId: row.user_id,
+    createdAt: row.created_at,
+  };
+}

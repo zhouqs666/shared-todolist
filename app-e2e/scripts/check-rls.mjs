@@ -89,6 +89,9 @@ export const PROBES = [
   { table: 'daily_notes', row: () => ({ content: 'rls-probe', author_id: GHOST_UUID }) },
   { table: 'reactions', row: () => ({ todo_id: GHOST_UUID, user_id: GHOST_UUID, emoji: 'x' }) },
   { table: 'stickers', row: () => ({ sticker_key: 'rls-probe', rarity: 'rare', unlocked_by: GHOST_UUID }) },
+  // 待办留言板（2026-10-09）：两张表的 INSERT 都收紧到「只能以自己的身份写」
+  { table: 'todo_comments', row: () => ({ todo_id: GHOST_UUID, author_id: GHOST_UUID, content: 'rls-probe' }) },
+  { table: 'comment_likes', row: () => ({ comment_id: GHOST_UUID, user_id: GHOST_UUID }) },
 ];
 
 /** RLS 放行时数据库会回报的「约束类」错误码 —— 见到它们就等于「策略没拦住」 */

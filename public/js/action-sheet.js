@@ -35,7 +35,7 @@ export const ICONS = {
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>',
   // 图片：相册/相框线性图标（配图入口）
   image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
-  // 备注：聊天气泡（完成后的交代/收尾说明，语义=留句话）
+  // 备注：聊天气泡（留言板入口，语义=留句话/看留言）
   note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
   // 编辑：铅笔（编辑待办文案）
   edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>',
@@ -69,7 +69,8 @@ let currentActionSheet = null;
  * @param {Object} handlers 业务回调（app.js 注入，避免本模块直接耦合业务层）
  * @param {()=>Array} handlers.getTodos 拿最新 todo 列表（菜单打开时取最新版本）
  * @param {(todo)=>void} [handlers.onEdit] 编辑文案
- * @param {(todo)=>void} [handlers.onNote] 编辑备注
+ * @param {(todo)=>void} [handlers.onComments] 打开留言板（F-04 升级后的入口，原「备注」）
+ * @param {(todoId:string)=>number} [handlers.commentCountOf] 该待办的留言条数（按钮状态：有留言则 --active）
  * @param {(todo)=>void} [handlers.onSetReminder] 设置/修改到点提醒（仅 App/E2E 钩子时入口可见）
  * @param {(todo)=>void} [handlers.onTogglePin] 置顶/取消置顶
  * @param {(todoId:string, prevPaths:string[])=>void} [handlers.onAddImage] 配图/加图
@@ -130,15 +131,19 @@ export function showTodoMenu(todo, handlers = {}) {
     actions.appendChild(pinBtn);
   }
 
-  // 备注（完成前后均可加：未完成时可留交代/叮嘱，完成后可留收尾说明）
+  // 留言（完成前后均可留：未完成时可叮嘱，完成后可留收尾交代）。
   // 完成动作本身由复选框承担（点对勾=完成），菜单里不再放完成按钮，避免冗余入口
   {
-    const hasNote = !!todo.completedNote;
-    const noteBtn = mkIconBtn(ICONS.note, hasNote ? '修改备注' : '加备注', hasNote ? 'action-sheet__icon-btn--active' : '');
+    const count = typeof handlers.commentCountOf === 'function' ? handlers.commentCountOf(todo.id) : 0;
+    const noteBtn = mkIconBtn(
+      ICONS.note,
+      count > 0 ? `留言 ${count} 条` : '留言',
+      count > 0 ? 'action-sheet__icon-btn--active' : ''
+    );
     noteBtn.addEventListener('click', () => {
       if (navigator.vibrate) { try { navigator.vibrate(10); } catch (_) {} }
       closeTodoMenu();
-      if (handlers.onNote) handlers.onNote(todo);
+      if (handlers.onComments) handlers.onComments(todo);
     });
     actions.appendChild(noteBtn);
   }

@@ -4960,3 +4960,340 @@ body.cherish-stage-on .topbar {
 @media (prefers-reduced-motion: reduce){
   #rvOverlay .f-body::after, #rvOverlay .back-sheen::before, #rvBeam, #rvOverlay .f-sticker svg{ animation:none !important; }
 }
+
+/* ===== 待办留言板（F-04 升级，2026-10-09）=====
+   卡片端：气泡徽标（有留言才出现；未读 = 主色底 + 右上角圆点）
+   弹层端：底部滑出，头部固定 / 列表滚动 / 输入条固定（骨架同 .trash-sheet） */
+
+/* --- 卡片上的留言徽标 --- */
+.todo__comment-badge {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 7px 0 6px;
+  border: none;
+  border-radius: 7px;
+  background: rgba(var(--color-primary-rgb), 0.14);
+  color: var(--color-primary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.15s var(--ease), background 0.15s var(--ease), color 0.15s var(--ease);
+  animation: reactions-enter 0.3s var(--ease);
+}
+.todo__comment-badge svg { width: 13px; height: 13px; }
+.todo__comment-badge-count {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+.todo__comment-badge:active { transform: scale(0.9); }
+/* 有未读：主色实底 + 白字，右上角一个红点（"ta 说话了"的唯一发现机制——不推系统通知） */
+.todo__comment-badge--unread {
+  background: var(--color-primary);
+  color: #fff;
+}
+.todo__comment-badge--unread::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-danger);
+  box-shadow: 0 0 0 2px var(--color-surface);
+}
+@media (hover: hover) {
+  .todo__comment-badge:hover { background: var(--color-primary); color: #fff; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .todo__comment-badge { animation: none; transition: none; }
+}
+
+/* --- 弹层骨架 --- */
+.comment-sheet__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000; /* 同 action-sheet：要能盖住 lightbox(9999) 与图鉴 */
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(184, 90, 124, 0.42);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.28s var(--ease);
+}
+.comment-sheet__overlay--show { opacity: 1; }
+.comment-sheet {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--color-bg);
+  border-radius: 24px 24px 0 0;
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.28s var(--ease);
+  padding-bottom: var(--safe-bottom);
+  box-shadow: 0 -4px 24px rgba(184, 90, 124, 0.10);
+}
+.comment-sheet__overlay--show .comment-sheet { transform: translateY(0); }
+.comment-sheet__handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+  margin: 10px auto 0;
+  flex-shrink: 0;
+}
+.comment-sheet__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 20px 10px;
+  flex-shrink: 0;
+}
+.comment-sheet__titles { min-width: 0; }
+.comment-sheet__title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--color-text);
+  line-height: 1.3;
+}
+.comment-sheet__subtitle {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.comment-sheet__close {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: inline-flex;
+}
+.comment-sheet__close svg { width: 18px; height: 18px; }
+.comment-sheet__close:active { background: rgba(255, 241, 242, 0.9); }
+
+/* --- 列表区 --- */
+.comment-sheet__body {
+  position: relative; /* 未读定位用 offsetTop，需此处为定位父级 */
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 16px 6px;
+  min-height: 120px;
+}
+.comment-sheet__empty {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  padding: 34px 0;
+}
+.comment-sheet__divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 2px;
+  font-size: 11px;
+  color: var(--color-primary);
+  letter-spacing: 0.04em;
+}
+.comment-sheet__divider::before,
+.comment-sheet__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(var(--color-primary-rgb), 0.28);
+}
+
+/* --- 单条留言 --- */
+.comment-row {
+  display: flex;
+  gap: 8px;
+  padding: 9px 2px;
+  animation: reactions-enter 0.3s var(--ease);
+}
+.comment-row + .comment-row { border-top: 1px solid rgba(var(--color-primary-rgb), 0.10); }
+.comment-row__avatar {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 1.5px rgba(var(--color-primary-rgb), 0.35);
+}
+.comment-row__avatar-dot {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(var(--color-primary-rgb), 0.18);
+}
+.comment-row__main { flex: 1; min-width: 0; }
+.comment-row__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.comment-row__name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.comment-row--mine .comment-row__name { color: var(--color-primary); }
+.comment-row__time {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+.comment-row__edited {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+.comment-row__content {
+  margin-top: 3px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.comment-row__reply {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.comment-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 5px;
+}
+.comment-row__action {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.comment-row__action:active { opacity: 0.6; }
+.comment-row__action--danger.armed,
+.comment-row__action--danger:active { color: var(--color-danger); }
+.comment-row__like {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.comment-row__like svg { width: 13px; height: 13px; opacity: 0.55; }
+.comment-row__like--mine { color: var(--color-primary); }
+.comment-row__like--mine svg { opacity: 1; }
+.comment-row__like-count { font-size: 12px; font-family: var(--font-mono); }
+
+/* --- 输入条 --- */
+.comment-sheet__footer {
+  flex-shrink: 0;
+  padding: 8px 16px 12px;
+  border-top: 1px solid rgba(var(--color-primary-rgb), 0.12);
+}
+.comment-sheet__hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 5px 8px 5px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--color-primary-rgb), 0.10);
+  font-size: 12px;
+  color: var(--color-primary);
+}
+.comment-sheet__hint[hidden] { display: none; }
+.comment-sheet__hint-cancel {
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+}
+.comment-sheet__hint-cancel svg { width: 14px; height: 14px; }
+.comment-sheet__composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.comment-sheet__input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.comment-sheet__input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 9px 48px 9px 12px;
+  /* ≥16px 防 iOS 聚焦时自动缩放（与 .note-input-panel__textarea 同约） */
+  font-size: 16px;
+  line-height: 1.4;
+  font-family: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  max-height: 96px;
+  overflow-y: auto;
+}
+.comment-sheet__input:focus {
+  outline: none;
+  border-color: rgba(var(--color-primary-rgb), 0.55);
+}
+.comment-sheet__counter {
+  position: absolute;
+  right: 10px;
+  bottom: 9px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+.comment-sheet__counter--near { color: #e08a3c; }
+.comment-sheet__send {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 0 16px;
+  height: 40px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--color-primary);
+  cursor: pointer;
+  transition: opacity 0.15s var(--ease);
+}
+.comment-sheet__send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.comment-sheet__send:active:not(:disabled) { opacity: 0.85; }
+
+@media (prefers-reduced-motion: reduce) {
+  .comment-sheet__overlay,
+  .comment-sheet,
+  .comment-row,
+  .comment-sheet__send { animation: none; transition: none; }
+}

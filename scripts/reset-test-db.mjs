@@ -90,6 +90,32 @@ if (e2) abort(`读取 stickers 失败：${e2.message}`);
 const { data: allNotes, error: e3 } = await sb.from('daily_notes').select('id, content, deleted_at');
 if (e3) abort(`读取 daily_notes 失败：${e3.message}`);
 
+// 待办留言（todo_comments）全清：与心里话同理 —— 残留会改变被测行为。
+// 实证场景：库里已有留言 → 卡片上气泡已亮、未读圆点已消、留言板非空态，
+// 于是「首次留言 / 未读提示 / 空态」这三条路径根本测不到（和贴纸一个道理）。
+// 关联 comment_likes 由 comment_id 的 ON DELETE CASCADE 处理。
+//
+// 表可能尚未在测试库建（迁移刚合入、还没应用的窗口期）：此时**跳过并警告**，
+// 不能让"没有这张表"把整套 E2E 卡死 —— schema 漂移的判据是 check-test-schema.mjs
+// （契约检查器，会把缺表判红），留言 E2E 自己也会因为功能不可用而红，两道闸都不缺。
+const missingTable = (err) =>
+  err.code === 'PGRST205' || err.code === '42P01' || /schema cache|does not exist/i.test(err.message || '');
+
+/** 读一张表；表不存在（迁移未应用）→ 返回 null 并警告 */
+async function readTable(table, select) {
+  const { data, error } = await sb.from(table).select(select);
+  if (error) {
+    if (missingTable(error)) {
+      console.log(`\n⚠️ ${table} 不在测试库（迁移未应用？）—— 本轮跳过对它的清理与校验；相关 E2E 断言本轮不可验证`);
+      return null;
+    }
+    abort(`读取 ${table} 失败：${error.message}`);
+  }
+  return data || [];
+}
+
+const allComments = (await readTable('todo_comments', 'id, todo_id, content, parent_id, deleted_at')) || [];
+
 console.log(`待删待办：${targets.length} 条（web 通道，${E2E_PREFIX} 前缀且非 ${APP_PREFIX}）`);
 targets.forEach((t) => console.log(`   ${t.deleted_at ? '[回收站]' : '[活跃  ]'} "${t.text}"  ${t.id}`));
 
@@ -98,6 +124,11 @@ allStickers.forEach((s) => console.log(`   ${s.sticker_key}  ${s.id}`));
 
 console.log(`\n待删心里话：${allNotes.length} 条（daily_notes 全清，阅后即焚残留无保留价值）`);
 allNotes.forEach((n) => console.log(`   ${n.deleted_at ? '[已焚]' : '[活跃]'} "${String(n.content).slice(0, 18)}"  ${n.id}`));
+
+console.log(`\n待删留言：${allComments.length} 条（todo_comments 全清，残留会让"未读/空态"路径测不到）`);
+allComments.forEach((c) =>
+  console.log(`   ${c.deleted_at ? '[已删]' : '[活跃]'}${c.parent_id ? '[回复]' : '      '} "${String(c.content).slice(0, 18)}"  ${c.id}`)
+);
 
 if (appData.length) {
   console.log(`\nℹ️ APP 通道待办 ${appData.length} 条（${APP_PREFIX}）—— 不属于本通道，刻意不删：`);
@@ -109,7 +140,7 @@ if (others.length) {
   others.forEach((t) => console.log(`   "${t.text}"  ${t.id}`));
 }
 
-if (!targets.length && !allStickers.length && !allNotes.length) {
+if (!targets.length && !allStickers.length && !allNotes.length && !allComments.length) {
   console.log('\n✅ 测试库已是干净初态，无需清理。\n');
   process.exit(0);
 }
@@ -123,6 +154,7 @@ if (DRY_RUN) {
 const todoIds = targets.map((t) => t.id);
 const stickerIds = allStickers.map((s) => s.id);
 const noteIds = allNotes.map((n) => n.id);
+const commentIds = allComments.map((c) => c.id);
 
 if (stickerIds.length) {
   const { error } = await sb.from('stickers').delete().in('id', stickerIds);
@@ -136,6 +168,13 @@ if (noteIds.length) {
   console.log(`✓ 已删除心里话 ${noteIds.length} 条`);
 }
 
+if (commentIds.length) {
+  // 关联 comment_likes 由 comment_id 的 ON DELETE CASCADE 处理
+  const { data: deleted, error } = await sb.from('todo_comments').delete().in('id', commentIds).select('id');
+  if (error) abort(`删除留言失败：${error.message}`);
+  console.log(`✓ 已删除留言 ${deleted.length} 条`);
+}
+
 if (todoIds.length) {
   // 关联 reactions 由 ON DELETE CASCADE 处理
   const { data: deleted, error } = await sb.from('todos').delete().in('id', todoIds).select('id');
@@ -147,6 +186,7 @@ if (todoIds.length) {
 const { data: leftTodos } = await sb.from('todos').select('id, text');
 const { data: leftStickers } = await sb.from('stickers').select('id');
 const { data: leftNotes } = await sb.from('daily_notes').select('id');
+const leftComments = (await readTable('todo_comments', 'id')) || [];
 const leftE2E = leftTodos.filter(isWebE2E);
 const leftApp = leftTodos.filter(isAppE2E);
 
@@ -154,10 +194,11 @@ console.log('\n--- 验证 ---');
 console.log(`  剩余 web 通道待办：${leftE2E.length} 条`);
 console.log(`  剩余贴纸：${leftStickers.length} 张`);
 console.log(`  剩余心里话：${leftNotes.length} 条`);
+console.log(`  剩余留言：${leftComments.length} 条`);
 console.log(`  剩余 APP 通道待办：${leftApp.length} 条（不属于本通道，未动）`);
 console.log(`  剩余其它待办：${leftTodos.length - leftE2E.length - leftApp.length} 条（非测试数据，未动）`);
 
-if (leftE2E.length === 0 && leftStickers.length === 0 && leftNotes.length === 0) {
+if (leftE2E.length === 0 && leftStickers.length === 0 && leftNotes.length === 0 && leftComments.length === 0) {
   console.log('\n✅ 测试库已归零\n');
 } else {
   console.log('\n⚠️ 仍有残留，请检查\n');
