@@ -105,7 +105,9 @@ jobs:
             scripts/test_update_count.mjs \
             scripts/test_timeline_grouping.mjs \
             scripts/test_sticker_key.mjs \
-            scripts/test_reveal_card_data.mjs; do
+            scripts/test_reveal_card_data.mjs \
+            scripts/test_comments_logic.mjs \
+            scripts/test_comments_migration.mjs; do
             echo "================================================"
             echo "Running: $f"
             echo "================================================"

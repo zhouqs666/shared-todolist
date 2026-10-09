@@ -72,6 +72,15 @@
   如果只能校验后者，那至少要有一条断言把两者钉在一起（本例的做法：直接读 `build.gradle`，
   因为那正是 gradle 打在包里的那个值）。
 
+- 🔴 **Realtime 频道里挂的表，在任何部署窗口里都可能不存在吗？**（2026-10-09 从留言板开发中实测挖出）
+  向服务端订阅一张**不存在的表**（典型的"JS 已热更、迁移还没应用"窗口），整条频道会
+  **报 `SUBSCRIBED` 却一条事件都不投递** —— 同一频道里其它表（todos 的置顶/完成）也一起哑掉，
+  而 REST/首屏/单端 UI 全正常，只有**跨端断言**能发现（见
+  [docs/lessons/2026-10-09-partial-table-subscription.md](docs/lessons/2026-10-09-partial-table-subscription.md)）。
+  ⇒ 两条判据：① 新增表若可能在部署窗口期缺席，**单独一条频道**、且在数据层确认表可读后再建立
+  （范例：`realtime.js` 的 `initCommentRealtime` + `comments.js` 的 `commentsTablesReady()`）；
+  ② 动到 Realtime 订阅的改动必须跑一遍**双账号跨端 E2E**，单端 smoke 永远发现不了这一层。
+
 - 🔴 状态一致性：`completed_by` / `completed_at` 这类联动字段是否同步维护？（正例：`db.js setCompleted`）
 - 🔴 竞态：Realtime 自我回声是否会覆盖本地乐观状态？（正例：`state.js inFlight` 飞行追踪）
 - 🔴 错误处理：创建 / 删除 / 完成等关键路径是否 try/catch 或统一 `wrapError`？

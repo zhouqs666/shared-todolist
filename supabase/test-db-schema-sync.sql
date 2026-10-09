@@ -120,6 +120,79 @@ REVOKE EXECUTE ON FUNCTION consume_login_count(UUID) FROM public, anon;
 GRANT EXECUTE ON FUNCTION increment_login_count(UUID) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION consume_login_count(UUID) TO authenticated, service_role;
 
+-- ===== 8. 待办留言板（migration-add-todo-comments.sql）=====
+-- 遗漏后果：新版前端读不到两张表 → 留言功能整体不可见（拉取静默降级，其余功能不受影响）。
+-- 注意：本段只建表，**不含**历史 completed_note 搬迁（搬迁是生产数据动作，
+--       测试库没有历史备注，需要时用 apply-sql.mjs 跑完整迁移即可）。
+CREATE TABLE IF NOT EXISTS todo_comments (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  todo_id    UUID NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  author_id  UUID NOT NULL REFERENCES auth.users(id),
+  parent_id  UUID REFERENCES todo_comments(id) ON DELETE SET NULL,
+  content    TEXT NOT NULL CHECK (char_length(content) <= 100),
+  edited_at  TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_todo_comments_todo
+  ON todo_comments (todo_id, created_at);
+
+ALTER TABLE todo_comments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "todo_comments_select_auth" ON todo_comments;
+CREATE POLICY "todo_comments_select_auth" ON todo_comments
+  FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "todo_comments_insert_auth" ON todo_comments;
+CREATE POLICY "todo_comments_insert_auth" ON todo_comments
+  FOR INSERT TO authenticated WITH CHECK (author_id = auth.uid());
+DROP POLICY IF EXISTS "todo_comments_update_auth" ON todo_comments;
+CREATE POLICY "todo_comments_update_auth" ON todo_comments
+  FOR UPDATE TO authenticated USING (author_id = auth.uid()) WITH CHECK (author_id = auth.uid());
+DROP POLICY IF EXISTS "todo_comments_delete_auth" ON todo_comments;
+CREATE POLICY "todo_comments_delete_auth" ON todo_comments
+  FOR DELETE TO authenticated USING (author_id = auth.uid());
+
+CREATE TABLE IF NOT EXISTS comment_likes (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  comment_id UUID NOT NULL REFERENCES todo_comments(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (comment_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_comment_likes_comment ON comment_likes (comment_id);
+
+ALTER TABLE comment_likes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "comment_likes_select_auth" ON comment_likes;
+CREATE POLICY "comment_likes_select_auth" ON comment_likes
+  FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "comment_likes_insert_auth" ON comment_likes;
+CREATE POLICY "comment_likes_insert_auth" ON comment_likes
+  FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS "comment_likes_delete_auth" ON comment_likes;
+CREATE POLICY "comment_likes_delete_auth" ON comment_likes
+  FOR DELETE TO authenticated USING (user_id = auth.uid());
+
+ALTER TABLE todo_comments REPLICA IDENTITY FULL;
+ALTER TABLE comment_likes REPLICA IDENTITY FULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'todo_comments'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE todo_comments;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'comment_likes'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE comment_likes;
+  END IF;
+END $$;
+
 -- ===== 7. 验证 =====
 -- SELECT column_name, data_type FROM information_schema.columns
 --   WHERE table_name = 'todos'

@@ -12,7 +12,7 @@
  *   - 跨域请求（Supabase API/Realtime/Storage）一律走网络，绝不缓存
  */
 
-const VERSION = 'v20'; // 热更新上线后递增，强制清理旧缓存（批次 3 开出卡片：app.js/style.css 均有变更）
+const VERSION = 'v21'; // 热更新上线后递增，强制清理旧缓存（待办留言板：新增 comments.js / comment-logic.js，app.js/style.css 均有变更）
 const CACHE = 'todo-shell-' + VERSION;
 
 // 预缓存的核心资源（与实际 public/ 目录对齐）
@@ -25,6 +25,8 @@ const PRECACHE_URLS = [
   '/js/login.js',
   '/js/db.js',
   '/js/realtime.js',
+  '/js/comments.js',
+  '/js/comment-logic.js',
   '/js/state.js',
   '/js/timeline.js',
   '/js/theme.js',

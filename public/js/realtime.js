@@ -17,7 +17,7 @@ import { supabase } from './supabase.js';
 import { sortTodos, isTodoRemoved, markTodoRemoved } from './state.js';
 import { notify } from './notify.js';
 import { syncReminders } from './reminder.js';
-import { toExternal, toNote, toReaction, toSticker } from './transforms.js';
+import { toExternal, toNote, toReaction, toSticker, toTodoComment, toCommentLike } from './transforms.js';
 
 // 字段转换（toExternal/toNote/toReaction/toSticker）已抽到 ./transforms.js
 // （消除与 db.js 的双份维护，技术优化清单第6条）
@@ -42,6 +42,20 @@ import { toExternal, toNote, toReaction, toSticker } from './transforms.js';
  * @param {(sticker)=>void} [handlers.onStickerUnlocked] 图鉴贴纸解锁（stickers INSERT）
  * @param {(sticker)=>void} [handlers.onStickerUpdated] 图鉴贴纸更新（stickers UPDATE——升星改 star_level，批次 4；
  *        不订 UPDATE 则对方升星本端永远看不到）
+ * @param {(comment)=>void} [handlers.onCommentAdded] 待办留言新增（todo_comments INSERT）
+ * @param {(comment)=>void} [handlers.onCommentUpdated] 待办留言更新（todo_comments UPDATE——
+ *        改内容带 edited_at；删自己那条带 deleted_at，由 comments.js 按行替换缓存）
+ * @param {(id:string)=>void} [handlers.onCommentRemoved] 待办留言物理删除（todo_comments DELETE，罕见：
+ *        仅"回收站彻底删除待办"的级联；软删除走 UPDATE 分支）
+ * @param {(like)=>void} [handlers.onCommentLikeAdded] 留言爱心新增（comment_likes INSERT）
+ * @param {(likeId:string, commentId:string)=>void} [handlers.onCommentLikeRemoved] 留言爱心取消（comment_likes DELETE）
+ * @param {(comment)=>void} [handlers.onCommentAdded] 待办留言新增（todo_comments INSERT）
+ * @param {(comment)=>void} [handlers.onCommentUpdated] 待办留言更新（todo_comments UPDATE——
+ *        改内容带 edited_at；删自己那条带 deleted_at，由 comments.js 按行替换缓存）
+ * @param {(id:string)=>void} [handlers.onCommentRemoved] 待办留言物理删除（todo_comments DELETE，罕见：
+ *        仅"回收站彻底删除待办"的级联；软删除走 UPDATE 分支）
+ * @param {(like)=>void} [handlers.onCommentLikeAdded] 留言爱心新增（comment_likes INSERT）
+ * @param {(likeId:string, commentId:string)=>void} [handlers.onCommentLikeRemoved] 留言爱心取消（comment_likes DELETE）
  * @param {({firstTime:boolean})=>void} [handlers.onSubscribed]
  *        进入 SUBSCRIBED 时回调：firstTime=true 是订阅刚建立，false 是断线重连。
  *        两种都意味着「有一段窗口的远端变更收不到」（复制槽不重放历史），由调用方去对账。
@@ -325,6 +339,88 @@ export function initRealtime({ getTodos, setTodos, notifyCompleted, setOnline, g
     releaseTodoEventBuffer,
     /** 已应用的 todos 事件计数（app.js 用它判断某次拉取的快照是否已过时） */
     getTodoEventSeq: () => todoEventSeq,
+  };
+}
+
+/**
+ * 待办留言板的 Realtime 订阅（**独立频道**，2026-10-09 实测定型）
+ *
+ * ⚠️ 为什么留言不挂在主频道上（`todos-changes`）——这条是踩出来的，别合并回去：
+ *   `todo_comments` / `comment_likes` 是**新增表**，存在「JS 已热更、迁移还没应用」的窗口期。
+ *   实测（2026-10-09）：客户端向服务端订阅一张**不存在的表**时，频道依然报 SUBSCRIBED
+ *   （离线提示条不出现、一切看似正常），但**整条频道一条事件都不再投递** ——
+ *   连 todos 的置顶/完成都收不到。表现是「E2E 里对端不刷新没反应」+「同频道其它表全哑」，
+ *   排查时会误以为是 Realtime 服务抖动。
+ *   拆成独立频道后：留言表不在时的失败被关在这条频道里，主频道（todos / 心里话 / 表情 /
+ *   图鉴）不受影响；调用方只在**确认两张表可读**（commentsTablesReady()）之后才建立它。
+ *
+ * ⚠️ 与服务端「订阅生效」依然有时序：建立订阅**先于**首次数据拉取（复制槽不重放历史），
+ *   漏事件窗口由 comments.js 的补拉（断线/回前台对账）兜底。
+ *
+ * @param {Object} handlers 见上方 initRealtime 的同名回调注释
+ * @returns {Object} channel（用于 unsubscribe）
+ */
+export function initCommentRealtime({ onCommentAdded, onCommentUpdated, onCommentRemoved, onCommentLikeAdded, onCommentLikeRemoved }) {
+  const channel = supabase
+    .channel('comment-changes')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'todo_comments' },
+      (payload) => {
+        const comment = toTodoComment(payload.new);
+        if (!comment || !onCommentAdded) return;
+        // 对方留言不发系统通知（产品原则：情感性事件不打断），
+        // 由卡片上的未读圆点承担发现机制（comments.js 内部处理）
+        onCommentAdded(comment);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'todo_comments' },
+      (payload) => {
+        // 改内容（edited_at）与软删除（deleted_at）都走这里，统一按行替换缓存
+        const comment = toTodoComment(payload.new);
+        if (!comment || !onCommentUpdated) return;
+        onCommentUpdated(comment);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'todo_comments' },
+      (payload) => {
+        // 物理删除只在「回收站彻底删除待办」的级联里发生（软删除走 UPDATE）
+        const id = payload.old?.id;
+        if (!id || !onCommentRemoved) return;
+        onCommentRemoved(id);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'comment_likes' },
+      (payload) => {
+        const like = toCommentLike(payload.new);
+        if (!like || !onCommentLikeAdded) return;
+        onCommentLikeAdded(like);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'comment_likes' },
+      (payload) => {
+        const id = payload.old?.id;
+        if (!id || !onCommentLikeRemoved) return;
+        onCommentLikeRemoved(id, payload.old?.comment_id);
+      }
+    )
+    .subscribe((status, err) => {
+      if (status !== 'SUBSCRIBED' && err) console.warn('[realtime] 留言频道订阅错误:', err.message);
+    });
+
+  return {
+    channel,
+    unsubscribe() {
+      supabase.removeChannel(channel);
+    },
   };
 }
 

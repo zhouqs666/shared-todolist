@@ -31,7 +31,7 @@ import {
   markTodoRemoved,
   unmarkTodoRemoved,
 } from './state.js';
-import { initRealtime, initPresence } from './realtime.js';
+import { initRealtime, initPresence, initCommentRealtime } from './realtime.js';
 import { initTheme } from './theme.js';
 import { initNotify, requestPermission, isNative } from './notify.js';
 // 到点提醒：调度核心 ./reminder.js（渠道/调度/取消/对账），纯逻辑在 ./reminder-logic.js（有单测）
@@ -39,6 +39,20 @@ import { initReminder, syncReminders, reminderUiEnabled } from './reminder.js';
 import { QUICK_OPTIONS, quickOptionAt, formatReminderTime, isReminderExpired } from './reminder-logic.js';
 import { initMessages, refreshNotes, onNoteAdded, onNoteRemoved, onNoteUpdated } from './messages.js';
 import { initReactions, refreshReactions, renderReactions, onReactionAdded, onReactionRemoved, REACTION_EMOJIS, isMyReaction, toggleReaction, getReactionSvg, getReactionLabel } from './reactions.js';
+// 待办留言板（F-04 升级：单条完成备注 → 双人平铺留言 + 回复），纯逻辑在 ./comment-logic.js（有单测）
+import {
+  initComments,
+  refreshComments,
+  renderCommentBadge,
+  getCommentCount,
+  openCommentSheet,
+  commentsTablesReady,
+  onCommentAdded,
+  onCommentUpdated,
+  onCommentRemoved,
+  onCommentLikeAdded,
+  onCommentLikeRemoved,
+} from './comments.js';
 import { pickImage, pickImageFromCamera, pickImages, uploadTodoImage } from './image-utils.js';
 import { checkForUpdate, setUpdateSupabase, notifyAppReady, getCurrentBundleInfo, getTotalUpdateCount } from './update.js';
 // App 内 APK 更新（原生壳更新）：先查壳更新，无壳更新才回落 bundle 热更新
@@ -53,7 +67,7 @@ import { openImageLightbox } from './lightbox.js';
 // 纪念日模块（在一起天数 + 倒计时面板）已拆出到 ./anniversary.js（技术清单第8条）
 import { renderAnniversary, toggleAnniversaryPanel } from './anniversary.js';
 // 待办操作菜单 + 退出确认 action sheet 已拆出到 ./action-sheet.js（技术清单第8条）
-// 业务回调（onEdit/onNote/onAddImage/onDelete/onConfirm/onLongPress）通过参数注入
+// 业务回调（onEdit/onComments/onAddImage/onDelete/onConfirm/onLongPress）通过参数注入
 import {
   showTodoMenu,
   showImageSourceChooser,
@@ -200,6 +214,24 @@ async function refreshTodoList() {
 let reconciling = false;
 
 /**
+ * 留言板的 Realtime 频道（懒建立：**确认两张表可读之后**才订，2026-10-09 实测教训）。
+ * 为什么必须懒：向服务端订阅一张**不存在**的表，频道会报 SUBSCRIBED 却一条事件都不投递 ——
+ * 连 todos 的置顶/完成都收不到（同频道其它表全哑）。所以留言单独一个频道 + 表就绪后才建，
+ * 让"迁移未应用"的窗口期只影响留言自己，不连累主频道。详见 realtime.js 的 initCommentRealtime。
+ */
+let commentCh = null;
+function ensureCommentRealtime() {
+  if (commentCh || !commentsTablesReady()) return;
+  commentCh = initCommentRealtime({
+    onCommentAdded,
+    onCommentUpdated,
+    onCommentRemoved,
+    onCommentLikeAdded,
+    onCommentLikeRemoved,
+  });
+}
+
+/**
  * 断线重连 / 回前台后的对账：把「收不到事件的那段窗口」里对方做的变更补回来。
  *
  * 背景（为什么必须有这一步）：Supabase Realtime 的复制槽在客户端连上时才建立，
@@ -229,7 +261,10 @@ async function reconcileRemoteState() {
     // 留言/表情只在冷启动拉过一次，断线期间的会永久漏，这里必须补拉
     await refreshNotes();
     await refreshReactions();
-    render(getTodos()); // 表情是 render() 里按卡片绘制的，补拉后要重绘
+    await refreshComments();
+    // 表当初不可读（迁移未应用）→ 留言频道没建；现在能读了就补上
+    ensureCommentRealtime();
+    render(getTodos()); // 表情与留言徽标都是 render() 里按卡片绘制的，补拉后要重绘
   } finally {
     // 必须 finally：否则中途抛错会让 reconciling 永远为 true，此后所有对账都被静默跳过
     reconciling = false;
@@ -276,6 +311,7 @@ async function reconcileRemoteState() {
 
   // realtimeCh 声明在模块作用域（模块级函数要用），这里只声明启动期的拉取句柄
   let todosFetch = null;
+  let commentsPromise = null;
 
   // ===== 启动并行化（v2.7.75）=====
   // profiles 与 todos / auth 之间没有依赖（Supabase 客户端自动附带本地 session 的 JWT），
@@ -314,6 +350,13 @@ async function reconcileRemoteState() {
       onNoteUpdated,
       onReactionAdded,
       onReactionRemoved,
+      // 待办留言板：对方的留言只更新卡片图标（未读圆点）+ 开着的话追加到列表，
+      // 不发系统通知（情感性事件不打断，产品原则）
+      onCommentAdded,
+      onCommentUpdated,
+      onCommentRemoved,
+      onCommentLikeAdded,
+      onCommentLikeRemoved,
       // 隐藏款揭晓：对方开出的隐藏款首次推来 → 图鉴红点信号 + 待查看卡片（D7-②，
       // 旧的直接弹 Toast 已在批次 3 移除——惊喜的展示移到通知卡里）
       onRarityReveal: handlePartnerRevealPending,
@@ -340,6 +383,15 @@ async function reconcileRemoteState() {
       currentUser,
       onRemoteReaction: pulseTodoOnRemoteReaction,
     });
+
+    // 留言板数据同理：并行发出、渲染前 await —— 卡片上的留言徽标（条数/未读圆点）
+    // 由 render() 按卡片绘制，晚到会导致徽标"先没有后冒出"（闪一下）。
+    // 数据到位后再建留言的 Realtime 频道（懒建立的原因见 ensureCommentRealtime）
+    commentsPromise = initComments({
+      currentUser,
+      getTodos,
+      displayOf,
+    }).then(() => ensureCommentRealtime());
 
     // 构建 userId → {displayName, avatar, lastSeenAt} 映射
     // lastSeenAt 用于「对方今天来过」判断 → 触发开场光晕
@@ -414,6 +466,9 @@ async function reconcileRemoteState() {
   // 表情反应数据：与 todos / profiles 并行发出（见上方「启动并行化」），此处等它到位即可。
   // 必须等：首屏渲染就要表情，否则卡片会先无表情再补上（闪一下）。
   if (reactionsPromise) await reactionsPromise;
+
+  // 留言板数据：同理必须等（卡片上的留言徽标：条数 + 未读圆点，晚到会闪）
+  if (commentsPromise) await commentsPromise;
 
   // 首屏列表（兜底拉取：与 auth/profiles/reactions 并行，见上方「启动并行化」）。
   // 用 refreshTodoList() 而非裸 db.listTodos()：让本批也占一个「代」序号，
@@ -531,6 +586,9 @@ async function reconcileRemoteState() {
     try {
       if (realtimeCh && typeof realtimeCh.unsubscribe === 'function') realtimeCh.unsubscribe();
     } catch (e) { /* cleanup 失败不应阻塞卸载 */ }
+    try {
+      if (commentCh && typeof commentCh.unsubscribe === 'function') commentCh.unsubscribe();
+    } catch (e) { /* 同上 */ }
     try {
       if (presence && typeof presence.unsubscribe === 'function') presence.unsubscribe();
     } catch (e) { /* 同上 */ }
@@ -1217,11 +1275,11 @@ function openReminderPanel(todo) {
 
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
-  // 锁滚动 + 下一帧触发滑入动画（与 openNotePanel 同款节奏）
+  // 锁滚动 + 下一帧触发滑入动画（与 openEditPanel 同款节奏）
   document.body.style.overflow = 'hidden';
   requestAnimationFrame(() => overlay.classList.add('note-input-overlay--show'));
 
-  // ESC 关闭（监听器自清理：触发后自行 remove，与 onNoteEsc 同款）
+  // ESC 关闭（监听器自清理：触发后自行 remove，与 openEditPanel 同款）
   document.addEventListener('keydown', onReminderEsc);
   function onReminderEsc(e) {
     if (e.key === 'Escape') {
@@ -1268,124 +1326,6 @@ function renderReminderBadge(li, todo) {
     badge.innerHTML = ICONS.bell + `<span class="todo__reminder-badge-time">${text}</span>`;
   }
   badge.title = `提醒 ${text}`;
-}
-
-/* ===== 完成备注：底部滑出输入面板（一次性模态，复用 add-panel 滑出风格）=====
- * 长按已完成待办 → 备注 → 弹此面板。覆盖语义：输入框预填原备注，可改可清空。
- * 不自动保存（必须点保存才写入，避免误触覆盖）。
- */
-// 备注占位文案池：每次打开面板随机抽一条，诗意且贴备注场景（收尾交代/叮嘱留话）。
-// 风格：短、留白，像两人之间给某件事留的便条，完成前后都适用。
-const NOTE_PLACEHOLDERS = [
-  '事毕，灯也熄了',
-  '花浇过了，安心睡',
-  '窗已关严，风进不来',
-  '先搁着，等你回来再说',
-  '信已寄出，风替我送',
-  '这事我记下了',
-  '路远，慢慢来不急',
-  '雨大，今日不出门',
-  '做完了，你先歇',
-  '留半盏灯，等你回',
-];
-function pickNotePlaceholder() {
-  return NOTE_PLACEHOLDERS[Math.floor(Math.random() * NOTE_PLACEHOLDERS.length)];
-}
-function openNotePanel(todo) {
-  // 已打开则不重复
-  if (document.querySelector('.note-input-overlay')) return;
-
-  const overlay = document.createElement('div');
-  overlay.className = 'note-input-overlay';
-  // 从 state 取最新 todo（避免闭包陈旧）
-  const latest = getTodos().find((t) => t.id === todo.id) || todo;
-
-  const panel = document.createElement('div');
-  panel.className = 'note-input-panel';
-
-  const handle = document.createElement('div');
-  handle.className = 'note-input-panel__handle';
-  panel.appendChild(handle);
-
-  const label = document.createElement('div');
-  label.className = 'note-input-panel__label';
-  label.textContent = latest.completedNote ? '修改这句话' : '留句话给 ta';
-  panel.appendChild(label);
-
-  const textarea = document.createElement('textarea');
-  textarea.className = 'note-input-panel__textarea';
-  textarea.maxLength = 100;
-  textarea.rows = 2;
-  textarea.placeholder = pickNotePlaceholder();
-  textarea.value = latest.completedNote || ''; // 预填原备注（覆盖语义）
-  // 回车保存（移动端键盘的"完成"键也触发）
-  textarea.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      saveNote(latest.id, textarea.value.trim());
-    }
-  });
-  panel.appendChild(textarea);
-
-  const saveBtn = document.createElement('button');
-  saveBtn.type = 'button';
-  saveBtn.className = 'note-input-panel__save';
-  saveBtn.textContent = '保存';
-  saveBtn.addEventListener('click', () => saveNote(latest.id, textarea.value.trim()));
-  panel.appendChild(saveBtn);
-
-  overlay.appendChild(panel);
-  // 点遮罩关闭（不保存）
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeNotePanel(); });
-  document.body.appendChild(overlay);
-  // 锁滚动
-  document.body.style.overflow = 'hidden';
-  // 下一帧触发滑入动画
-  requestAnimationFrame(() => overlay.classList.add('note-input-overlay--show'));
-  // 聚焦输入框（等动画启动后，避免突兀）
-  setTimeout(() => textarea.focus(), 280);
-  // ESC 关闭
-  document.addEventListener('keydown', onNoteEsc);
-  function onNoteEsc(e) {
-    if (e.key === 'Escape') {
-      closeNotePanel();
-      document.removeEventListener('keydown', onNoteEsc);
-    }
-  }
-}
-
-function closeNotePanel() {
-  const overlay = document.querySelector('.note-input-overlay');
-  if (!overlay) return;
-  overlay.classList.remove('note-input-overlay--show');
-  document.body.style.overflow = '';
-  setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 280);
-}
-
-/**
- * 保存完成备注（乐观更新 + 失败回滚）。
- * 空字符串转 null（清除备注语义）。
- */
-async function saveNote(id, text) {
-  const note = text || null;
-  // 乐观更新本地
-  const current = getTodos().find((t) => t.id === id);
-  const prev = current && current.completedNote;
-  if (current) {
-    current.completedNote = note;
-    setTodos(getTodos()); // 触发重渲染，meta 行自动刷新
-  }
-  closeNotePanel();
-  try {
-    await db.setCompletedNote(id, note);
-    showToast(note ? '已保存' : '已清除备注');
-  } catch (err) {
-    // 回滚
-    const target = getTodos().find((t) => t.id === id);
-    if (target) target.completedNote = prev;
-    setTodos(getTodos());
-    handleError(toAppError(err), '保存失败');
-  }
 }
 
 /* ===== 编辑待办文案：底部滑出输入面板（复用 note-panel 滑出风格）=====
@@ -1953,7 +1893,9 @@ function render() {
   todoListEl.appendChild(frag);
 }
 
-/** 构建 meta 文本（创建者 · 时间 · 完成者完成于时间 · 备注） */
+/** 构建 meta 文本（创建者 · 时间 · 完成者完成于时间）
+ *  留言不进 meta：卡片上只留一个气泡图标（条数/未读圆点），点开才看内容 ——
+ *  留言全文铺进列表会让列表变成聊天记录墙（F-04 升级的产品定稿，2026-10-09） */
 function buildMetaText(todo) {
   const creator = displayOf(todo.createdBy);
   const time = formatRelativeTime(todo.createdAt);
@@ -1964,10 +1906,6 @@ function buildMetaText(todo) {
     if (todo.completedAt) {
       meta += ` · ${formatRelativeTime(todo.completedAt)}`;
     }
-  }
-  // 备注：完成前后均可加，用「」包裹，像一句轻声的话，区别于其他 meta 信息
-  if (todo.completedNote) {
-    meta += ` ·「${todo.completedNote}」`;
   }
   return meta;
 }
@@ -2110,6 +2048,9 @@ function renderItem(todo) {
   // 表情反应区（仅已完成时显示，由 reactions 模块管理）
   renderReactions(li, todo);
 
+  // 留言徽标（有留言才显示：气泡 + 条数，有未读加圆点，由 comments 模块管理）
+  renderCommentBadge(li, todo);
+
   // 隐藏款稀有度样式（背景渐变 + 角标，由 applyRarity 统一管理）
   applyRarity(li, todo);
 
@@ -2126,7 +2067,9 @@ function renderItem(todo) {
       showTodoMenu(todo, {
         getTodos,
         onEdit: openEditPanel,
-        onNote: openNotePanel,
+        // 留言：打开留言板并直接聚焦输入框（从菜单进来 = 想说话）
+        onComments: (t) => openCommentSheet(t.id, { focus: true }),
+        commentCountOf: getCommentCount,
         onSetReminder: openReminderPanel,
         onTogglePin: togglePin,
         onAddImage: attachImageToTodo,
@@ -2150,7 +2093,8 @@ function renderItem(todo) {
     showTodoMenu(todo, {
       getTodos,
       onEdit: openEditPanel,
-      onNote: openNotePanel,
+      onComments: (t) => openCommentSheet(t.id, { focus: true }),
+      commentCountOf: getCommentCount,
       onSetReminder: openReminderPanel,
       onTogglePin: togglePin,
       onAddImage: attachImageToTodo,
@@ -2209,9 +2153,11 @@ function updateItem(li, todo) {
   renderReminderBadge(li, todo);
   // 表情反应区：完成态变化时需要显隐，表情数量变化时需要刷新
   renderReactions(li, todo);
+  // 留言徽标：条数/未读圆点变化时增删或刷新（与 renderImage 同款双入口）
+  renderCommentBadge(li, todo);
   // 隐藏款稀有度样式：Realtime 推来 rarity 时同步背景/角标（原地更新，绝不重建 li）
   applyRarity(li, todo);
-  // meta 文本（时间/完成状态/备注可能变化）
+  // meta 文本（时间/完成状态可能变化）
   const metaText = li.querySelector('.todo__meta-text');
   if (metaText) {
     const next = buildMetaText(todo);

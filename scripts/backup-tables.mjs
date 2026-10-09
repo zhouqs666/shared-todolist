@@ -50,8 +50,9 @@ loadEnv();
 const { url, key } = requireSupabaseEnv();
 const sb = createClient(url, key, { auth: { persistSession: false } });
 
-// 与 incident-*.json 保持一致的四张表
-const TABLES = ['todos', 'stickers', 'daily_notes', 'reactions'];
+// 与 incident-*.json 保持一致的表清单（新表上线即加入：备份是铁律一的底，
+// 漏掉一张表 = 那张表的删除没有兜底）
+const TABLES = ['todos', 'stickers', 'daily_notes', 'reactions', 'todo_comments', 'comment_likes'];
 
 console.log(`\n💾 导出生产数据（只读）\n  原因：${REASON}${DRY_RUN ? '\n  模式：--dry-run（不落盘）' : ''}\n`);
 

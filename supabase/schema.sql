@@ -177,6 +177,67 @@ BEGIN
   END IF;
 END $$;
 
+-- ===== 8. 待办留言板：todo_comments（平铺 + 回复引用）+ comment_likes（留言爱心）=====
+-- 交付件是 supabase/migration-add-todo-comments.sql（含历史 completed_note 搬迁）；
+-- 这里只是权威定义副本。要点：写操作 RLS 收紧到 author_id/user_id = auth.uid()（只能动自己的）。
+CREATE TABLE IF NOT EXISTS todo_comments (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  todo_id    UUID NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  author_id  UUID NOT NULL REFERENCES auth.users(id),
+  parent_id  UUID REFERENCES todo_comments(id) ON DELETE SET NULL,
+  content    TEXT NOT NULL CHECK (char_length(content) <= 100),
+  edited_at  TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_todo_comments_todo
+  ON todo_comments (todo_id, created_at);
+ALTER TABLE todo_comments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "todo_comments_select_auth" ON todo_comments;
+CREATE POLICY "todo_comments_select_auth" ON todo_comments
+  FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "todo_comments_insert_auth" ON todo_comments;
+CREATE POLICY "todo_comments_insert_auth" ON todo_comments
+  FOR INSERT TO authenticated WITH CHECK (author_id = auth.uid());
+DROP POLICY IF EXISTS "todo_comments_update_auth" ON todo_comments;
+CREATE POLICY "todo_comments_update_auth" ON todo_comments
+  FOR UPDATE TO authenticated USING (author_id = auth.uid()) WITH CHECK (author_id = auth.uid());
+DROP POLICY IF EXISTS "todo_comments_delete_auth" ON todo_comments;
+CREATE POLICY "todo_comments_delete_auth" ON todo_comments
+  FOR DELETE TO authenticated USING (author_id = auth.uid());
+
+CREATE TABLE IF NOT EXISTS comment_likes (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  comment_id UUID NOT NULL REFERENCES todo_comments(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (comment_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_comment_likes_comment ON comment_likes (comment_id);
+ALTER TABLE comment_likes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "comment_likes_select_auth" ON comment_likes;
+CREATE POLICY "comment_likes_select_auth" ON comment_likes
+  FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "comment_likes_insert_auth" ON comment_likes;
+CREATE POLICY "comment_likes_insert_auth" ON comment_likes
+  FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS "comment_likes_delete_auth" ON comment_likes;
+CREATE POLICY "comment_likes_delete_auth" ON comment_likes
+  FOR DELETE TO authenticated USING (user_id = auth.uid());
+
+-- 启用 Realtime（幂等；REPLICA IDENTITY FULL 让 DELETE 事件带完整旧行）
+ALTER TABLE todo_comments REPLICA IDENTITY FULL;
+ALTER TABLE comment_likes REPLICA IDENTITY FULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'todo_comments') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE todo_comments;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'comment_likes') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE comment_likes;
+  END IF;
+END $$;
+
 -- ===== 4. 账号创建参考（不在此处运行）=====
 -- 两个固定账号在 Supabase Auth 侧创建；登录标识用伪域名邮箱（形状 `<拼音>@todo.local`，
 -- 真实映射见客户端登录代码 public/js/auth.js —— 按凭据卫生规则，文档与 SQL 只写形状不写真值），
