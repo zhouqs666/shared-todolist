@@ -129,7 +129,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -268,7 +268,7 @@ jobs:
         # 改成「只有预演成功才期望有产物，且必须有」：预演失败时跳过（失败本身已经红在那了），
         # 预演成功而产物缺失则**报错**。
         if: steps.dryrun.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dryrun-apk-${{ inputs.version }}
           path: android/app/build/outputs/apk/release/app-release.apk
@@ -333,7 +333,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'npm'
@@ -442,7 +442,7 @@ jobs:
       - name: 上传已发布的 APK（供桌面留档 / 事后复核）
         # 与预演同样不吞失败：只有发布成功才期望有产物，且必须有。
         if: steps.release.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: released-apk-${{ inputs.version }}
           path: android/app/build/outputs/apk/release/app-release.apk
