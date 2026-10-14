@@ -31,6 +31,9 @@
   <link rel="preconnect" href="https://zyceucmmtstszdnugimn.supabase.co" crossorigin />
   <link rel="dns-prefetch" href="https://zyceucmmtstszdnugimn.supabase.co" />
   <link rel="stylesheet" href="/css/style.css" />
+  <!-- 预加载正文主字体（霞鹜文楷 1.6MB woff2，本地资源）：让 font-display:swap 的切换尽早发生，
+       避免「系统字体上屏 → 文楷整体跳变」在慢速首屏上被用户察觉 -->
+  <link rel="preload" href="/fonts/lxgw-wenkai-regular.woff2" as="font" type="font/woff2" crossorigin />
   <script>
     // 顶栏爱心"预上色"：在 SVG 渲染前就按当前时段设好 stop-color，
     // 避免"默认粉色 → 时段色"的跳变（尤其深夜打开时粉色→深紫的突兀切换）。

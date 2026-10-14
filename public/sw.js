@@ -12,7 +12,7 @@
  *   - 跨域请求（Supabase API/Realtime/Storage）一律走网络，绝不缓存
  */
 
-const VERSION = 'v21'; // 热更新上线后递增，强制清理旧缓存（待办留言板：新增 comments.js / comment-logic.js，app.js/style.css 均有变更）
+const VERSION = 'v22'; // 热更新上线后递增，强制清理旧缓存（霞鹜文楷 web font 落地：新增 fonts/ 预缓存）
 const CACHE = 'todo-shell-' + VERSION;
 
 // 预缓存的核心资源（与实际 public/ 目录对齐）
@@ -38,6 +38,7 @@ const PRECACHE_URLS = [
   '/js/vendor/canvas-confetti.esm.min.js',
   '/favicon.svg',
   '/manifest.webmanifest',
+  '/fonts/lxgw-wenkai-regular.woff2', // 正文主字体：预缓存保证 PWA 离线首屏即文楷
 ];
 
 // 检测是否运行在 Capacitor 原生 WebView 内
