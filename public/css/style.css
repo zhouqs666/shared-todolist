@@ -1,3 +1,22 @@
+/* ===== Web Font：霞鹜文楷（落地 --font-cn 首选字体）=====
+   背景：--font-cn 首选 "LXGW WenKai" 长期未真正加载（fallback 链上的 Songti/STSong
+   是 Apple 字体，Android ROM 基本不预装 Noto Serif CJK）——真机上整条宋体栈落空，
+   全部渲染成系统黑体，「书卷气」的设计意图在产品实际形态（Android APK）上从未发生。
+   本字体：官方 webfont 分片合并后子集化（GB2312 全集 + ASCII + 常用标点 +
+   项目源码全部字符兜底，7388 码位，1.6MB woff2），随热更包下发，离线可用。
+   已知边界（缺失字符逐字回退到 fallback 栈，不影响主体）：
+     希腊/西里尔字母、33 个 GB2312 尾部生僻字、部分符号（Ⅰ-Ⅻ、✨❤ 等，
+     App 内爱心/闪光均走 SVG，不依赖字体字形）。
+   粗体：仅引入 400 字重，600/500 由浏览器合成加粗（再引 Bold 要 +4.6MB，不值）。
+   许可：SIL OFL 1.1（public/fonts/OFL.txt），附加条款明确允许子集化 WOFF2 用于网页字体。 */
+@font-face {
+  font-family: "LXGW WenKai";
+  src: url("/fonts/lxgw-wenkai-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap; /* 首屏先用系统宋体/黑体上屏，字体就绪后整体切换，不阻塞渲染 */
+}
+
 /* ===== 基础重置 ===== */
 *,
 *::before,
