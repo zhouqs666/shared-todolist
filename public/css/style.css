@@ -2909,6 +2909,17 @@ body.cherish-stage-on .topbar {
 
 .add-panel__input {
   flex: 1;
+  /* ⚠️ 必须显式 min-width: 0（2026-10-22 真机事故）——
+     flex 子项的自动最小尺寸（min-width: auto）= 它的 min-content = <input> 的**固有宽度**：
+     HTML 的 size 默认 20 字符 → Blink 按「20 × 该字体的平均字宽」算。
+     霞鹜文楷的拉丁字符是全角（≈1em）→ Android WebView 上平均字宽 ≈16.8px
+     → 固有宽 ≈ 20×16.8 + padding/border ≈ 366px；
+     而添加面板在 360px 视口下只留得下 212px（360 − 16×2 − 48图片 − 48对钩 − 10×2 gap）
+     → flex 行向右溢出，右侧两个按钮被挤出屏幕，Android 上无法点对钩提交待办。
+     不写 min-width: 0 的话，桌面 Chromium（平均字宽 ≈8.35px，固有宽 197px）看不出问题，
+     只有真机会炸 —— 别拿桌面绿测试当护栏。
+     详见 docs/lessons/2026-10-22-webfont-input-overflow.md */
+  min-width: 0;
   margin-top: 16px;
   padding: 12px 14px;
   border: 1px solid var(--color-border);
