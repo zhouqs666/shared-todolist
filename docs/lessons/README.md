@@ -15,5 +15,6 @@ AGENTS.md 只保留规则本体和一行教训要点，完整叙事在这里。�
 | 2026-09-17 | [2026-09-17-device-ci-removal.md](2026-09-17-device-ci-removal.md) | 设备侧 E2E 移出 CI 的完整取舍 | 铁律五（CI 分层） |
 | 2026-10-02 | [2026-10-02-capacitor-thenable.md](2026-10-02-capacitor-thenable.md) | 插件代理进 Promise 链，2.8.1 壳不可用 | 铁律八 |
 | 2026-10-09 | [2026-10-09-partial-table-subscription.md](2026-10-09-partial-table-subscription.md) | 订阅一张不存在的表 ⇒ 整个 Realtime 频道静默失声（开发期抓到） | 铁律二 / 铁律六（维度 B） |
+| 2026-10-22 | [2026-10-22-webfont-input-overflow.md](2026-10-22-webfont-input-overflow.md) | web font 撑爆 input 固有宽度 ⇒ Android 上对钩按钮被挤出屏幕，桌面 E2E 全绿也没抓到 | 铁律二 / 铁律六（维度 C） |
 
 另见：[../emulator-troubleshooting.md](../emulator-troubleshooting.md) —— 本机模拟器黑屏排障手册（2026-10-02）。
