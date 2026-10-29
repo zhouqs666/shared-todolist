@@ -81,15 +81,17 @@
 **⚠️ 例外/边界：**
 - **门禁覆盖 ≠ 测试全覆盖**，这是有意的分层（2026-09-14 定型）：PR 门禁要「快而稳」（Node 回归 + admin
   Playwright E2E + workflow 静态检查——跑得慢拖住合并、跑得不稳让人无视红灯）；全量回归要「慢而全」——
-  9 个双账号 E2E（blindbox / offline / trash / undo_complete / pin / reminder / camera_image /
-  note_ceremony / env_switch）走 `e2e-web-full.yml`，**每晚 02:17（北京）**定时 + 手动。该工作流**不设 required check**
+  10 个双账号 E2E（blindbox / offline / trash / undo_complete / pin / reminder / camera_image /
+  todo_comments / edit_todo / note_ceremony / env_switch）走 `e2e-web-full.yml`，**每晚 02:17（北京）**定时 + 手动。该工作流**不设 required check**
   （不在 PR 上跑，设了会让 check 停在 "Expected" 卡死 PR）；夜里会跑，但**改动等待期内**要自己先跑一遍
 - **CI 绿灯 ≠ 交付物可用**——制品/发布结果单独回读验证（铁律三 `verify-release.mjs`）
 - 有硬限制无法验证的功能点：交付时明确列出 + 标注原因（如"无法模拟真机震动"、"无法测试 FCM 推送"）
 
 **教训：** [2026-09-14-web-channel-isolation](docs/lessons/2026-09-14-web-channel-isolation.md)（Web 通道曾把
 27 条测试数据写进生产库——所以隔离必须是物理的、守卫必须挂网络层）、
-[2026-09-16-rls-disabled](docs/lessons/2026-09-16-rls-disabled.md)（"粘贴过一次"挡不住漂移，必须机器判定）。
+[2026-09-16-rls-disabled](docs/lessons/2026-09-16-rls-disabled.md)（"粘贴过一次"挡不住漂移，必须机器判定）、
+[2026-10-29-edit-todo-save](docs/lessons/2026-10-29-edit-todo-save.md)（删定义漏删调用点 ⇒ ReferenceError 抛在
+try 之外 ⇒ 编辑待办"无法保存"，而"编辑待办"此前**一条测试都没有**——没测过的功能，重构时没有护栏）。
 
 ---
 
@@ -200,7 +202,7 @@
   | 层 | 何时跑 | 耗时（实测） | 角色 |
   |---|---|---|---|
   | `ci.yml`（3 job） | 每次 push / PR | 约 70 秒 | 必需门禁：Node 回归 + admin E2E + actionlint |
-  | `e2e-web-full.yml` | 每晚 02:17 + 手动 | 约 4–7 分钟 | 全量业务回归（9 个双账号 E2E）+ 三项 preflight |
+  | `e2e-web-full.yml` | 每晚 02:17 + 手动 | 约 4–7 分钟 | 全量业务回归（10 个双账号 E2E）+ 三项 preflight |
 
 - **设备侧（模拟器）不进 CI**（2026-09-17 删除 e2e-app.yml，#78）：四条理由与明确接受的代价见
   [docs/lessons/2026-09-17-device-ci-removal.md](docs/lessons/2026-09-17-device-ci-removal.md)。
@@ -359,9 +361,9 @@ cron 无人值守形态要格外小心（先只报告不删一段，真删时告
   `SplashScreen` / `@capgo/capacitor-updater`（热更）/ 自研 `ApkInstallerPlugin`；**状态栏无独立插件**
   （原生 `MainActivity` 的 WindowCompat/InsetsController + `styles.xml` 直接控制）
 - **Storage bucket**：`todo-attachments`（图片附件，公开读）/ `app_updates`（热更 zip + APK）
-- **CI/CD（5 个 workflow）**：`ci.yml`（Node 回归 + admin Playwright E2E + actionlint + 三个结构性检查）、
+- **CI/CD（5 个 workflow）**：`ci.yml`（Node 回归 + admin Playwright E2E + actionlint + 四个结构性检查）、
   `release-web.yml`（仅手动）、`release-apk.yml`（仅手动）、`e2e-web-full.yml`（每晚 02:17 北京，
-  9 个双账号 E2E）、`codeql.yml`（静态扫描）。两个写生产的工作流共用 `production` 审批门但**各有
+  10 个双账号 E2E）、`codeql.yml`（静态扫描）。两个写生产的工作流共用 `production` 审批门但**各有
   concurrency 组**（`release-web` / `release-apk`），写不同的表/对象，互不需串行。
   ⚠️ `schedule` cron **按 UTC 解释**（本项目 `17 18 * * *` = 北京 02:17，分钟位不要写 0——整点是调度器
   负载高峰），且定时任务只在**默认分支**运行
@@ -384,7 +386,8 @@ cron 无人值守形态要格外小心（先只报告不删一段，真删时告
 - **Web E2E 跑批**：`run-web-e2e.mjs`（`--files` / `--keep-data` / `--no-retry` / `--fail-on-flaky`）；
   依赖钉在 `scripts/requirements-e2e.txt`（CI 与本地同版本）
 - **结构性检查（CI required job 内，纯静态秒级）**：`check-test-guards.mjs`（只读守卫）/
-  `check-e2e-env-keys.mjs`（凭证键三方一致：代码读取/模板/两个工作流生成）/ `check-actions-pinned.mjs`
+  `check-e2e-env-keys.mjs`（凭证键三方一致：代码读取/模板/两个工作流生成）/ `check-actions-pinned.mjs`/
+  `check-undefined-refs.mjs`（public/js「被调用但未定义」的引用 —— 删定义漏删调用点的唯一防线，2026-10-29 事故新增）
 - **安全回归**：`test_rls_migration.mjs` / `test_rpc_migration.mjs`（PGlite 真 Postgres 跑
   `supabase/migration-rls-hardening.sql` / `supabase/migration-rpc-execute-hardening.sql`：
   复现洞 → 修复 → 幂等，进 CI）+
