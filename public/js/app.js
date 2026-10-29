@@ -1330,11 +1330,40 @@ function renderReminderBadge(li, todo) {
 
 /* ===== 编辑待办文案：底部滑出输入面板（复用 note-panel 滑出风格）=====
  * 长按待办 → 编辑 → 弹此面板。预填原 text，可改；空文本不允许。
+ *
+ * ⚠️ 2026-10-29 事故：F-04（完成备注升级为留言板）重构时把旧「完成备注」面板连同
+ *    closeNotePanel 一起删了，**本面板却仍在调用它** → 点「保存」抛
+ *    `ReferenceError: closeNotePanel is not defined`。更糟的是这个抛出点在 try 之外：
+ *    db.updateTodoText 根本没执行，而页面因为乐观更新仍显示新文案 —— 刷新即回退，
+ *    表现成「编辑待办无法保存」（复盘：docs/lessons/2026-10-29-edit-todo-save.md）。
+ *    三条防线：① 静态把关「被调用但未定义」（scripts/check-undefined-refs.mjs，进 CI）
+ *    ② 关面板属表现层，异常绝不允许挡住落库（见 saveEditText）
+ *    ③ scripts/test_edit_todo.py 端到端钉住「真的落库」。
  */
+
+/** 当前编辑面板的 ESC 处理器（模块级：关面板时统一摘掉，避免监听器泄漏到下一次按键） */
+let editPanelEscHandler = null;
+
+/**
+ * 关闭编辑待办面板（点遮罩 / ESC / 保存成功后共用）。
+ * 只认 `.edit-panel-overlay` —— 提醒面板也用 `.note-input-overlay`，不能被误关。
+ */
+function closeNotePanel() {
+  if (editPanelEscHandler) {
+    document.removeEventListener('keydown', editPanelEscHandler);
+    editPanelEscHandler = null;
+  }
+  const overlay = document.querySelector('.edit-panel-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('note-input-overlay--show');
+  document.body.style.overflow = '';
+  setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 280);
+}
+
 function openEditPanel(todo) {
   if (document.querySelector('.note-input-overlay')) return;
   const overlay = document.createElement('div');
-  overlay.className = 'note-input-overlay';
+  overlay.className = 'note-input-overlay edit-panel-overlay';
   const latest = getTodos().find((t) => t.id === todo.id) || todo;
 
   const panel = document.createElement('div');
@@ -1375,13 +1404,13 @@ function openEditPanel(todo) {
   document.body.style.overflow = 'hidden';
   requestAnimationFrame(() => overlay.classList.add('note-input-overlay--show'));
   setTimeout(() => textarea.focus(), 280);
-  document.addEventListener('keydown', onNoteEsc);
+  // ESC 关闭。监听器由 closeNotePanel 统一摘掉 —— 不再只在自己触发时摘，
+  // 否则「点保存/点遮罩」关闭后残留的监听器会在下次 ESC 时误伤别的面板。
   function onNoteEsc(e) {
-    if (e.key === 'Escape') {
-      closeNotePanel();
-      document.removeEventListener('keydown', onNoteEsc);
-    }
+    if (e.key === 'Escape') closeNotePanel();
   }
+  editPanelEscHandler = onNoteEsc;
+  document.addEventListener('keydown', onNoteEsc);
 }
 
 /**
@@ -1396,7 +1425,14 @@ async function saveEditText(id, text) {
     current.text = text;
     setTodos(getTodos()); // 触发重渲染
   }
-  closeNotePanel();
+  // 关面板是**表现层**，绝不能让它挡住落库：单独兜住异常。
+  // 2026-10-29 事故就是这里 —— closeNotePanel 未定义时抛在 try 之外，
+  // 整段保存被跳过，却因为乐观更新看不出任何报错，只表现为「保存不了」。
+  try {
+    closeNotePanel();
+  } catch (e) {
+    console.error('[app] 关闭编辑面板失败（不阻塞保存）:', e);
+  }
   try {
     await db.updateTodoText(id, text);
     showToast('已保存');

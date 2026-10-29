@@ -63,6 +63,16 @@ jobs:
         # 规则见 scripts/check-actions-pinned.mjs 头部注释。
         run: node scripts/check-actions-pinned.mjs
 
+      - name: Check undefined references in public/js
+        # 第四例（2026-10-29 事故）：「删了一个定义，却忘了还有调用点」。
+        # F-04 重构删掉了 closeNotePanel()，同一文件里的编辑待办面板仍在调用它 →
+        # 点保存抛 ReferenceError，且抛在 try 之外 → db.updateTodoText 根本没执行，
+        # 而页面因乐观更新仍显示新文案 —— 表现成「编辑待办无法保存」，线上跑了 6 天。
+        # 人眼在几千行里看不出「这个函数名从没被定义过」，机器判定是秒级零漏报的。
+        # 本脚本查两类：① 被调用但全项目未定义；② import 了目标模块没导出的名字
+        # （删了 export 忘了删 import —— 那种错会让整页模块加载失败，更致命）。
+        run: node scripts/check-undefined-refs.mjs
+
       - name: Install dependencies
         run: npm ci
 
