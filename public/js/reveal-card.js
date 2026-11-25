@@ -319,6 +319,8 @@ const tgt = { x: 0, y: 0 };
 const curTilt = { x: 0, y: 0 };
 let gyroBase = null;
 let gyroOn = false;
+// 临时诊断开关（flicker-diagnostic.js）：关掉倾斜/陀螺仪对 3D 子树的逐帧写 style
+let diagTiltOff = false;
 
 function clamp1(v) { return Math.max(-1, Math.min(1, v)); }
 
@@ -354,8 +356,18 @@ function setupTiltSources() {
 }
 
 function applyTilt() {
+  if (diagTiltOff) return;
   ui.tiltWrap.style.transform = `rotateX(${-curTilt.y * 10}deg) rotateY(${curTilt.x * 12}deg)`;
   ui.card3d.style.setProperty('--gx', `${50 + curTilt.x * 30}%`);
+}
+
+/** 临时诊断（真机闪烁二分）：关掉倾斜后不再逐帧写 transform/--gx */
+export function setDiagTiltOff(off) {
+  diagTiltOff = !!off;
+  if (diagTiltOff && ui) {
+    ui.tiltWrap.style.transform = '';
+    ui.card3d.style.removeProperty('--gx');
+  }
 }
 
 // ===== 播放控制（分镜时间轴 + 队列） =====
