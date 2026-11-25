@@ -154,11 +154,22 @@ let fxCtx = null;
 let fdpr = 1;
 let parts = [];
 
+/**
+ * 量画布的 backing store 尺寸。
+ *
+ * ⚠️ 2026-11-25 修（第二版）：**必须按「布局尺寸」量，不能按 getBoundingClientRect()**。
+ * 卡片在 3D 里（perspective + rotateX/rotateY），getBoundingClientRect() 返回的是
+ * **投影后**的盒子 —— 倾斜一变它就变（实测 289×404 → 282.3×408.3）。后果：
+ *   ① 画布按投影尺寸分配 ⇒ 纹理分辨率欠 4%（实测 554×775，应为 578×808）；
+ *   ② 倾斜一变，投影变了但画布没变 ⇒ 纹理被重新缩放采样 ⇒ 流光图案相对卡片漂移。
+ * offsetWidth/offsetHeight 是**布局尺寸**，不受 transform 影响 —— 正是要的。
+ */
 function sizeCanvas(c) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const r = c.getBoundingClientRect();
-  c.width = Math.max(1, r.width * dpr);
-  c.height = Math.max(1, r.height * dpr);
+  const w = c.offsetWidth || Math.round(c.getBoundingClientRect().width);
+  const h = c.offsetHeight || Math.round(c.getBoundingClientRect().height);
+  c.width = Math.max(1, Math.round(w * dpr));
+  c.height = Math.max(1, Math.round(h * dpr));
   return dpr;
 }
 
@@ -300,7 +311,10 @@ function renderHolo(tSec, tierKey) {
   gl.viewport(0, 0, ui.holo.width, ui.holo.height);
   gl.uniform2f(GL.uRes, ui.holo.width, ui.holo.height);
   gl.uniform1f(GL.uTime, tSec);
-  gl.uniform2f(GL.uTilt, curTilt.x, curTilt.y);
+  gl.uniform2f(GL.uTilt, appliedTiltX, appliedTiltY);
+  // 记下 shader 实际用的值（E2E 断言「shader 与 DOM 变换用同一份倾斜」）
+  lastShaderTiltX = appliedTiltX;
+  lastShaderTiltY = appliedTiltY;
   gl.uniform3f(GL.uColA, h.a[0], h.a[1], h.a[2]);
   gl.uniform3f(GL.uColB, h.b[0], h.b[1], h.b[2]);
   gl.uniform3f(GL.uGlint, h.g[0], h.g[1], h.g[2]);
@@ -374,6 +388,16 @@ function setupTiltSources() {
 const TILT_WRITE_EPS = 0.02; // 归一化值，约 0.22°（12° 对应的满量程）
 let lastTiltX = NaN;
 let lastTiltY = NaN;
+// ⚠️ 2026-11-25 修（第二版）：**shader 必须用「已写入 DOM 的那份」倾斜值**。
+// 上一版只把 DOM 变换量化了，shader 仍在吃连续变化的 curTilt ⇒ 两者脱节：
+// 流光图案（u_tilt）持续相对卡片漂移，而卡片本身是「跳变」的 ⇒ 漂移在每次阈值跨越时
+// 被「啪」地拽回去。漂移量在**卡片四角最大**（透视畸变梯度最陡），于是真机上表现为
+// 「右下角每隔几秒闪一下」—— 史诗/传说款才有（稀有款没有 #rvHolo，没有 u_tilt）。
+// 现在 DOM 变换与 shader 共用同一份 appliedTilt ⇒ 两者永远一致，图案不再相对卡片漂移。
+let appliedTiltX = 0;
+let appliedTiltY = 0;
+let lastShaderTiltX = 0;
+let lastShaderTiltY = 0;
 
 function applyTilt() {
   const x = curTilt.x;
@@ -382,7 +406,18 @@ function applyTilt() {
   if (Math.abs(x - lastTiltX) < TILT_WRITE_EPS && Math.abs(y - lastTiltY) < TILT_WRITE_EPS) return;
   lastTiltX = x;
   lastTiltY = y;
+  appliedTiltX = x;
+  appliedTiltY = y;
   ui.tiltWrap.style.transform = `rotateX(${-y * 10}deg) rotateY(${x * 12}deg)`;
+}
+
+/** 倾斜调试快照（E2E 断言用）：DOM 变换用的倾斜 vs shader 用的倾斜必须一致 */
+export function getTiltDebug() {
+  return {
+    applied: [appliedTiltX, appliedTiltY],
+    shader: [lastShaderTiltX, lastShaderTiltY],
+    live: [curTilt.x, curTilt.y],
+  };
 }
 
 // ===== 播放控制（分镜时间轴 + 队列） =====

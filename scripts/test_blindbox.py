@@ -632,9 +632,12 @@ with sync_playwright() as p:
         holo_size = page.evaluate("""() => {
             const h = document.getElementById('rvHolo');
             const c = document.getElementById('rvCard3d');
-            if (!h || !c) return null;
+            const f = document.getElementById('rvCardFront');
+            if (!h || !c || !f) return null;
             const r = c.getBoundingClientRect();
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
             return { backW: h.width, backH: h.height, cssW: Math.round(r.width), cssH: Math.round(r.height),
+                     layW: f.offsetWidth, layH: f.offsetHeight, dpr: dpr,
                      disp: getComputedStyle(h).display };
         }""")
         check("（epic）全息层画布覆盖卡片尺寸（不是 1×1 像素）",
@@ -642,6 +645,34 @@ with sync_playwright() as p:
               and holo_size["backW"] >= holo_size["cssW"] * 0.9
               and holo_size["backH"] >= holo_size["cssH"] * 0.9,
               f"实际: {holo_size}")
+        # --- 7.5b 全息层画布按「布局尺寸」分配（2026-11-25 第二版修复）---
+        # 旧实现用 getBoundingClientRect() —— 卡片在 3D 里，返回的是**投影后**的盒子，
+        # 倾斜一变就变（实测 289×404 → 282.3×408.3）。按投影尺寸分配 ⇒ ① 分辨率欠 4%
+        # ② 倾斜一变纹理就被重新缩放采样 ⇒ 流光图案相对卡片漂移，真机上表现为
+        # 「右下角每隔几秒闪一下」（史诗/传说款才有 —— 稀有款没有 #rvHolo）。
+        # 现在按 offsetWidth/offsetHeight（布局尺寸，不受 transform 影响）分配。
+        check("（epic）全息层画布按布局尺寸分配（不受 3D 投影影响）",
+              holo_size is not None
+              and abs(holo_size["backW"] - round(holo_size["layW"] * holo_size["dpr"])) <= 2
+              and abs(holo_size["backH"] - round(holo_size["layH"] * holo_size["dpr"])) <= 2,
+              f"实际: {holo_size}")
+        # --- 7.5c shader 与 DOM 变换必须用同一份倾斜（2026-11-25 第二版修复）---
+        # 上一版只把 DOM 变换量化了，shader 仍在吃连续变化的 curTilt ⇒ 两者脱节：
+        # 流光图案相对卡片持续漂移（越靠四角越明显），阈值被跨越时「啪」地闪。
+        tilt_dbg = page.evaluate("""async () => {
+            const m = await import('/js/reveal-card.js');
+            const iv = setInterval(() => window.dispatchEvent(new DeviceOrientationEvent(
+                'deviceorientation', { gamma: 10 + (Math.random()-0.5)*0.8,
+                                        beta: 20 + (Math.random()-0.5)*0.8 })), 16);
+            await new Promise((r) => setTimeout(r, 1500));
+            clearInterval(iv);
+            return m.getTiltDebug();
+        }""")
+        check("（epic）shader 的 u_tilt 与 DOM 变换用的是同一份倾斜（不脱节）",
+              tilt_dbg is not None
+              and abs(tilt_dbg["shader"][0] - tilt_dbg["applied"][0]) < 1e-9
+              and abs(tilt_dbg["shader"][1] - tilt_dbg["applied"][1]) < 1e-9,
+              f"实际: {tilt_dbg}")
         check("（epic）卡片可关闭", close_reveal_card(page))
         wait_add_settled(page, t6)
         heal = page.evaluate("""async () => {
