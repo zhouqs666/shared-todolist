@@ -12,7 +12,7 @@
  *   - 跨域请求（Supabase API/Realtime/Storage）一律走网络，绝不缓存
  */
 
-const VERSION = 'v26'; // 热更新上线后递增，强制清理旧缓存（v26：集齐纪念卡残留清理；v25：glint 频闪修复；v24：第二版画布/倾斜修复。原生 App 不注册 SW，不受此影响）
+const VERSION = 'v27'; // 热更新上线后递增，强制清理旧缓存（v27：粒子层不再每帧全屏清屏 + 复看卡期间摘掉图鉴弹层毛玻璃；v26：集齐纪念卡残留清理；v25：glint 频闪修复；v24：第二版画布/倾斜修复。原生 App 不注册 SW，不受此影响）
 const CACHE = 'todo-shell-' + VERSION;
 
 // 预缓存的核心资源（与实际 public/ 目录对齐）

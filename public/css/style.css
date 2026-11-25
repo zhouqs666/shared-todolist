@@ -3538,6 +3538,19 @@ body.cherish-stage-on .topbar {
   opacity: 1;
   transition: opacity 0.25s var(--ease);
 }
+
+/* ⚠️ 2026-11-25 真机闪屏事故（M2）：复看卡打开期间摘掉这层全屏毛玻璃。
+   ① 复看卡遮罩（#rvOverlay）是 96% 不透明的深色渐变，**这层毛玻璃根本看不见**；
+   ② 但 backdrop-filter 会让合成器为它建 backdrop root 并对整屏做一次模糊 —— 它与
+      卡片的 WebGL 层（每帧纹理上传）/ mix-blend-mode 层 / 全屏粒子层叠在一起时，
+      把真机 GPU 的合成预算打爆 ⇒ 合成器偶尔吐出残缺 Tile：
+      卡片右下角糊上一块矩形垃圾（业主看到的「闪屏」，实测 17 次 / 525 帧，单帧 33ms）；
+   ③ 实测桌面真实渲染管线：帧率 30.6 → 58.5（+91%）。
+   视觉损失：零 —— 它本来就被盖住看不见。 */
+body.rv-open .sticker-modal {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 .sticker-modal.hidden {
   display: flex; /* 保持 flex 布局，用 opacity + visibility 实现淡出 */
   opacity: 0;

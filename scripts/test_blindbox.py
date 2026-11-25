@@ -469,8 +469,64 @@ with sync_playwright() as p:
         check("陀螺仪噪声下 3 秒内 3D 子树 style 变更 ≤ 5 次（不再每帧强制重栅格）",
               tilt_changes is not None and tilt_changes <= 5, f"实际: {tilt_changes} 次")
 
+        # --- 7.1e M1：粒子层不得每帧全屏 clearRect（2026-11-25 M1）---
+        # 真机症状（第六版定位）：合成器吐出单帧矩形垃圾块，卡片右下角糊上一块。
+        # 病根之一 = 粒子层每 33ms 对**全屏**画布 clearRect（真机 41.5MB/帧、30fps
+        # ≈1.2GB/s），且**一个粒子都没有时照样清**。改法：只清上一帧画过粒子的包围盒。
+        # 断言：单次 clearRect 覆盖的面积必须远小于整块画布（修复前恒为 100%）。
+        clear_stat = page.evaluate("""async () => {
+            const f = document.getElementById('rvFx');
+            if (!f) return null;
+            const proto = CanvasRenderingContext2D.prototype;
+            const orig = proto.clearRect;
+            let area = 0, calls = 0, maxOne = 0;
+            proto.clearRect = function (x, y, w, h) {
+                const a = Math.abs(w) * Math.abs(h);
+                area += a; calls++; if (a > maxOne) maxOne = a;
+                return orig.apply(this, arguments);
+            };
+            await new Promise(r => setTimeout(r, 2000));
+            proto.clearRect = orig;
+            const canvasArea = f.width * f.height;
+            return { calls, canvasArea,
+                     maxRatio: +(maxOne / canvasArea).toFixed(3),
+                     avgRatio: +(calls ? area / calls / canvasArea : 0).toFixed(3) };
+        }""")
+        check("粒子层不做全屏清屏（单次清理 ≤ 画布 60%，修复前恒为 100%）",
+              clear_stat is not None and clear_stat["maxRatio"] <= 0.60,
+              f"实际: {clear_stat}")
+
+        # --- 7.1f M2：复看卡打开期间，图鉴弹层的全屏毛玻璃必须被摘掉（2026-11-25 M2）---
+        # backdrop-filter 会让合成器建 backdrop root 并对整屏做模糊；弹层此时被
+        # #rvOverlay 的 96% 不透明遮罩完全盖住、毛玻璃根本看不见 ⇒ 白白烧合成预算。
+        m2 = page.evaluate("""() => {
+            const modal = document.getElementById('stickerModal');
+            if (!modal) return null;
+            const cs = getComputedStyle(modal);
+            return {
+                bodyFlag: document.body.classList.contains('rv-open'),
+                backdrop: cs.backdropFilter || cs.webkitBackdropFilter || 'none',
+            };
+        }""")
+        check("复看卡打开时 <body> 挂上 rv-open 标记",
+              m2 is not None and m2["bodyFlag"] is True, f"实际: {m2}")
+        check("复看卡打开时图鉴弹层已无 backdrop-filter（全屏毛玻璃 = 合成预算杀手）",
+              m2 is not None and m2["backdrop"] in ("none", ""), f"实际: {m2}")
+
+        # 关闭后必须恢复：毛玻璃与 rv-open 标记都要回来（不能把弹层永久改坏）
+        check("复看卡可关闭（准备验证毛玻璃恢复）", close_reveal_card(page))
+        m2_after = page.evaluate("""() => {
+            const modal = document.getElementById('stickerModal');
+            if (!modal) return null;
+            const cs = getComputedStyle(modal);
+            return { bodyFlag: document.body.classList.contains('rv-open'),
+                     backdrop: cs.backdropFilter || cs.webkitBackdropFilter || 'none' };
+        }""")
+        check("复看卡关闭后 rv-open 标记摘掉、毛玻璃恢复",
+              m2_after is not None and m2_after["bodyFlag"] is False
+              and m2_after["backdrop"] not in ("none", ""), f"实际: {m2_after}")
+
         page.evaluate("() => localStorage.setItem('__e2e_fx_off', '1')")  # 装回降级钩子（跑批默认）
-        check("复看卡可关闭（书架仍开着）", close_reveal_card(page))
         check("关闭复看卡后图鉴弹层仍在", page.locator('#stickerModal').is_visible())
         page.locator('#stickerModalClose').click()
         wait_until(page, lambda: not page.locator('#stickerModal').is_visible(), desc="书架收起")
