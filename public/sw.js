@@ -12,7 +12,7 @@
  *   - 跨域请求（Supabase API/Realtime/Storage）一律走网络，绝不缓存
  */
 
-const VERSION = 'v28'; // 热更新上线后递增，强制清理旧缓存（v28：**回滚到 3.7.3 的内容** —— 2026-11-25 业主指示「把今天的修复全部回滚」；缓存版本必须高于此前的 v27，否则设备继续吃 3.7.8 的旧缓存。v22 及更早：霞鹜文楷 web font 落地新增 fonts/ 预缓存等。原生 App 不注册 SW，不受此影响）
+const VERSION = 'v29'; // 热更新上线后递增，强制清理旧缓存（v29：复看卡闪烁单变量验证 —— 复看态摘掉 WebGL 全息层，改了 js/reveal-card.js 与 css/style.css。v28：回滚到 3.7.3 内容；v22 及更早：霞鹜文楷 web font 落地新增 fonts/ 预缓存等。原生 App 不注册 SW，不受此影响）
 const CACHE = 'todo-shell-' + VERSION;
 
 // 预缓存的核心资源（与实际 public/ 目录对齐）

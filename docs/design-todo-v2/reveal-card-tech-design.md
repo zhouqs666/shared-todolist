@@ -175,6 +175,10 @@ reveal-card（一个组件，三个入口）
 | 完成路径 | 按 D1 删 `celebrateCompletion` 隐藏分支 / `burstCardRing` / `RARITY_COMPLETE_TEXT`（可与本组件并行先上，见批次计划） |
 | `style-lab.html` | 新增「开出卡片」参数小节（sheen 速度/角度、金箔色相、渗出粒子密度），保持"改参数回工作台"惯例 |
 
+**2026-11-25 闪烁单变量验证（3.7.10）**：复看入口（`playReview`）暂不渲染 `#rvHolo` WebGL 全息层
+（overlay 挂 `holo-off`，循环跳过 shader 绘制）；光柱/毛玻璃/倾斜原样保留，供真机按层二分。
+开销（self）/通知（notify）入口保持全效。详见 `docs/lessons/2026-11-25-reveal-card-flicker.md` 第八版。
+
 ## 12. 测试策略
 
 - E2E 钩子沿用 `__e2e_force_rarity`（链路不变）；卡片组件出稳定 data-testid；
