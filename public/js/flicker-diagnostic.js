@@ -2,11 +2,13 @@
  * 临时闪烁诊断（2026-11-25，定位完即删除）
  *
  * 背景：复看卡在真机上的 GPU 合成伪影，桌面/模拟器都复现不了，只有真机能当传感器。
- * 这里把四条可疑的合成路径做成开关，让业主在同一台手机、同一个会话里逐项 A/B：
+ * 这里把可疑的合成路径做成开关，让业主在同一台手机、同一个会话里逐项 A/B：
  *   ① 全屏 canvas（纪念卡彩带的残留层）
  *   ② #rvBeam 全屏光柱
  *   ③ 图鉴弹层毛玻璃 backdrop-filter
  *   ④ 陀螺仪/倾斜的逐帧 transform 重栅格
+ *   ⑤ 背后的图鉴完成态书架（集齐后才变重的持久层）
+ *   ⑥ 隐藏的纪念卡层
  *
  * 入口：图鉴标题（「收集图鉴」）长按 1.5 秒。正常使用不会看到面板。
  * 移除：删掉本文件 + sticker-book.js 的两行接线 + reveal-card.js 的 setDiagTiltOff。
@@ -25,6 +27,9 @@ let canvasOn = false;
 let beamOn = true;
 let blurOn = true;
 let tiltOn = true;
+let shelfOn = true;
+let memorialOn = true;
+let shelfTimer = 0;
 let countTimer = 0;
 
 function injectStyle() {
@@ -75,7 +80,9 @@ function refresh() {
   const blurBtn = panel.querySelector('[data-fd="blur"]');
   const tiltBtn = panel.querySelector('[data-fd="tilt"]');
   const canvasBtn = panel.querySelector('[data-fd="canvas"]');
-  label(canvasBtn, canvasOn ? '空白画布：开' : '空白画布：关');
+  const shelfBtn = panel.querySelector('[data-fd="shelf"]');
+  const memorialBtn = panel.querySelector('[data-fd="memorial"]');
+  label(canvasBtn, canvasOn ? '空白：开' : '空白：关');
   canvasBtn.classList.toggle('fd-on', canvasOn);
   label(beamBtn, beamOn ? '开' : '关');
   beamBtn.classList.toggle('fd-on', !beamOn);
@@ -83,6 +90,10 @@ function refresh() {
   blurBtn.classList.toggle('fd-on', !blurOn);
   label(tiltBtn, tiltOn ? '开' : '关');
   tiltBtn.classList.toggle('fd-on', !tiltOn);
+  label(shelfBtn, shelfOn ? '显示' : '隐藏');
+  shelfBtn.classList.toggle('fd-on', !shelfOn);
+  label(memorialBtn, memorialOn ? '显示' : '隐藏');
+  memorialBtn.classList.toggle('fd-on', !memorialOn);
   const count = panel.querySelector('.fd-count');
   if (count) {
     const canvases = [...document.querySelectorAll('body > canvas')];
@@ -138,6 +149,35 @@ function setTilt(on) {
   refresh();
 }
 
+/** 背后的图鉴弹层（完成态书架）。隐藏后标题不可点，60 秒自动恢复，避免把自己锁死 */
+function setShelf(on) {
+  shelfOn = !!on;
+  const modal = document.getElementById('stickerModal');
+  if (modal) modal.style.display = shelfOn ? '' : 'none';
+  if (shelfTimer) { clearTimeout(shelfTimer); shelfTimer = 0; }
+  if (!shelfOn) {
+    shelfTimer = setTimeout(() => { shelfTimer = 0; setShelf(true); }, 60000);
+  }
+  refresh();
+}
+
+/** 隐藏/恢复纪念卡层（含 scrim 与 12 格内容） */
+function setMemorial(on) {
+  memorialOn = !!on;
+  const m = document.getElementById('memorialCard');
+  if (m) m.style.display = memorialOn ? '' : 'none';
+  refresh();
+}
+
+/** 清掉 canvas-confetti 的全局画布（真实彩带），保留诊断用的空白画布 */
+function clearRealConfetti() {
+  try { confetti.reset(); } catch (_e) { /* ignore */ }
+  for (const c of [...document.querySelectorAll('body > canvas')]) {
+    if (c.id !== CANVAS_ID) c.remove();
+  }
+  refresh();
+}
+
 function fireRealConfetti() {
   const base = { spread: 60, ticks: 900, gravity: 0.9, scalar: 0.9, colors: ['#fbbf24', '#fcd34d', '#f59e0b'], zIndex: 1200 };
   confetti({ ...base, particleCount: 40, origin: { x: 0.15, y: 0.7 }, angle: 60 });
@@ -152,12 +192,15 @@ function buildPanel() {
   panel.id = PANEL_ID;
   panel.innerHTML = `
     <div class="fd-title">闪烁诊断（临时）</div>
-    <div class="fd-hint">先开一张史诗/传说复看卡，再逐项切换；每项观察 20–30 秒。</div>
+    <div class="fd-hint">先开史诗/传说复看卡；切完点「收起」，每项观察 20–30 秒。隐藏图鉴层 60 秒后自动恢复。</div>
     <div class="fd-row">
       <span class="fd-label">彩带画布</span>
-      <button type="button" data-fd="canvas">空白画布：关</button>
-      <button type="button" data-fd="real">真实彩带</button>
+      <button type="button" data-fd="canvas">空白：关</button>
+      <button type="button" data-fd="real">真实</button>
+      <button type="button" data-fd="clear">清除</button>
     </div>
+    <div class="fd-row"><span class="fd-label">图鉴层（背后书架）</span><button type="button" data-fd="shelf">显示</button></div>
+    <div class="fd-row"><span class="fd-label">纪念卡层</span><button type="button" data-fd="memorial">显示</button></div>
     <div class="fd-row"><span class="fd-label">光柱 #rvBeam</span><button type="button" data-fd="beam">开</button></div>
     <div class="fd-row"><span class="fd-label">图鉴毛玻璃</span><button type="button" data-fd="blur">开</button></div>
     <div class="fd-row"><span class="fd-label">陀螺仪/倾斜</span><button type="button" data-fd="tilt">开</button></div>
@@ -170,11 +213,15 @@ function buildPanel() {
   document.body.appendChild(panel);
   panel.querySelector('[data-fd="canvas"]').addEventListener('click', () => setCanvas(!canvasOn));
   panel.querySelector('[data-fd="real"]').addEventListener('click', fireRealConfetti);
+  panel.querySelector('[data-fd="clear"]').addEventListener('click', clearRealConfetti);
+  panel.querySelector('[data-fd="shelf"]').addEventListener('click', () => setShelf(!shelfOn));
+  panel.querySelector('[data-fd="memorial"]').addEventListener('click', () => setMemorial(!memorialOn));
   panel.querySelector('[data-fd="beam"]').addEventListener('click', () => setBeam(!beamOn));
   panel.querySelector('[data-fd="blur"]').addEventListener('click', () => setBlur(!blurOn));
   panel.querySelector('[data-fd="tilt"]').addEventListener('click', () => setTilt(!tiltOn));
   panel.querySelector('[data-fd="reset"]').addEventListener('click', () => {
     setCanvas(false); setBeam(true); setBlur(true); setTilt(true);
+    setShelf(true); setMemorial(true); clearRealConfetti();
   });
   panel.querySelector('[data-fd="hide"]').addEventListener('click', hidePanel);
   refresh();

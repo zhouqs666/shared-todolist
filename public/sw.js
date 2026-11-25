@@ -12,7 +12,7 @@
  *   - 跨域请求（Supabase API/Realtime/Storage）一律走网络，绝不缓存
  */
 
-const VERSION = 'v30'; // 热更新上线后递增，强制清理旧缓存（v30：临时闪烁诊断面板 js/flicker-diagnostic.js + reveal-card 诊断钩子。v29：复看态摘掉 WebGL 全息层；v28：回滚到 3.7.3 内容；v22 及更早：霞鹜文楷 web font 落地新增 fonts/ 预缓存等。原生 App 不注册 SW，不受此影响）
+const VERSION = 'v31'; // 热更新上线后递增，强制清理旧缓存（v31：诊断面板新增 图鉴层/纪念卡层/清除彩带 开关。v30：临时闪烁诊断面板；v29：复看态摘掉 WebGL 全息层；v28：回滚到 3.7.3 内容；v22 及更早：霞鹜文楷 web font 落地新增 fonts/ 预缓存等。原生 App 不注册 SW，不受此影响）
 const CACHE = 'todo-shell-' + VERSION;
 
 // 预缓存的核心资源（与实际 public/ 目录对齐）
