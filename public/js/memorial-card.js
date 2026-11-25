@@ -130,10 +130,26 @@ export function showMemorialCard(book, opts = {}) {
   if (opts.celebrate) fireCeremonyConfetti();
 }
 
-/** 关闭纪念卡（遮罩点击 / 关闭按钮 / ESC 共用） */
+/**
+ * 关闭纪念卡（遮罩点击 / 关闭按钮 / ESC 共用）
+ *
+ * ⚠️ 2026-11-25 真机闪屏事故的关键清理点：canvas-confetti 用的是**模块级全局画布**，
+ * 第一次调用时 append 到 document.body，之后**永远不会自己移除**（只有显式调
+ * confetti.reset() 才会 removeChild）。于是纪念卡播完后，body 里永久留下一块
+ * 全屏 `position:fixed; width:100%; height:100%` 的画布层 —— 它压在 App 内容之上、
+ * 位于图鉴弹层(1000)与复看卡遮罩(1200)之下，给真机的合成器多加一层全屏合成面。
+ *
+ * 而「集齐庆祝」的标记存在 localStorage，**bundle 切换（热更）时 localStorage 不共享**
+ * （见 update.js 的说明）⇒ 每次热更后第一次开图鉴都会重播纪念卡 ⇒ 每次都重新埋雷。
+ * 这解释了「只有生产环境闪」：切测试环境会 location.reload()，整页重载把残留全清掉。
+ *
+ * ⇒ 关闭时必须 reset 掉全局画布，不能只把弹层藏起来。
+ */
 function hideMemorialCard() {
   const modal = document.getElementById('memorialCard');
   if (modal) modal.classList.add('hidden');
+  // 清掉 canvas-confetti 的全局画布（否则永久留在 body 里）
+  try { confetti.reset(); } catch (_e) { /* ignore */ }
 }
 
 /**
