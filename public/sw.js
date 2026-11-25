@@ -12,7 +12,7 @@
  *   - 跨域请求（Supabase API/Realtime/Storage）一律走网络，绝不缓存
  */
 
-const VERSION = 'v22'; // 热更新上线后递增，强制清理旧缓存（霞鹜文楷 web font 落地：新增 fonts/ 预缓存）
+const VERSION = 'v23'; // 热更新上线后递增，强制清理旧缓存（v23：复看卡闪屏修复 —— style.css/reveal-card.js 变了，Web 通道必须失效旧缓存才能拿到修复；原生 App 不注册 SW，不受此影响）
 const CACHE = 'todo-shell-' + VERSION;
 
 // 预缓存的核心资源（与实际 public/ 目录对齐）
