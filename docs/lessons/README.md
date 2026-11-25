@@ -17,6 +17,6 @@ AGENTS.md 只保留规则本体和一行教训要点，完整叙事在这里。�
 | 2026-10-09 | [2026-10-09-partial-table-subscription.md](2026-10-09-partial-table-subscription.md) | 订阅一张不存在的表 ⇒ 整个 Realtime 频道静默失声（开发期抓到） | 铁律二 / 铁律六（维度 B） |
 | 2026-10-22 | [2026-10-22-webfont-input-overflow.md](2026-10-22-webfont-input-overflow.md) | web font 撑爆 input 固有宽度 ⇒ Android 上对钩按钮被挤出屏幕，桌面 E2E 全绿也没抓到 | 铁律二 / 铁律六（维度 C） |
 | 2026-10-29 | [2026-10-29-edit-todo-save.md](2026-10-29-edit-todo-save.md) | 删定义漏删调用点 ⇒ ReferenceError 抛在 try 之外 ⇒ 编辑待办「无法保存」，线上跑了 6 天 | 铁律二 / 铁律六（维度 B·C） |
-| 2026-11-25 | [2026-11-25-reveal-card-flicker.md](2026-11-25-reveal-card-flicker.md) | 画布 1×1 + 陀螺仪噪声每帧重栅格 47 次/秒 ⇒ 真机卡片闪屏（合成器输出残缺 Tile） | 铁律二 / 铁律六（维度 E·F） |
+| 2026-11-25 | [2026-11-25-reveal-card-flicker.md](2026-11-25-reveal-card-flicker.md) | 真机闪屏 = 合成器吐出的单帧矩形 Tile；连续五版修复均建立在未证伪的归因上 ⇒ 全部回滚（内容回到 3.7.3，而 3.7.3 本身也闪） | 铁律二 / 铁律六（维度 E·F） |
 
 另见：[../emulator-troubleshooting.md](../emulator-troubleshooting.md) —— 本机模拟器黑屏排障手册（2026-10-02）。

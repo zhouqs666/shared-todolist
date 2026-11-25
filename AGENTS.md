@@ -96,8 +96,9 @@
 [2026-09-16-rls-disabled](docs/lessons/2026-09-16-rls-disabled.md)（"粘贴过一次"挡不住漂移，必须机器判定）、
 [2026-10-29-edit-todo-save](docs/lessons/2026-10-29-edit-todo-save.md)（删定义漏删调用点 ⇒ ReferenceError 抛在
 try 之外 ⇒ 编辑待办"无法保存"，而"编辑待办"此前**一条测试都没有**——没测过的功能，重构时没有护栏）、
-[2026-11-25-reveal-card-flicker](docs/lessons/2026-11-25-reveal-card-flicker.md)（画布 1×1 + 陀螺仪噪声
-每帧强制重栅格 47 次/秒 ⇒ 真机卡片闪屏；E2E 默认降级通道 ⇒ 这类缺陷零覆盖）。
+[2026-11-25-reveal-card-flicker](docs/lessons/2026-11-25-reveal-card-flicker.md)（伪影本体 = Android 合成器吐出的
+单帧矩形 Tile；**「画布 1×1 / 陀螺仪重栅格」这条机制已被证伪** —— 它在 3.7.7 上仍闪；
+E2E 默认降级通道 ⇒ 这类缺陷零覆盖；**模拟器与桌面都天然复现不了 GPU 合成问题**）。
 
 ---
 

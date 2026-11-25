@@ -127,7 +127,18 @@ with sync_playwright() as p:
     page.locator('.topbar__avatar').click(button='right')
     page.wait_for_selector('.account-menu__item', timeout=5000)
     page.locator('.account-menu__item', has_text='回收站').first.click()
-    page.wait_for_selector('.trash-item', timeout=8000)
+    # 等**这一条**出现在回收站，而不是「有任意一条 .trash-item」就往下走。
+    # 回收站是**服务端查询**（db.js listTrashed 按 deleted_at 倒序、无条数上限），
+    # 而软删除的落库是异步的 ⇒ 面板里可能先出现别的条目（上一轮残留），
+    # wait_for_selector('.trash-item') 会**立刻**返回，随后按文案定位的那条却还没到 ⇒ 超时。
+    # 2026-11-25 回滚后本地跑批实测：首跑栽在这里（重试通过 = FLAKY，不算通过）。
+    wait_until(
+        page,
+        lambda: page.locator('.trash-item', has_text=test_text)
+                  .first.locator('.trash-item__btn--purge').count() > 0,
+        timeout_ms=15000,
+        desc="待办出现在回收站",
+    )
     page.locator('.trash-item', has_text=test_text).first.locator('.trash-item__btn--purge').click()
     wait_until(
         page,
