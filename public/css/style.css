@@ -4944,6 +4944,12 @@ body.cherish-stage-on .topbar {
 .flashing #rvFlash{ animation:rv-flashOut .3s ease-out; }
 @keyframes rv-flashOut{ 0%{opacity:0;} 16%{opacity:.95;} 100%{opacity:0;} }
 
+/* 复看/通知卡打开期间：把背后的图鉴弹层（完成态书架）与纪念卡移出合成树。
+   完成态书架是集齐后才出现的持久合成负载，与光柱叠加会触发 Android GPU Tile 伪影
+   （2026-11-25 真机闪烁修复）。遮罩本身 90–96% 不透明，视觉不可察；关闭即恢复。 */
+body.rv-open #stickerModal,
+body.rv-open #memorialCard { display: none !important; }
+
 /* 粒子层（渗出/爆发/星芒共用一块画布） */
 #rvFx{ position:absolute; inset:0; z-index:20; pointer-events:none; }
 
