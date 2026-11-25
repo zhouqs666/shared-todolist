@@ -402,7 +402,7 @@ function fillCard(spec) {
   void overlay.offsetWidth; // 重启动画的回流
   overlay.classList.add(t.cls);
   if (spec.mode === 'notify') overlay.classList.add('mode-quiet', 'mode-notify');
-  if (spec.mode === 'review') overlay.classList.add('mode-quiet');
+  if (spec.mode === 'review') overlay.classList.add('mode-quiet', 'holo-off');
 
   ui.fTier.textContent = t.label;
   ui.fScene.innerHTML = spec.item.scene;
@@ -423,13 +423,20 @@ function fillCard(spec) {
   ui.fNotify.textContent = REVEAL_TIERS.notify.badge;
 }
 
+/** 复看卡不渲染 WebGL 全息层（2026-11-25 闪烁单变量验证：只摘 #rvHolo，
+ *  光柱/毛玻璃/倾斜原样保留，便于真机二分定位；详见 docs/lessons/2026-11-25-reveal-card-flicker.md） */
+function holoActive() {
+  return !!(cur && cur.mode !== 'review'
+    && REVEAL_TIERS[cur.tierKey] && REVEAL_TIERS[cur.tierKey].webgl);
+}
+
 function toIdle(instant) {
   phase = 'idle';
   ui.overlay.classList.remove('phase-suspense', 'phase-reveal', 'phase-hold');
   if (instant) ui.overlay.classList.add('no-anim');
   ui.overlay.classList.add('phase-idle');
   ui.btnClose.classList.remove('hidden');
-  if (!fxActive() || (cur && !REVEAL_TIERS[cur.tierKey].webgl)) renderHoloStatic(cur && cur.tierKey);
+  if (holoActive() && !fxActive()) renderHoloStatic(cur.tierKey);
 }
 
 async function playCeremony(spec) {
@@ -560,7 +567,7 @@ function loop(t) {
       if (now - lastTw > (tier.twinkleEvery || 0.6)) { lastTw = now; spawnTwinkle(r2, tier.palette); }
     }
     stepParts(dt);
-    if (phase === 'idle') renderHolo(now, cur.tierKey);
+    if (phase === 'idle' && holoActive()) renderHolo(now, cur.tierKey);
   } else {
     stepParts(0); // 清屏一次
   }
@@ -639,7 +646,7 @@ function runPlay({ spec, resolve }) {
     phase = 'idle';
     ui.overlay.classList.add('phase-idle');
     ui.btnClose.classList.remove('hidden');
-    if (REVEAL_TIERS[spec.tierKey].webgl) renderHoloStatic(spec.tierKey);
+    if (holoActive()) renderHoloStatic(spec.tierKey);
   }
   if (spec.onClose) {
     const prevResolve = spec.resolve;

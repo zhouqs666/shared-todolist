@@ -382,6 +382,34 @@ col += u_glint * step(0.9915, sp) * 0.9;                          // 与底色�
 6. **`requestVideoFrameCallback` 只在播放中触发** —— 暂停后 seek 不回调（实测回调数 0）。
    逐帧取证必须 `play()`；为这个坑白等过 12 分钟。
 
+## 第八版（2026-11-25 晚，C 方案单变量验证）：复看卡先只摘 WebGL 全息层
+
+业主选择「单变量验证」：不一次性重做渲染，而是先只移除一个可疑层，用真机结果二分。
+
+**本次改动（3.7.10，仅复看入口）**
+
+- `playReview` 的 overlay 挂 `holo-off`；循环里的 `renderHolo()` 与首帧 `renderHoloStatic()`
+  都经 `holoActive()` 判断，复看态直接跳过（不是只 `display:none` 后继续画）。
+- 光柱 `#rvBeam`、图鉴弹层 `backdrop-filter`、陀螺仪/倾斜、粒子循环**全部原样保留** ——
+  它们是下一批待验证变量，本次不动。
+- 开销卡（self）/通知卡（notify）保持原样，WebGL 全息层照常渲染。
+
+**为什么先摘它**：稀有款 `webgl:false` 且 CSS 同时隐藏 `#rvHolo` / `#rvBeam`，而业主报告的
+闪烁恰好只出现在史诗/传说 ⇒ 这两个元素是唯一稳定的「档位差异」。其中 `#rvHolo` 是
+`mix-blend-mode:screen` 的 WebGL 画布，且在 3.7.3 里还叠着「遮罩隐藏时量尺寸 → 1×1 像素拉满整卡」
+的退化（复用 `#rvHolo` 的旧代码时实测 backing store 1×1 / CSS 288×404）。先把这条最反常的路径摘掉。
+
+**判据（真机）**
+
+| 结果 | 结论 | 下一步 |
+|---|---|---|
+| 复看卡不再闪 | `#rvHolo` 是（或包含）元凶 | 直接保留此改；用静态 CSS 纹理补回质感 |
+| 仍闪 | 元凶在光柱 / 毛玻璃 / 倾斜 / 3D 变换中 | 恢复 `#rvHolo` 不必要，继续按同方法摘 `#rvBeam` → 毛玻璃 → 倾斜 |
+
+**不能本地验证**：桌面 GPU 与模拟器 SwiftShader 都不产生真机的合成器伪影；测试环境
+（切换会整页 reload）也无法复现生产 session 的残留状态。E2E 只能钉住「复看态确实挂
+`holo-off`、`#rvHolo` 确实 `display:none`，且开出卡未被误伤」（`test_blindbox.py` 7.5a）。
+
 ## 教训
 
 1. **`display:none` 时量尺寸 = 量到 0**。任何「先量尺寸再显示」或「先显示再量尺寸」的顺序

@@ -572,6 +572,12 @@ with sync_playwright() as p:
         snap6 = wait_reveal_card(page, desc="epic 开出卡片弹出")
         check("（epic）卡片弹出、卡面「心动」（epic_1）",
               snap6 is not None and snap6["name"] == "心动" and snap6["tierEpic"], f"实际: {snap6}")
+        self_holo = page.evaluate("""() => {
+            const o = document.querySelector('[data-testid="reveal-card"]');
+            return { holoOff: o ? o.classList.contains('holo-off') : null };
+        }""")
+        check("（epic 开出卡）不挂 holo-off（全息层保留，单变量只动复看卡）",
+              self_holo["holoOff"] is False, f"实际: {self_holo}")
         check("（epic）卡片可关闭", close_reveal_card(page))
         wait_add_settled(page, t6)
         heal = page.evaluate("""async () => {
@@ -594,6 +600,40 @@ with sync_playwright() as p:
         }""")
         check("本地状态滞后时自愈到 epic_2（旧实现撞车即静默放弃）",
               heal.get("key") == "epic_2" and heal.get("epicCount") == 2, f"实际: {heal}")
+
+        # --- 7.5a 复看卡单变量验证（2026-11-25 闪烁 C 方案）：只摘 epic/legendary 的
+        #     WebGL 全息层，开出卡不受影响；光柱/毛玻璃/倾斜保留，供真机二分定位 ---
+        page.evaluate("() => localStorage.removeItem('__e2e_fx_off')")  # review 走真实 idle 路径
+        page.locator('#stickerEntry').click()
+        check("复看（epic）：图鉴弹层打开", wait_until(
+            page, lambda: page.locator('#stickerModal').is_visible(), desc="图鉴弹层可见"))
+        epic_cell = page.locator('.sticker-cell--unlocked[data-key="epic_1"]').first
+        check("复看（epic）：epic_1 格子渲染", wait_until(
+            page, lambda: epic_cell.count() > 0, desc="epic_1 格子渲染"))
+        epic_cell.click()
+        rv_epic = wait_reveal_card(page, desc="epic 复看卡弹出")
+        check("复看（epic）：卡面为「心动」", rv_epic is not None and rv_epic["name"] == "心动",
+              f"实际: {rv_epic}")
+        review_holo = page.evaluate("""() => {
+            const o = document.querySelector('[data-testid="reveal-card"]');
+            const h = o && o.querySelector('#rvHolo');
+            return {
+                holoOff: o ? o.classList.contains('holo-off') : null,
+                display: h ? getComputedStyle(h).display : null,
+            };
+        }""")
+        check("复看（epic）：挂 holo-off 且 #rvHolo display:none（全息层被摘掉）",
+              review_holo["holoOff"] is True and review_holo["display"] == "none",
+              f"实际: {review_holo}")
+        page.locator('#rvCard3d').click(position={"x": 120, "y": 300})
+        check("复看（epic）：翻面仍可用（只摘全息层，不动交互）",
+              wait_until(page, lambda: (reveal_card_snapshot(page) or {}).get("flippedVisible"),
+                         timeout_ms=5000, desc="复看 epic 翻面"))
+        check("复看（epic）：可关闭且书架仍在", close_reveal_card(page)
+              and page.locator('#stickerModal').is_visible())
+        page.locator('#stickerModalClose').click()
+        wait_until(page, lambda: not page.locator('#stickerModal').is_visible(), desc="书架收起")
+        page.evaluate("() => localStorage.setItem('__e2e_fx_off', '1')")  # 装回跑批默认
 
         # --- 7.6 隐藏款写入 rarity_seen=false（对方端揭晓的前提；旧实现恒为 true，链路是死的）---
         seen = page.evaluate("""async () => {

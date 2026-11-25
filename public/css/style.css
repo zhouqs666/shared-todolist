@@ -4891,6 +4891,8 @@ body.cherish-stage-on .topbar {
   mix-blend-mode:screen; opacity:.74; pointer-events:none;
 }
 .tier-rare #rvHolo{ display:none; }
+/* 复看卡单变量验证：不渲染 WebGL 全息层（只摘这一层，光柱/毛玻璃/倾斜保留） */
+#rvOverlay.holo-off #rvHolo{ display:none; }
 
 /* ===== 分镜动效 ===== */
 .phase-suspense #rvCard3d{ animation:rv-flyIn .55s cubic-bezier(.22,1.15,.36,1) forwards; }
