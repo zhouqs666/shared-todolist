@@ -3538,19 +3538,6 @@ body.cherish-stage-on .topbar {
   opacity: 1;
   transition: opacity 0.25s var(--ease);
 }
-
-/* ⚠️ 2026-11-25 真机闪屏事故（M2）：复看卡打开期间摘掉这层全屏毛玻璃。
-   ① 复看卡遮罩（#rvOverlay）是 96% 不透明的深色渐变，**这层毛玻璃根本看不见**；
-   ② 但 backdrop-filter 会让合成器为它建 backdrop root 并对整屏做一次模糊 —— 它与
-      卡片的 WebGL 层（每帧纹理上传）/ mix-blend-mode 层 / 全屏粒子层叠在一起时，
-      把真机 GPU 的合成预算打爆 ⇒ 合成器偶尔吐出残缺 Tile：
-      卡片右下角糊上一块矩形垃圾（业主看到的「闪屏」，实测 17 次 / 525 帧，单帧 33ms）；
-   ③ 实测桌面真实渲染管线：帧率 30.6 → 58.5（+91%）。
-   视觉损失：零 —— 它本来就被盖住看不见。 */
-body.rv-open .sticker-modal {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
 .sticker-modal.hidden {
   display: flex; /* 保持 flex 布局，用 opacity + visibility 实现淡出 */
   opacity: 0;
@@ -4056,12 +4043,6 @@ body.rv-open .sticker-modal {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-}
-/* 隐藏态把 scrim 的毛玻璃摘掉：纪念卡关掉后不该还留着一层「要重采样整屏背景」的
-   合成面（真机闪屏事故的残留之一，2026-11-25）。淡出过渡保留。 */
-.memorial-card.hidden .memorial-card__scrim {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 .memorial-card__scrim {
   position: absolute;
@@ -4809,10 +4790,7 @@ body.rv-open .sticker-modal {
 /* 贴纸专属场景层（每张卡独立 SVG，D10） */
 #rvOverlay .f-scene{ position:absolute; inset:0; }
 #rvOverlay .f-scene svg{ width:100%; height:100%; display:block; }
-/* CSS 流光兜底层（rare 唯一的卡面流光；legendary/epic 与 WebGL 叠加）
-   ⚠️ --gx 由 JS 每帧写入过，但**从不生效**：本规则的 background-position 被
-   下一行的 rv-cardSheen 动画整个覆盖（CSS 动画优先级高于普通声明）。写它只会
-   每帧让整棵卡片子树样式失效一次 —— 2026-11-25 已把 JS 侧写入删除，勿再写回。 */
+/* CSS 流光兜底层（rare 唯一的卡面流光；legendary/epic 与 WebGL 叠加） */
 #rvOverlay .f-body::after{
   content:""; position:absolute; inset:0; pointer-events:none;
   background:linear-gradient(115deg, transparent 34%, var(--sheen-a) 47%, var(--sheen-b) 50%, transparent 66%);
@@ -4964,12 +4942,8 @@ body.rv-open .sticker-modal {
 .flashing #rvFlash{ animation:rv-flashOut .3s ease-out; }
 @keyframes rv-flashOut{ 0%{opacity:0;} 16%{opacity:.95;} 100%{opacity:0;} }
 
-/* 粒子层（渗出/爆发/星芒共用一块画布）
-   ⚠️ width/height:100% 不能省（2026-11-25 修）：canvas 是**替换元素**，
-   绝对定位 + inset:0 并不会把它拉伸 —— 替换元素 width:auto 取内在尺寸（即 canvas
-   的 width 属性），left/right 同时为 0 时按 CSS 2.1 §10.3.8 忽略 right。
-   结果：粒子层永远 1×1 CSS 像素 → 粒子/星芒/爆发在生产环境一次都没显示过。 */
-#rvFx{ position:absolute; inset:0; width:100%; height:100%; z-index:20; pointer-events:none; }
+/* 粒子层（渗出/爆发/星芒共用一块画布） */
+#rvFx{ position:absolute; inset:0; z-index:20; pointer-events:none; }
 
 /* 关闭：卡片飞向图鉴入口方向（"回家"） */
 #rvCard3d.fly{
