@@ -419,6 +419,57 @@ with sync_playwright() as p:
         plaque = (reveal_card_snapshot(page) or {}).get("plaqueText") or ""
         check("翻面档案铭牌可见（人称行=开出方称呼 + No.01/12）",
               flipped and "开出" in plaque and "No.01/12" in plaque, f"实际: {plaque}")
+
+        # --- 7.1d 渲染压力防回归（2026-11-25 真机闪屏事故）---
+        # 真机症状：点开图鉴里已开启的贴纸后**卡片一直在闪**（Android GPU 合成器输出
+        # 残缺 Tile：卡片下半截塌成色块、文字重影、左侧彩色扫描条纹）。本地定位到的
+        # 根因链（真机复现 + 受控实验，见 docs/lessons/2026-11-25-reveal-card-flicker.md）：
+        #   ① 粒子层 CSS 永远 1×1（canvas 是替换元素，inset:0 不会拉伸它）
+        #   ② 陀螺仪噪声让 applyTilt() 每帧改 transform → 3D 子树每帧强制重栅格
+        #      （修复前实测 47 次/秒；桌面无陀螺仪 0 次/秒）
+        #   ③ 每帧重绘全息层/粒子层（未降频）
+        # 之前的 E2E 默认 __e2e_fx_off=1 走降级通道，永远看不到这个缺陷（铁律二：
+        # 没测过的功能，重构时没有护栏）。这里用「注入传感器噪声 + 数 style 变更
+        # 次数」把它变成机器可判的断言。
+        check("复看卡可关闭（准备按生产形态重开）", close_reveal_card(page))
+        page.evaluate("() => localStorage.removeItem('__e2e_fx_off')")  # 生产形态：特效开
+        page.locator('.sticker-cell--unlocked').first.click()
+        check("复看卡以生产形态（特效开）重开", wait_reveal_card(page, desc="复看卡重开") is not None)
+
+        fx_size = page.evaluate("""() => {
+            const f = document.getElementById('rvFx');
+            if (!f) return null;
+            const r = f.getBoundingClientRect();
+            return { cssW: Math.round(r.width), cssH: Math.round(r.height),
+                     vw: window.innerWidth, vh: window.innerHeight };
+        }""")
+        check("粒子层覆盖全屏（不是 1×1 —— 替换元素不被 inset:0 拉伸）",
+              fx_size is not None and fx_size["cssW"] >= fx_size["vw"] * 0.9
+              and fx_size["cssH"] >= fx_size["vh"] * 0.9, f"实际: {fx_size}")
+
+        tilt_changes = page.evaluate("""async () => {
+            const tw = document.getElementById('rvTiltWrap');
+            const c3 = document.getElementById('rvCard3d');
+            if (!tw || !c3) return null;
+            let n = 0;
+            const ob = new MutationObserver((recs) => { n += recs.length; });
+            ob.observe(tw, { attributes: true, attributeFilter: ['style'] });
+            ob.observe(c3, { attributes: true, attributeFilter: ['style'] });
+            // 模拟真机陀螺仪噪声（±0.4° 传感器抖动，60Hz）
+            const iv = setInterval(() => {
+                window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', {
+                    gamma: 10 + (Math.random() - 0.5) * 0.8,
+                    beta: 20 + (Math.random() - 0.5) * 0.8 }));
+            }, 16);
+            await new Promise((r) => setTimeout(r, 3000));
+            clearInterval(iv);
+            ob.disconnect();
+            return n;
+        }""")
+        check("陀螺仪噪声下 3 秒内 3D 子树 style 变更 ≤ 5 次（不再每帧强制重栅格）",
+              tilt_changes is not None and tilt_changes <= 5, f"实际: {tilt_changes} 次")
+
+        page.evaluate("() => localStorage.setItem('__e2e_fx_off', '1')")  # 装回降级钩子（跑批默认）
         check("复看卡可关闭（书架仍开着）", close_reveal_card(page))
         check("关闭复看卡后图鉴弹层仍在", page.locator('#stickerModal').is_visible())
         page.locator('#stickerModalClose').click()
@@ -572,6 +623,25 @@ with sync_playwright() as p:
         snap6 = wait_reveal_card(page, desc="epic 开出卡片弹出")
         check("（epic）卡片弹出、卡面「心动」（epic_1）",
               snap6 is not None and snap6["name"] == "心动" and snap6["tierEpic"], f"实际: {snap6}")
+        # --- 7.5a 全息层画布尺寸防回归（2026-11-25 真机闪屏事故）---
+        # 旧实现：runPlay 在遮罩还是 display:none 时量画布 → getBoundingClientRect()
+        # 全 0 → sizeCanvas 的 max(1, 0×dpr) 让画布退化成 **1×1 像素**。
+        # 后果：epic/legendary 的金箔流光变成「1 个着色器像素拉满整张卡」，卡片被
+        # 一层均匀色纱蒙住（设计稿的虹彩/闪点从未渲染）。这里钉住 backing store
+        # 必须覆盖卡片尺寸 —— 退回 1×1 会直接红。
+        holo_size = page.evaluate("""() => {
+            const h = document.getElementById('rvHolo');
+            const c = document.getElementById('rvCard3d');
+            if (!h || !c) return null;
+            const r = c.getBoundingClientRect();
+            return { backW: h.width, backH: h.height, cssW: Math.round(r.width), cssH: Math.round(r.height),
+                     disp: getComputedStyle(h).display };
+        }""")
+        check("（epic）全息层画布覆盖卡片尺寸（不是 1×1 像素）",
+              holo_size is not None and holo_size["disp"] != "none"
+              and holo_size["backW"] >= holo_size["cssW"] * 0.9
+              and holo_size["backH"] >= holo_size["cssH"] * 0.9,
+              f"实际: {holo_size}")
         check("（epic）卡片可关闭", close_reveal_card(page))
         wait_add_settled(page, t6)
         heal = page.evaluate("""async () => {

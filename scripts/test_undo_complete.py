@@ -202,8 +202,11 @@ with sync_playwright() as p:
     h1_toast_undo('common', 'E2E-测试-完成撤销-toast撤销-普通款')
     # legendary 是当初暴露该缺陷的那一档（稀有度 toast 文案与配色最重，顶掉撤销按钮最明显）
     h1_toast_undo('legendary', 'E2E-测试-完成撤销-toast撤销-隐藏款')
-    # 钩子用完即清：别让它影响后续用例（H2 也会完成待办，虽不关心稀有度）
-    page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")
+    # 钩子换成 common，**不是清掉**（2026-11-25 修）：清掉 = 回到 15% 随机隐藏款 →
+    # H2 的待办有 15% 概率开出隐藏款 → 复看卡的全屏遮罩挡住 UI → H2 点「完成」直接
+    # 超时（实测 2026-11-25 首次失败就是它，重试通过被记成 FLAKY）。H2 不关心稀有度，
+    # 钉成 common 才是「别让它影响后续用例」的正确做法。
+    page.evaluate("() => localStorage.setItem('__e2e_force_rarity', 'common')")
 
     # ===== H2: 长按菜单撤销 =====
     print("\n== H2: 长按菜单撤销 ==", flush=True)
@@ -311,6 +314,9 @@ with sync_playwright() as p:
     else:
         check("H4 基类长文案 已显示", False, "提示没弹出来")
     page.set_viewport_size({"width": 1280, "height": 720})
+
+    # 钩子用完即清（收尾卫生：生产行为与不加钩子一致；生产环境没有任何入口写这个 key）
+    page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")
 
     # 汇总
     print(f"\n== 结果: {results['pass']} 通过 / {results['fail']} 失败 ==", flush=True)
