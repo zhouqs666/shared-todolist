@@ -319,8 +319,6 @@ const tgt = { x: 0, y: 0 };
 const curTilt = { x: 0, y: 0 };
 let gyroBase = null;
 let gyroOn = false;
-// 临时诊断开关（flicker-diagnostic.js）：关掉倾斜/陀螺仪对 3D 子树的逐帧写 style
-let diagTiltOff = false;
 
 function clamp1(v) { return Math.max(-1, Math.min(1, v)); }
 
@@ -356,18 +354,8 @@ function setupTiltSources() {
 }
 
 function applyTilt() {
-  if (diagTiltOff) return;
   ui.tiltWrap.style.transform = `rotateX(${-curTilt.y * 10}deg) rotateY(${curTilt.x * 12}deg)`;
   ui.card3d.style.setProperty('--gx', `${50 + curTilt.x * 30}%`);
-}
-
-/** 临时诊断（真机闪烁二分）：关掉倾斜后不再逐帧写 transform/--gx */
-export function setDiagTiltOff(off) {
-  diagTiltOff = !!off;
-  if (diagTiltOff && ui) {
-    ui.tiltWrap.style.transform = '';
-    ui.card3d.style.removeProperty('--gx');
-  }
 }
 
 // ===== 播放控制（分镜时间轴 + 队列） =====
@@ -490,6 +478,36 @@ async function playCeremony(spec) {
   toIdle(false);
 }
 
+// ===== 背后书架：开卡期间移出合成树（2026-11-25 真机闪烁修复） =====
+// 完成态书架（12 格全解锁 + 金色 glow）是集齐后才出现的持久合成负载；与光柱叠加
+// 会把 Android 合成器推过 Tile 预算。开卡期间给 body 挂 rv-open 隐藏书架/纪念卡，
+// 关闭即恢复（遮罩本身 90–96% 不透明，视觉不可察）。光柱保留。
+let shelfHidden = false;
+let shelfScrollTop = 0;
+
+function hideShelfForReveal() {
+  if (shelfHidden) return;
+  const modal = document.getElementById('stickerModal');
+  const memorial = document.getElementById('memorialCard');
+  const bookOpen = !!(modal && !modal.classList.contains('hidden'));
+  const memorialOpen = !!(memorial && !memorial.classList.contains('hidden'));
+  if (!bookOpen && !memorialOpen) return;
+  if (bookOpen) {
+    const panel = modal.querySelector('.sticker-modal__panel');
+    shelfScrollTop = panel ? panel.scrollTop : 0;
+  }
+  document.body.classList.add('rv-open');
+  shelfHidden = true;
+}
+
+function restoreShelfAfterReveal() {
+  if (!shelfHidden) return;
+  document.body.classList.remove('rv-open');
+  const panel = document.querySelector('#stickerModal .sticker-modal__panel');
+  if (panel) panel.scrollTop = shelfScrollTop;
+  shelfHidden = false;
+}
+
 /** 滚动锁释放：body.overflow 是单一状态，图鉴弹层（sticker-book）也在用它——
  *  复看卡叠在书架上时，卡关了锁不能放（否则背景可滚）。按「还有没有别的弹层开着」判定 */
 function releaseScrollLock() {
@@ -513,6 +531,7 @@ function finishPlay() {
     if (resolve) resolve({ played: true });
     draining = false;
     drainQueue(); // 下一张（若有）
+    if (!cur) restoreShelfAfterReveal(); // 队列空了才把书架放回来
   };
   if (fxActive()) {
     ui.card3d.classList.add('fly');
@@ -626,6 +645,7 @@ function failPlay({ spec, resolve }, err) {
   if (spec.fallback) { try { spec.fallback(); } catch (_e2) { /* 兜底再失败不阻塞 */ } }
   draining = false;
   drainQueue();
+  if (!cur) restoreShelfAfterReveal();
 }
 
 /**
@@ -645,6 +665,7 @@ function runPlay({ spec, resolve }) {
   fillCard(spec);
   fdpr = sizeCanvas(ui.fx);
   sizeHolo();
+  hideShelfForReveal();
   document.body.style.overflow = 'hidden';
   ui.overlay.classList.remove('hidden');
   startLoop(); // rAF 主循环（tilt 缓动/粒子/holo）只在 overlay 打开期间工作

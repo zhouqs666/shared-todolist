@@ -412,6 +412,14 @@ with sync_playwright() as p:
         check("复看为安静模式（无 NEW、无仪式）",
               rv is not None and rv["modeQuiet"] and not rv["modeNotify"] and not rv["newVisible"],
               f"实际: {rv}")
+        # 2026-11-25 真机闪烁修复：开卡期间背后完成态书架移出合成树（rv-open + display:none）
+        shelf_hidden = page.evaluate("""() => ({
+            rvOpen: document.body.classList.contains('rv-open'),
+            display: getComputedStyle(document.getElementById('stickerModal')).display,
+        })""")
+        check("复看卡打开期间背后书架移出合成树（rv-open + display:none）",
+              shelf_hidden["rvOpen"] is True and shelf_hidden["display"] == "none",
+              f"实际: {shelf_hidden}")
         # 翻面：idle 点卡片 → 档案铭牌出现（人称行「… 开出」+ 册编号 No.02/12）
         page.locator('#rvCard3d').click(position={"x": 120, "y": 300})
         flipped = wait_until(page, lambda: (reveal_card_snapshot(page) or {}).get("flippedVisible"),
@@ -420,6 +428,13 @@ with sync_playwright() as p:
         check("翻面档案铭牌可见（人称行=开出方称呼 + No.01/12）",
               flipped and "开出" in plaque and "No.01/12" in plaque, f"实际: {plaque}")
         check("复看卡可关闭（书架仍开着）", close_reveal_card(page))
+        shelf_restored = page.evaluate("""() => ({
+            rvOpen: document.body.classList.contains('rv-open'),
+            display: getComputedStyle(document.getElementById('stickerModal')).display,
+        })""")
+        check("关闭复看卡后书架恢复（rv-open 摘掉 + display 不是 none）",
+              shelf_restored["rvOpen"] is False and shelf_restored["display"] != "none",
+              f"实际: {shelf_restored}")
         check("关闭复看卡后图鉴弹层仍在", page.locator('#stickerModal').is_visible())
         page.locator('#stickerModalClose').click()
         wait_until(page, lambda: not page.locator('#stickerModal').is_visible(), desc="书架收起")
