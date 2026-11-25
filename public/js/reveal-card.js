@@ -270,8 +270,17 @@ function initHolo() {
     + '  vec3 col = mix(u_colA, u_colB, 0.5+0.5*band);\n'
     + '  col = mix(col, col*(0.65+0.6*irid), 0.42);\n'
     + '  vec2 gp = uv*vec2(64.0,90.0);\n'
-    + '  float sp = hash(floor(gp) + floor(u_time*7.0)*0.371);\n'
-    + '  col += u_glint * step(0.9915, sp) * 0.9;\n'
+    // 闪点（金箔颗粒感）。2026-11-25 真机闪屏事故定位：
+    //   旧值：floor(u_time*7.0) 的 **7 次/秒** 重排 + 固定 0.9 幅度 + 与底色无关的加色
+    //   → ① 7Hz 在手机上是频闪（真机肉眼可见的「一直在闪」）；
+    //     ② 底色被 band 压暗的瞬间（11.4s 一次的亮度脉动），白火花与暗底的
+    //        对比度最大 ⇒ 「画面颜色变深的一瞬间闪」（业主原话）；
+    //     ③ 稀有款没有 #rvHolo（display:none）⇒ 天然不闪 ⇒ 与现象完全吻合。
+    //   新值：频率 7Hz → 1.4Hz（金粉缓慢明灭，不再频闪）、幅度 0.9 → 0.30、
+    //        并与底色亮度联动（底色暗时火花不突兀，消掉「变深的一瞬间闪」）。
+    + '  float sp = hash(floor(gp) + floor(u_time*1.4)*0.371);\n'
+    + '  float baseLum = dot(col, vec3(0.299,0.587,0.114));\n'
+    + '  col += u_glint * step(0.9915, sp) * 0.30 * (0.25 + 0.75*baseLum);\n'
     + '  vec2 g = vec2(0.5,0.42) + u_tilt*vec2(0.30,0.24);\n'
     + '  col += u_glint * smoothstep(0.55,0.0,distance(uv,g)) * 0.40;\n'
     + '  float edge = smoothstep(0.0,0.06,uv.x)*smoothstep(1.0,0.94,uv.x)*smoothstep(0.0,0.05,uv.y)*smoothstep(1.0,0.95,uv.y);\n'

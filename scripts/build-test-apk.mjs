@@ -51,6 +51,7 @@ const prodUrl = loadDotenv(join(ROOT, '.env')).SUPABASE_URL;
 
 const testEnv = loadDotenv(join(ROOT, 'app-e2e', '.env.test'));
 const TEST_URL = testEnv.E2E_SUPABASE_URL;
+const TEST_ANON_KEY = testEnv.E2E_SUPABASE_ANON_KEY;
 const TEST_SERVICE_KEY = testEnv.E2E_SUPABASE_SERVICE_ROLE_KEY;
 
 // --publish：构建成功后把 APK 作为「壳更新」发布到测试项目
