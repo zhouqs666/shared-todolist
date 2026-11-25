@@ -353,9 +353,36 @@ function setupTiltSources() {
   if (typeof DeviceOrientationEvent !== 'undefined') enableGyro();
 }
 
+/**
+ * 倾斜写入（跟手 / 陀螺仪）。
+ *
+ * ⚠️ 2026-11-25 修（真机「复看卡一直在闪」事故）。这里原本每帧无条件写两处 style，
+ * 两个问题叠加起来把 Android 合成器打爆：
+ *
+ *   ① --gx 从来不生效。`.f-body::after` 的 `background-position: var(--gx) 0` 被
+ *      `rv-cardSheen` 动画整个覆盖（CSS 动画优先级高于普通声明）—— 实测把 --gx
+ *      改成 5% 后计算值仍是 `-60% 0px`。也就是说这行每帧让整棵卡片子树的样式
+ *      失效一次，换来的是零效果。
+ *   ② transform 每帧都变 = 整棵 3D 卡片子树（transform-style:preserve-3d +
+ *      mix-blend-mode 层 + 渐变文字 + SVG 滤镜）被强制重新栅格化。真机上陀螺仪
+ *      噪声让 curTilt 每帧都动，实测 **47 次/秒**（桌面无陀螺仪 0 次/秒）——
+ *      这正是合成器偶发输出残缺 Tile（卡片闪一下）的燃料。
+ *
+ * 现在：① 删掉 --gx 写入（行为零变化，它本来就不生效）；② 只有倾斜变化超过阈值
+ * 才写 transform，阈值取在传感器噪声之上 → 手机静置时不再触发重栅格化。
+ */
+const TILT_WRITE_EPS = 0.02; // 归一化值，约 0.22°（12° 对应的满量程）
+let lastTiltX = NaN;
+let lastTiltY = NaN;
+
 function applyTilt() {
-  ui.tiltWrap.style.transform = `rotateX(${-curTilt.y * 10}deg) rotateY(${curTilt.x * 12}deg)`;
-  ui.card3d.style.setProperty('--gx', `${50 + curTilt.x * 30}%`);
+  const x = curTilt.x;
+  const y = curTilt.y;
+  // NaN 比较恒为 false → 首次必定写入
+  if (Math.abs(x - lastTiltX) < TILT_WRITE_EPS && Math.abs(y - lastTiltY) < TILT_WRITE_EPS) return;
+  lastTiltX = x;
+  lastTiltY = y;
+  ui.tiltWrap.style.transform = `rotateX(${-y * 10}deg) rotateY(${x * 12}deg)`;
 }
 
 // ===== 播放控制（分镜时间轴 + 队列） =====
@@ -539,6 +566,19 @@ function setupInteraction() {
 
 // ===== 主循环（仅 overlay 打开时工作；关闭即停 rAF） =====
 
+/**
+ * 主循环（仅 overlay 打开时工作；关闭即停 rAF）
+ *
+ * ⚠️ 2026-11-25 修：重绘降频到 ~30fps。
+ * 原因：全息层每帧重绘 = 每帧一次纹理上传；粒子层每帧全屏 clear。叠加在
+ * 「3D 子树每帧重栅格」之上，真机上会把 Android 合成器预算打爆 → 卡片偶发
+ * 输出残缺 Tile（闪屏）。30fps 的流光与星芒在视觉上与 60fps 无可辨差异。
+ * 粒子物理按**真实时间**推进（accum 累积 dt），降频不会让粒子变慢。
+ */
+const DRAW_INTERVAL_MS = 1000 / 30;
+let lastDrawT = 0;
+let accumDt = 0;
+
 function loop(t) {
   raf = requestAnimationFrame(loop);
   const dt = Math.min((t - lastT) / 1000, 0.05);
@@ -547,19 +587,24 @@ function loop(t) {
   curTilt.y += (tgt.y - curTilt.y) * Math.min(1, dt * 9);
   applyTilt();
   if (!cur || phase === 'closed' || document.hidden) return;
+  accumDt += dt;
+  if (t - lastDrawT < DRAW_INTERVAL_MS) return;
+  lastDrawT = t;
+  const stepDt = accumDt;
+  accumDt = 0;
   const now = t / 1000;
   if (fxActive() && cur) {
     const tier = REVEAL_TIERS[cur.tierKey];
     if (leakOn) {
       const r = cardRect();
       const rate = 90 + Math.min(140, (now * 60) % 1000); // 渐强
-      if (Math.random() < rate * dt * 1.8) spawnLeak(r, tier.palette);
+      if (Math.random() < rate * stepDt * 1.8) spawnLeak(r, tier.palette);
     }
     if (phase === 'idle') {
       const r2 = cardRect();
       if (now - lastTw > (tier.twinkleEvery || 0.6)) { lastTw = now; spawnTwinkle(r2, tier.palette); }
     }
-    stepParts(dt);
+    stepParts(stepDt);
     if (phase === 'idle') renderHolo(now, cur.tierKey);
   } else {
     stepParts(0); // 清屏一次
@@ -569,6 +614,8 @@ function loop(t) {
 function startLoop() {
   if (raf) return;
   lastT = 0;
+  lastDrawT = 0;
+  accumDt = 0;
   raf = requestAnimationFrame(loop);
 }
 
@@ -624,10 +671,18 @@ function runPlay({ spec, resolve }) {
   phase = 'closed';
   spec.resolve = resolve;
   fillCard(spec);
-  fdpr = sizeCanvas(ui.fx);
-  sizeHolo();
   document.body.style.overflow = 'hidden';
   ui.overlay.classList.remove('hidden');
+  // ⚠️ 必须在遮罩**可见之后**量画布（2026-11-25 修）。
+  // fillCard 把 overlay 置为 class="hidden" → #rvOverlay.hidden 是 display:none，
+  // 此时 getBoundingClientRect() 全是 0 → sizeCanvas 的 max(1, 0×dpr) 让画布退化成
+  // **1×1 像素**。后果有两条：
+  //   ① 全息层变成「1 个着色器像素拉满整张卡」（mix-blend-mode:screen 叠一层均匀
+  //      色纱）—— epic/legendary 的金箔流光从未真正渲染过；
+  //   ② 粒子层同理，粒子/星芒/爆发在生产环境一次都没显示过。
+  // getBoundingClientRect() 会强制同步布局，遮罩可见后量到的就是真实尺寸。
+  fdpr = sizeCanvas(ui.fx);
+  sizeHolo();
   startLoop(); // rAF 主循环（tilt 缓动/粒子/holo）只在 overlay 打开期间工作
   if (!fxActive()) {
     toIdle(true); // 降级：静态精卡直达（信息全保留，D9）
