@@ -410,6 +410,34 @@ col += u_glint * step(0.9915, sp) * 0.9;                          // 与底色�
 （切换会整页 reload）也无法复现生产 session 的残留状态。E2E 只能钉住「复看态确实挂
 `holo-off`、`#rvHolo` 确实 `display:none`，且开出卡未被误伤」（`test_blindbox.py` 7.5a）。
 
+## 第九版（2026-11-25 晚，诊断版）：把四条可疑合成路径做成真机开关
+
+第八版摘掉 `#rvHolo` 后业主复测**仍闪**，且热更后集齐纪念卡**再次重播**。测试层复刻发现：
+纪念卡重播会在 body 上重建一块 `390×844 / z-index:1200 / FixedPosition / drawsContent=true`
+的 canvas-confetti 画布，且在生产形态下 DOM 排在 `#rvOverlay` **之后** ⇒ 全屏画布压在复看卡上。
+桌面实测该画布约 2.5s 自动移除、`confetti.reset()` 立即移除；Android WebView 是否回收未知。
+
+**结论必须诚实**：目前「彩带画布」是最大嫌疑，**不是已确认根因**。桌面/模拟器看不到 GPU
+伪影，测试环境又空库/整页 reload，任何「本地验证」都不能替代真机。继续按猜测发修复版 = 重复
+前五版的错误。
+
+**诊断版（3.7.11）**：新增临时面板 `public/js/flicker-diagnostic.js`，入口 = 图鉴标题
+（「收集图鉴」）**长按 1.5 秒**，正常使用不可见。四个开关：
+
+| 开关 | 作用 | 候选机制 |
+|---|---|---|
+| 彩带画布 | 创建/移除一块与 canvas-confetti 同几何、同 z-index（1200）、同 DOM 位置的空白全屏画布；另有「真实彩带」（ticks 900，约 15s） | 全屏 canvas 层压在 3D 卡片上 |
+| 光柱 #rvBeam | `body.diag-no-beam` 隐藏 | 全屏 mask + 旋转 conic-gradient |
+| 图鉴毛玻璃 | `body.diag-no-blur` 摘掉 `.sticker-modal` / 纪念卡 scrim 的 backdrop-filter | 全屏 backdrop root |
+| 陀螺仪/倾斜 | `setDiagTiltOff()` 停掉 `applyTilt()` 的逐帧 transform/--gx 写入 | 3D 子树每帧重栅格 |
+
+**使用方式（真机）**：打开图鉴 → 长按标题 → 面板出现 → 打开一张史诗/传说复看卡 →
+逐项切换，每项停留 20–30 秒。哪一项一关就不闪，根因即坐实；四项都关还闪，则说明伪影来自
+剩下的卡面 sheen / 网络字体 / 3D 翻面本身，再继续收口。
+
+**移除**：定位完成后的下一版删掉 `flicker-diagnostic.js`、`sticker-book.js` 的两行接线、
+`reveal-card.js` 的 `setDiagTiltOff` 导出与 `diagTiltOff` 判断。
+
 ## 教训
 
 1. **`display:none` 时量尺寸 = 量到 0**。任何「先量尺寸再显示」或「先显示再量尺寸」的顺序
