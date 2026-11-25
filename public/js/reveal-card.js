@@ -155,6 +155,25 @@ let fdpr = 1;
 let parts = [];
 
 /**
+ * 同步 `<body>` 上的「复看卡打开中」标记（`body.rv-open`）。
+ *
+ * ⚠️ 2026-11-25 真机闪屏事故（M2）：复看卡打开时，图鉴弹层 `.sticker-modal` 那层
+ * **全屏 `backdrop-filter: blur(2px)`** 必须摘掉 ——
+ *  ① 弹层此时被 #rvOverlay 的 96% 不透明遮罩完全盖住，毛玻璃**根本看不见**；
+ *  ② 但 backdrop-filter 会让合成器为它建 backdrop root 并对整屏做一次模糊，
+ *     与卡片的 WebGL 层 / mix-blend-mode 层叠加时把真机 GPU 合成预算打爆 →
+ *     合成器偶尔吐出残缺 Tile（卡片右下角一块矩形垃圾 = 业主看到的「闪屏」）；
+ *  ③ 实测桌面真实渲染管线：帧率 30.6 → 58.5（+91%）。
+ *
+ * 用 JS 挂 class 而不是 CSS `:has()`：`:has()` 要 Chrome 105+（本项目 minSdk 24，
+ * 旧设备上的 System WebView 可能没有）；class 方案在任意 WebView 上都成立。
+ */
+function syncRvOpenFlag() {
+  const open = !!(ui && ui.overlay && !ui.overlay.classList.contains('hidden'));
+  document.body.classList.toggle('rv-open', open);
+}
+
+/**
  * 量画布的 backing store 尺寸。
  *
  * ⚠️ 2026-11-25 修（第二版）：**必须按「布局尺寸」量，不能按 getBoundingClientRect()**。
@@ -212,11 +231,33 @@ function spawnTwinkle(rect, palette) {
   });
 }
 
+/**
+ * 粒子层绘制 + 清理。
+ *
+ * ⚠️ 2026-11-25 真机闪屏事故（M1）：**不再每帧全屏 clearRect**。
+ * 旧写法每 33ms 对**整块全屏画布** clearRect —— 真机上画布是 2160×4800 ≈ 41.5 MB，
+ * 30fps 就是 ≈1.2 GB/s 的清屏写入，**哪怕一个粒子都没有**。更糟的是它强行点亮了一条
+ * 「全屏 canvas 每帧都在变」的合成路径，与卡片的 WebGL 层 / mix-blend-mode 层 /
+ * backdrop-filter 叠在一起，把真机 GPU 的合成预算打爆 → 合成器偶尔吐出残缺 Tile
+ * （卡片右下角一块矩形垃圾 = 业主看到的「闪屏」）。
+ *
+ * 新写法：**只清「上一帧真正画过东西」的那块包围盒**。
+ *  - 没有粒子时，整块画布一帧都不碰 ⇒ 该层不触发任何合成。
+ *  - 有粒子时，清屏面积从「全屏」缩到「粒子包围盒」（卡片量级）⇒ 真机上省 ~95%。
+ * 视觉损失：零（清的就是上一帧画的那些像素）。
+ */
+let fxDirtyRect = null;
+
 function stepParts(dt) {
   const ctx = fxCtx;
-  ctx.clearRect(0, 0, ui.fx.width, ui.fx.height);
+  // ① 清掉上一帧画过的东西（只清它那块）
+  if (fxDirtyRect) {
+    ctx.clearRect(fxDirtyRect.x, fxDirtyRect.y, fxDirtyRect.w, fxDirtyRect.h);
+    fxDirtyRect = null;
+  }
   if (!parts.length) return;
   ctx.globalCompositeOperation = 'lighter';
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (let i = parts.length - 1; i >= 0; i--) {
     const p = parts[i];
     p.age += dt;
@@ -229,12 +270,20 @@ function stepParts(dt) {
     if (p.t === 'leak' || p.t === 'tw') a = k * (0.55 + 0.45 * Math.sin(p.tw + p.age * 9));
     ctx.globalAlpha = Math.max(0, a);
     ctx.fillStyle = p.c;
+    const rad = p.size * (p.t === 'burst' ? 0.5 + 0.5 * k : 1);
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size * (p.t === 'burst' ? 0.5 + 0.5 * k : 1), 0, 6.2832);
+    ctx.arc(p.x, p.y, rad, 0, 6.2832);
     ctx.fill();
+    // 记下本帧画到的范围（留 2px 抗锯齿余量）
+    if (p.x - rad - 2 < minX) minX = p.x - rad - 2;
+    if (p.y - rad - 2 < minY) minY = p.y - rad - 2;
+    if (p.x + rad + 2 > maxX) maxX = p.x + rad + 2;
+    if (p.y + rad + 2 > maxY) maxY = p.y + rad + 2;
   }
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
+  // ② 记下本帧画过的包围盒，供下一帧清理
+  if (maxX >= minX) fxDirtyRect = { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
 }
 
 // ===== WebGL holo 层（epic/legendary；同一份 shader 换调色盘，§6） =====
@@ -468,6 +517,7 @@ function fillCard(spec) {
   const { overlay } = ui;
   const t = REVEAL_TIERS[spec.tierKey];
   overlay.className = 'hidden';
+  syncRvOpenFlag(); // M2：遮罩隐藏 → 摘掉 body.rv-open（图鉴弹层恢复毛玻璃）
   overlay.classList.remove('shaking', 'flashing');
   ui.card3d.classList.remove('fly', 'flipped');
   void overlay.offsetWidth; // 重启动画的回流
@@ -557,6 +607,7 @@ function finishPlay() {
   ui.btnClose.classList.add('hidden');
   const done = () => {
     ui.overlay.className = 'hidden';
+    syncRvOpenFlag(); // M2：遮罩隐藏 → 摘掉 body.rv-open
     releaseScrollLock();
     phase = 'closed';
     const resolve = cur && cur.resolve;
@@ -689,6 +740,7 @@ function failPlay({ spec, resolve }, err) {
   console.warn('[reveal-card] 播放失败:', err && err.message);
   try {
     ui.overlay.className = 'hidden';
+    syncRvOpenFlag(); // M2：遮罩隐藏 → 摘掉 body.rv-open
     releaseScrollLock();
     phase = 'closed';
     cur = null;
@@ -717,6 +769,7 @@ function runPlay({ spec, resolve }) {
   fillCard(spec);
   document.body.style.overflow = 'hidden';
   ui.overlay.classList.remove('hidden');
+  syncRvOpenFlag(); // M2：遮罩可见 → 挂上 body.rv-open（图鉴弹层摘掉全屏毛玻璃）
   // ⚠️ 必须在遮罩**可见之后**量画布（2026-11-25 修）。
   // fillCard 把 overlay 置为 class="hidden" → #rvOverlay.hidden 是 display:none，
   // 此时 getBoundingClientRect() 全是 0 → sizeCanvas 的 max(1, 0×dpr) 让画布退化成
@@ -757,7 +810,7 @@ function ensureReady() {
   if (!GL) ui.holo.style.display = 'none'; // CSS sheen 兜底流光（§9 第一级降级）
   setupTiltSources();
   setupInteraction();
-  window.addEventListener('resize', () => { if (cur) { sizeCanvas(ui.fx); sizeHolo(); } });
+  window.addEventListener('resize', () => { if (cur) { sizeCanvas(ui.fx); sizeHolo(); fxDirtyRect = null; } });
   ready = true;
 }
 
