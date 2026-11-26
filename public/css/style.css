@@ -4516,13 +4516,6 @@ body.cherish-stage-on .topbar {
 .img-src-menu__icon svg { width: 22px; height: 22px; }
 .account-menu__item--danger { color: var(--rose-500); }
 .account-menu__item--danger .account-menu__icon { color: var(--rose-500); }
-.account-menu__version {
-  padding: 10px 8px 4px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--color-text-muted);
-  opacity: .8;
-}
 
 /* ===== 回收站弹层 ===== */
 .trash-sheet {
@@ -4909,7 +4902,7 @@ body.cherish-stage-on .topbar {
   mix-blend-mode:screen; opacity:.74; pointer-events:none;
 }
 .tier-rare #rvHolo{ display:none; }
-/* 复看卡单变量验证：不渲染 WebGL 全息层（只摘这一层，光柱/毛玻璃/倾斜保留） */
+/* 临时诊断（holo-diag.js）：可整体关闭全息层做真机 A/B；默认开启（epic/legendary，含复看） */
 #rvOverlay.holo-off #rvHolo{ display:none; }
 
 /* ===== 分镜动效 ===== */
