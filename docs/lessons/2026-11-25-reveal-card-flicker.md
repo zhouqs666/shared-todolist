@@ -552,7 +552,28 @@ col += u_glint * step(0.9915, sp) * 0.9;                          // 与底色�
 
 **真机 A/B/A 判据**：完成待办 → 开卡（应闪）→ 移除 Toast 层 → 收起面板 → 不闪；再重建隐藏 Toast 层 → 收起 → 闪回来 ⇒ 根因坐实。若移除后仍闪、清除画布后才不闪 ⇒ 是彩带 canvas；两者都不行 ⇒ 另有层。
 
-**确认后的修复（暂不实施）**：Toast 淡出结束从 DOM 移除；隐藏态摘 `backdrop-filter`；开卡期间 `body.rv-open` 隐藏 Toast / 全屏 canvas；书架修复保留。
+**确认后的修复（已在 3.7.16 实施）**：Toast 淡出结束从 DOM 移除；隐藏态摘 `backdrop-filter`；
+开卡期间 `body.rv-open` 隐藏 Toast / 全屏 canvas；书架修复保留。
+
+## 第十五版（2026-11-26，最终修复）：真机 A/B/A 确认，移除隐藏 Toast 层
+
+业主用 3.7.15 诊断面板完成 A/B/A：
+
+- **重建隐藏 Toast 层 → 闪**；
+- **移除 Toast 层 → 不闪**；
+- **再重建 → 又闪**。
+⇒ 根因坐实：**Toast 隐藏后残留的 `opacity:0 + visibility:visible + backdrop-filter:blur(8px)` 固定层**（`z-index:11000` > 复看卡 `1200`）。这个层由任意一次 Toast 惰性创建；完成待办必发 Toast；退出 App 清掉；再完成又重建。等 15 秒只是 `opacity:0`，元素和模糊层仍在 —— 所以“等一会儿再开卡”仍闪。
+
+**修复（3.7.16）**：
+
+1. `toast.js`：淡出结束（350ms）后把 `#toast` 从 DOM 移除；下次 `showToast` 由 `ensureToast()` 重建；
+2. `style.css`：`.toast:not(.toast--show)` 摘掉 `backdrop-filter`；
+3. `reveal-card.js`：`rv-open` 对**所有**开卡入口生效；CSS 在开卡期间隐藏 `#toast` 与 body 直属全屏 canvas（彩带残留层）；
+4. 书架/纪念卡隐藏修复保留；3.7.15 临时诊断整块删除。
+
+**防回归**（`test_blindbox.py`）：`Toast 隐藏后从 DOM 移除（不留隐藏合成层）`。
+
+**为什么此前多轮没找到**：这个层**不可见**（opacity 0），又在卡片**上方**；桌面/模拟器看不到 GPU 伪影，测试环境的完成 Toast 也不会与复看卡同屏。只有真机上“完成 → 开卡 / 退出重进 / 再完成”的对照 + 诊断面板的移除/重建，才把它逼出来。
 
 ## 教训
 

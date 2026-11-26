@@ -1175,6 +1175,12 @@ input {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+/* 隐藏态摘掉毛玻璃：opacity:0 的元素若仍带 backdrop-filter，在 Android 上会留下一个
+   固定在视口上方的合成层（2026-11-26 真机 A/B/A 确认的闪屏根因）。淡出动画保留。 */
+.toast:not(.toast--show) {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 
 /* 图标 + 文案间距 */
 .toast__icon {
@@ -4961,6 +4967,10 @@ body.cherish-stage-on .topbar {
    （2026-11-25 真机闪烁修复）。遮罩本身 90–96% 不透明，视觉不可察；关闭即恢复。 */
 body.rv-open #stickerModal,
 body.rv-open #memorialCard { display: none !important; }
+/* 开卡期间 Toast / 全屏彩带画布也不参与合成：它们是会话级固定层，
+   任何压在 3D 卡片上的额外层都可能触发 Android GPU Tile 伪影（2026-11-26）。 */
+body.rv-open #toast { display: none !important; }
+body.rv-open > canvas { display: none !important; }
 
 /* 粒子层（渗出/爆发/星芒共用一块画布） */
 #rvFx{ position:absolute; inset:0; z-index:20; pointer-events:none; }

@@ -494,7 +494,6 @@ function hideShelfForReveal() {
   const memorial = document.getElementById('memorialCard');
   const bookOpen = !!(modal && !modal.classList.contains('hidden'));
   const memorialOpen = !!(memorial && !memorial.classList.contains('hidden'));
-  if (!bookOpen && !memorialOpen) return;
   if (bookOpen) {
     const panel = modal.querySelector('.sticker-modal__panel');
     shelfScrollTop = panel ? panel.scrollTop : 0;
@@ -505,6 +504,8 @@ function hideShelfForReveal() {
     prevMemorialDisplay = memorial.style.display;
     memorial.style.display = 'none';
   }
+  // rv-open 对**所有**开卡入口生效：除了书架/纪念卡，还负责把 Toast / 全屏彩带画布
+  // 这类会话级固定层移出合成（2026-11-26 真机 A/B/A：隐藏 Toast 层是闪屏根因）。
   document.body.classList.add('rv-open');
   shelfHidden = true;
 }
