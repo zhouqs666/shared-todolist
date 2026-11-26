@@ -679,6 +679,11 @@ with sync_playwright() as p:
               "第一条" in (serial.get("t0") or "") and "第一条" in (serial.get("t1") or ""),
               f"实际: {serial}")
         check("提示串行：第一条结束后第二条接上", "第二条" in (serial.get("t2") or ""), f"实际: {serial}")
+        # 2026-11-26 真机 A/B/A 确认的闪屏根因：Toast 隐藏后若仍留在 DOM
+        # （opacity:0 + backdrop-filter），会留下高于复看卡的固定合成层。修复后必须移除。
+        check("Toast 隐藏后从 DOM 移除（不留隐藏合成层）",
+              wait_until(page, lambda: page.locator('#toast').count() == 0,
+                         timeout_ms=5000, desc="Toast 从 DOM 移除"))
 
         # 清掉钩子，避免影响其它用例/后续断言
         page.evaluate("() => localStorage.removeItem('__e2e_force_rarity')")

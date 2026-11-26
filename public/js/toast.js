@@ -29,6 +29,7 @@
  */
 
 let toastTimer = null;
+let removeTimer = null;
 let showing = false;
 const queue = [];
 
@@ -89,10 +90,19 @@ function hide() {
   const toast = document.getElementById('toast');
   if (toast) toast.classList.remove('toast--show');
   const next = queue.shift();
-  if (next) display(ensureToast(), next.msg, next.opts);
+  if (next) { display(ensureToast(), next.msg, next.opts); return; }
+  // 淡出结束后从 DOM 移除：opacity:0 + backdrop-filter 的隐藏层在 Android 上仍参与合成
+  // （2026-11-26 真机 A/B/A 确认：完成待办创建 Toast 后，这一层压在复看卡上方会触发闪屏）。
+  clearTimeout(removeTimer);
+  removeTimer = setTimeout(() => {
+    if (showing) return;
+    const t = document.getElementById('toast');
+    if (t && !t.classList.contains('toast--show') && queue.length === 0) t.remove();
+  }, 350);
 }
 
 function display(toast, msg, opts) {
+  clearTimeout(removeTimer);
   showing = true;
   const variant = opts.variant || '';
   // 重置 class 到基线再按变体叠加（防止上次变体残留）
