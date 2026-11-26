@@ -15,6 +15,7 @@
  */
 
 import { isFxEnabled } from './theme.js';
+import confetti from './vendor/canvas-confetti.esm.min.js';
 import {
   parseStickerKey, getStickerName, getStickerFlavor, getSeriesDef,
 } from './blindbox.js';
@@ -484,6 +485,8 @@ async function playCeremony(spec) {
 // 关闭即恢复（遮罩本身 90–96% 不透明，视觉不可察）。光柱保留。
 let shelfHidden = false;
 let shelfScrollTop = 0;
+let prevShelfDisplay = '';
+let prevMemorialDisplay = '';
 
 function hideShelfForReveal() {
   if (shelfHidden) return;
@@ -495,6 +498,12 @@ function hideShelfForReveal() {
   if (bookOpen) {
     const panel = modal.querySelector('.sticker-modal__panel');
     shelfScrollTop = panel ? panel.scrollTop : 0;
+    prevShelfDisplay = modal.style.display;
+    modal.style.display = 'none'; // 同时用行内样式，避免旧 CSS 缓存导致规则不生效
+  }
+  if (memorialOpen) {
+    prevMemorialDisplay = memorial.style.display;
+    memorial.style.display = 'none';
   }
   document.body.classList.add('rv-open');
   shelfHidden = true;
@@ -503,9 +512,24 @@ function hideShelfForReveal() {
 function restoreShelfAfterReveal() {
   if (!shelfHidden) return;
   document.body.classList.remove('rv-open');
-  const panel = document.querySelector('#stickerModal .sticker-modal__panel');
+  const modal = document.getElementById('stickerModal');
+  const memorial = document.getElementById('memorialCard');
+  const panel = modal && modal.querySelector('.sticker-modal__panel');
+  if (modal) modal.style.display = prevShelfDisplay;
+  if (memorial) memorial.style.display = prevMemorialDisplay;
   if (panel) panel.scrollTop = shelfScrollTop;
+  prevShelfDisplay = '';
+  prevMemorialDisplay = '';
   shelfHidden = false;
+}
+
+/** 清除 canvas-confetti 的全局画布：开卡前兜底，避免纪念卡重播的残留层压在卡上。
+ *  只删 body 直属、无 id 的 canvas（#rvHolo/#rvFx 在 #rvOverlay 内，不受影响）。 */
+function clearGlobalConfetti() {
+  try { confetti.reset(); } catch (_e) { /* 降级环境忽略 */ }
+  for (const c of document.querySelectorAll('body > canvas')) {
+    if (!c.id) c.remove();
+  }
 }
 
 /** 滚动锁释放：body.overflow 是单一状态，图鉴弹层（sticker-book）也在用它——
@@ -665,6 +689,7 @@ function runPlay({ spec, resolve }) {
   fillCard(spec);
   fdpr = sizeCanvas(ui.fx);
   sizeHolo();
+  clearGlobalConfetti();
   hideShelfForReveal();
   document.body.style.overflow = 'hidden';
   ui.overlay.classList.remove('hidden');
