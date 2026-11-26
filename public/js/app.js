@@ -1555,6 +1555,7 @@ function renderMe() {
       onOpenTrash: openTrash,
       onSwitchEnv: requestEnvSwitch,
       onLogout: () => showLogoutConfirm(logout),
+      getVersion: getCurrentBundleInfo,
     }));
     meEl.appendChild(img);
   }
@@ -1663,13 +1664,16 @@ async function showUpdateWelcomeIfPending() {
     `;
     document.body.appendChild(overlay);
 
-    // No.X 印记 = 这个 App 累计迭代了多少次（热更新 + 壳更新统一累计，口径见 update.js）。
-    // 到这里才发起查询（splash 已淡出 ⇒ 会话必然已恢复，不会查成 anon 的 0 行）；
-    // 不 await：计数再慢也不拖延动画；拿不到就永远不显示（错数字比没有数字更糟）
+    // 版本号 + No.X 印记：No.X = 累计迭代次数（热更新 + 壳更新统一累计，口径见 update.js）。
+    // 版本号先显示，计数慢也不影响；拿不到计数就只显示 v版本。
+    const noEl = overlay.querySelector('#updateWelcomeNo');
+    if (noEl && version) {
+      noEl.textContent = `v${version}`;
+      noEl.style.opacity = '0.22';
+    }
     getTotalUpdateCount(supabase).then((n) => {
-      const noEl = overlay.querySelector('#updateWelcomeNo');
       if (!n || !noEl) return;
-      noEl.textContent = `No.${n}`;
+      noEl.textContent = version ? `v${version} · No.${n}` : `No.${n}`;
       noEl.style.opacity = '0.22';
     });
 

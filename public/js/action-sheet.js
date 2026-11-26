@@ -352,6 +352,22 @@ export function showAccountMenu(handlers = {}) {
     list.appendChild(envBtn);
   }
 
+  // 当前 bundle 版本（M3）：热更后排查「设备到底在跑哪版」的唯一可靠入口。
+  // 不依赖 localStorage；原生返回 {hot, version}，浏览器返回 null。
+  if (handlers.getVersion) {
+    const ver = document.createElement('div');
+    ver.className = 'account-menu__version';
+    ver.setAttribute('data-testid', 'bundle-version');
+    ver.textContent = '当前版本 …';
+    list.appendChild(ver);
+    Promise.resolve(handlers.getVersion())
+      .then((info) => {
+        if (!info || !info.version) { ver.textContent = '当前版本 Web'; return; }
+        ver.textContent = `当前版本 ${info.version}${info.hot ? '' : '（内置）'}`;
+      })
+      .catch(() => { ver.textContent = '当前版本 未知'; });
+  }
+
   // 退出登录
   const logoutBtn = document.createElement('button');
   logoutBtn.type = 'button';

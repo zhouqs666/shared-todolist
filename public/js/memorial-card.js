@@ -130,10 +130,13 @@ export function showMemorialCard(book, opts = {}) {
   if (opts.celebrate) fireCeremonyConfetti();
 }
 
-/** 关闭纪念卡（遮罩点击 / 关闭按钮 / ESC 共用） */
+/** 关闭纪念卡（遮罩点击 / 关闭按钮 / ESC 共用）
+ *  同时清掉 canvas-confetti 的全局画布：热更后纪念卡会重播，残留的全屏 canvas
+ *  可能压在复看卡上（2026-11-25 真机闪烁的同类合成层）。 */
 function hideMemorialCard() {
   const modal = document.getElementById('memorialCard');
   if (modal) modal.classList.add('hidden');
+  try { confetti.reset(); } catch (_e) { /* 降级环境忽略 */ }
 }
 
 /**
