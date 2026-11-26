@@ -591,7 +591,7 @@ with sync_playwright() as p:
             const o = document.querySelector('[data-testid="reveal-card"]');
             return { holoOff: o ? o.classList.contains('holo-off') : null };
         }""")
-        check("（epic 开出卡）不挂 holo-off（全息层保留，单变量只动复看卡）",
+        check("（epic 开出卡）不挂 holo-off（全息层默认开启）",
               self_holo["holoOff"] is False, f"实际: {self_holo}")
         check("（epic）卡片可关闭", close_reveal_card(page))
         wait_add_settled(page, t6)
@@ -616,8 +616,8 @@ with sync_playwright() as p:
         check("本地状态滞后时自愈到 epic_2（旧实现撞车即静默放弃）",
               heal.get("key") == "epic_2" and heal.get("epicCount") == 2, f"实际: {heal}")
 
-        # --- 7.5a 复看卡单变量验证（2026-11-25 闪烁 C 方案）：只摘 epic/legendary 的
-        #     WebGL 全息层，开出卡不受影响；光柱/毛玻璃/倾斜保留，供真机二分定位 ---
+        # --- 7.5a 全息层恢复（2026-11-26 按原设计实现）：复看 epic 卡也渲染 #rvHolo，
+        #     且 backing store 必须覆盖卡片布局尺寸（防退回 1×1 —— 这是此前流光从未生效的根因）---
         page.evaluate("() => localStorage.removeItem('__e2e_fx_off')")  # review 走真实 idle 路径
         page.locator('#stickerEntry').click()
         check("复看（epic）：图鉴弹层打开", wait_until(
@@ -635,13 +635,19 @@ with sync_playwright() as p:
             return {
                 holoOff: o ? o.classList.contains('holo-off') : null,
                 display: h ? getComputedStyle(h).display : null,
+                backing: h ? [h.width, h.height] : null,
+                css: h ? [h.offsetWidth, h.offsetHeight] : null,
             };
         }""")
-        check("复看（epic）：挂 holo-off 且 #rvHolo display:none（全息层被摘掉）",
-              review_holo["holoOff"] is True and review_holo["display"] == "none",
+        check("复看（epic）：全息层已恢复且 backing 覆盖布局尺寸（不再是 1×1）",
+              review_holo["holoOff"] is False and review_holo["display"] != "none"
+              and review_holo["backing"] is not None and review_holo["css"] is not None
+              and review_holo["backing"][0] > 1 and review_holo["backing"][1] > 1
+              and review_holo["backing"][0] >= review_holo["css"][0]
+              and review_holo["backing"][1] >= review_holo["css"][1],
               f"实际: {review_holo}")
         page.locator('#rvCard3d').click(position={"x": 120, "y": 300})
-        check("复看（epic）：翻面仍可用（只摘全息层，不动交互）",
+        check("复看（epic）：翻面仍可用（全息层与交互共存）",
               wait_until(page, lambda: (reveal_card_snapshot(page) or {}).get("flippedVisible"),
                          timeout_ms=5000, desc="复看 epic 翻面"))
         check("复看（epic）：可关闭且书架仍在", close_reveal_card(page)

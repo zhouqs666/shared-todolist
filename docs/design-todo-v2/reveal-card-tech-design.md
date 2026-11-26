@@ -175,9 +175,12 @@ reveal-card（一个组件，三个入口）
 | 完成路径 | 按 D1 删 `celebrateCompletion` 隐藏分支 / `burstCardRing` / `RARITY_COMPLETE_TEXT`（可与本组件并行先上，见批次计划） |
 | `style-lab.html` | 新增「开出卡片」参数小节（sheen 速度/角度、金箔色相、渗出粒子密度），保持"改参数回工作台"惯例 |
 
-**2026-11-25 闪烁单变量验证（3.7.10）**：复看入口（`playReview`）暂不渲染 `#rvHolo` WebGL 全息层
-（overlay 挂 `holo-off`，循环跳过 shader 绘制）；光柱/毛玻璃/倾斜原样保留，供真机按层二分。
-开销（self）/通知（notify）入口保持全效。详见 `docs/lessons/2026-11-25-reveal-card-flicker.md` 第八版。
+**2026-11-26 全息层恢复（3.7.17）**：闪烁最终根因是 Toast 隐藏层（见 lessons 第十五版），不是 `#rvHolo`。
+复看入口重新渲染全息层，并修掉从上线起就存在的 1×1 尺寸 bug：
+- `sizeHolo()` 移到遮罩可见后，用 `offsetWidth/Height`（布局尺寸，不受 3D 投影影响）分配 backing store；
+- 倾斜量化（变化 >0.02 才写 style），DOM 变换与 shader 的 `u_tilt` 共用 `appliedTilt`；
+- glint 频闪降为 1.4Hz / 幅度 0.30 / 与底色亮度联动；
+- 临时 `holo-diag.js`（图鉴标题长按）可真机开/关全息层；确认后删除。
 
 ## 12. 测试策略
 

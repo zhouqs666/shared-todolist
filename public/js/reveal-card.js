@@ -260,8 +260,9 @@ function initHolo() {
     + '  vec3 col = mix(u_colA, u_colB, 0.5+0.5*band);\n'
     + '  col = mix(col, col*(0.65+0.6*irid), 0.42);\n'
     + '  vec2 gp = uv*vec2(64.0,90.0);\n'
-    + '  float sp = hash(floor(gp) + floor(u_time*7.0)*0.371);\n'
-    + '  col += u_glint * step(0.9915, sp) * 0.9;\n'
+    + '  float sp = hash(floor(gp) + floor(u_time*1.4)*0.371);\n'
+    + '  float baseLum = dot(col, vec3(0.299,0.587,0.114));\n'
+    + '  col += u_glint * step(0.9915, sp) * 0.30 * (0.25 + 0.75*baseLum);\n'
     + '  vec2 g = vec2(0.5,0.42) + u_tilt*vec2(0.30,0.24);\n'
     + '  col += u_glint * smoothstep(0.55,0.0,distance(uv,g)) * 0.40;\n'
     + '  float edge = smoothstep(0.0,0.06,uv.x)*smoothstep(1.0,0.94,uv.x)*smoothstep(0.0,0.05,uv.y)*smoothstep(1.0,0.95,uv.y);\n'
@@ -291,7 +292,17 @@ function initHolo() {
   };
 }
 
-function sizeHolo() { if (GL) sizeCanvas(ui.holo); }
+function sizeHolo() {
+  if (!GL) return;
+  // 用布局尺寸（offsetWidth/Height），不用 getBoundingClientRect：后者是 3D 投影后的盒子，
+  // 倾斜一变纹理就被重新缩放采样。必须在遮罩可见后调用（display:none 时 offset 为 0）。
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = ui.holo.offsetWidth;
+  const h = ui.holo.offsetHeight;
+  if (!w || !h) return;
+  ui.holo.width = Math.max(1, Math.round(w * dpr));
+  ui.holo.height = Math.max(1, Math.round(h * dpr));
+}
 
 function renderHolo(tSec, tierKey) {
   const t = REVEAL_TIERS[tierKey];
@@ -301,7 +312,7 @@ function renderHolo(tSec, tierKey) {
   gl.viewport(0, 0, ui.holo.width, ui.holo.height);
   gl.uniform2f(GL.uRes, ui.holo.width, ui.holo.height);
   gl.uniform1f(GL.uTime, tSec);
-  gl.uniform2f(GL.uTilt, curTilt.x, curTilt.y);
+  gl.uniform2f(GL.uTilt, appliedTilt.x, appliedTilt.y);
   gl.uniform3f(GL.uColA, h.a[0], h.a[1], h.a[2]);
   gl.uniform3f(GL.uColB, h.b[0], h.b[1], h.b[2]);
   gl.uniform3f(GL.uGlint, h.g[0], h.g[1], h.g[2]);
@@ -318,6 +329,9 @@ function renderHoloStatic(tierKey) {
 
 const tgt = { x: 0, y: 0 };
 const curTilt = { x: 0, y: 0 };
+const appliedTilt = { x: 0, y: 0 };
+// 临时诊断（holo-diag.js）：整体关闭全息层做真机 A/B；默认开启
+let diagHoloOff = false;
 let gyroBase = null;
 let gyroOn = false;
 
@@ -355,8 +369,14 @@ function setupTiltSources() {
 }
 
 function applyTilt() {
-  ui.tiltWrap.style.transform = `rotateX(${-curTilt.y * 10}deg) rotateY(${curTilt.x * 12}deg)`;
-  ui.card3d.style.setProperty('--gx', `${50 + curTilt.x * 30}%`);
+  // 量化：变化小于 0.02（约 0.22°）不写 style —— 传感器噪声不配触发整棵 3D 子树重栅格。
+  // DOM 变换与 shader 的 u_tilt 共用 appliedTilt，永远一致（不再出现图案被拽回去）。
+  if (Math.abs(curTilt.x - appliedTilt.x) < 0.02
+    && Math.abs(curTilt.y - appliedTilt.y) < 0.02) return;
+  appliedTilt.x = curTilt.x;
+  appliedTilt.y = curTilt.y;
+  ui.tiltWrap.style.transform =
+    `rotateX(${-appliedTilt.y * 10}deg) rotateY(${appliedTilt.x * 12}deg)`;
 }
 
 // ===== 播放控制（分镜时间轴 + 队列） =====
@@ -403,7 +423,8 @@ function fillCard(spec) {
   void overlay.offsetWidth; // 重启动画的回流
   overlay.classList.add(t.cls);
   if (spec.mode === 'notify') overlay.classList.add('mode-quiet', 'mode-notify');
-  if (spec.mode === 'review') overlay.classList.add('mode-quiet', 'holo-off');
+  if (spec.mode === 'review') overlay.classList.add('mode-quiet');
+  overlay.classList.toggle('holo-off', diagHoloOff);
 
   ui.fTier.textContent = t.label;
   ui.fScene.innerHTML = spec.item.scene;
@@ -424,10 +445,9 @@ function fillCard(spec) {
   ui.fNotify.textContent = REVEAL_TIERS.notify.badge;
 }
 
-/** 复看卡不渲染 WebGL 全息层（2026-11-25 闪烁单变量验证：只摘 #rvHolo，
- *  光柱/毛玻璃/倾斜原样保留，便于真机二分定位；详见 docs/lessons/2026-11-25-reveal-card-flicker.md） */
+/** 全息层是否渲染：epic/legendary 默认开启（含复看）；临时诊断可整体关闭 */
 function holoActive() {
-  return !!(cur && cur.mode !== 'review'
+  return !!(cur && !diagHoloOff
     && REVEAL_TIERS[cur.tierKey] && REVEAL_TIERS[cur.tierKey].webgl);
 }
 
@@ -686,14 +706,19 @@ function runPlay({ spec, resolve }) {
   leakOn = false;
   parts.length = 0;
   phase = 'closed';
+  // 每张卡从水平姿态开始：清掉上一张的倾斜/量化值，陀螺仪重新取基准
+  tgt.x = 0; tgt.y = 0; curTilt.x = 0; curTilt.y = 0;
+  appliedTilt.x = 0; appliedTilt.y = 0;
+  gyroBase = null;
+  ui.tiltWrap.style.transform = '';
   spec.resolve = resolve;
   fillCard(spec);
   fdpr = sizeCanvas(ui.fx);
-  sizeHolo();
   clearGlobalConfetti();
   hideShelfForReveal();
   document.body.style.overflow = 'hidden';
   ui.overlay.classList.remove('hidden');
+  sizeHolo(); // 遮罩可见后再量（offsetWidth/Height）；放前面会量成 1×1
   startLoop(); // rAF 主循环（tilt 缓动/粒子/holo）只在 overlay 打开期间工作
   if (!fxActive()) {
     toIdle(true); // 降级：静态精卡直达（信息全保留，D9）
@@ -808,6 +833,32 @@ export function playReview(sticker, opts = {}) {
   });
   if (!spec) return Promise.resolve({ played: false });
   return enqueue(spec);
+}
+
+/** 临时诊断（holo-diag.js）：开/关全息层。默认开；关掉用于真机对比是否引入闪烁。 */
+export function setDiagHoloOff(off) {
+  diagHoloOff = !!off;
+  if (!ui) return;
+  ui.overlay.classList.toggle('holo-off', diagHoloOff);
+  if (!diagHoloOff && cur && REVEAL_TIERS[cur.tierKey] && REVEAL_TIERS[cur.tierKey].webgl) {
+    if (fxActive()) renderHolo(performance.now() / 1000, cur.tierKey);
+    else renderHoloStatic(cur.tierKey);
+  }
+}
+
+/** 临时诊断：当前全息层状态（backing store / 布局尺寸 / 是否被关） */
+export function getDiagHoloState() {
+  const h = ui && ui.holo;
+  const ov = ui && ui.overlay;
+  return {
+    off: diagHoloOff,
+    backing: h ? [h.width, h.height] : null,
+    css: h ? [h.offsetWidth, h.offsetHeight] : null,
+    display: h ? getComputedStyle(h).display : null,
+    offClass: ov ? ov.classList.contains('holo-off') : null,
+    tier: cur ? cur.tierKey : null,
+    mode: cur ? cur.mode : null,
+  };
 }
 
 /** 组件是否正在屏上（E2E / 弹层层叠判断用） */

@@ -46,6 +46,8 @@ import { db } from './db.js';
 import { setStickers } from './state.js';
 // 开出卡片（D7 三入口）：通知卡（②）+ 图鉴复看卡（③）
 import * as revealCard from './reveal-card.js';
+// TEMPORARY 2026-11-26：全息层诊断（图鉴标题长按 1.5s），真机确认后删除
+import { initHoloDiag } from './holo-diag.js';
 
 const TOTAL_STICKERS = STICKERS_PER_RARITY * 3; // 每册 12 张
 // 图鉴展示顺序：rare → epic → legendary（由低到高）
@@ -675,6 +677,8 @@ export function initStickerBook(opts = {}) {
     memorialBtn.addEventListener('click', () => showMemorialCard(buildBookData()));
   }
   initMemorialCard();
+  // TEMPORARY 2026-11-26：全息层诊断入口（长按图鉴标题），真机确认后删除
+  initHoloDiag();
 
   // 注册渲染回调：stickers 变化时更新红点 + 若弹层开着则刷新网格（不重放入场动画）
   setStickersRenderFn(() => {
